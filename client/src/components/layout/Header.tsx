@@ -1,6 +1,7 @@
-import { Menu, Stethoscope, UserRound } from 'lucide-react'
+import { Menu, UserRound } from 'lucide-react'
 import { useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
+import symptoraLogo from '@/assets/symptora-logo.png'
 import { APP_NAME } from '@/lib/constants'
 import { useAuthStore } from '@/store/authStore'
 
@@ -27,11 +28,8 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-white/60 bg-surface/95 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_2px_6px_rgba(30,41,59,0.06)] backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
-        <Link to="/" className="flex items-center gap-2 text-lg font-bold text-primary">
-          <span className="icon-badge h-9 w-9">
-            <Stethoscope className="h-5 w-5 text-primary-600" strokeWidth={2.25} />
-          </span>
-          {APP_NAME}
+        <Link to="/" className="flex items-center">
+          <img src={symptoraLogo} alt={APP_NAME} className="h-8 w-auto sm:h-9" />
         </Link>
 
         <nav className="hidden items-center gap-6 xl:flex">
