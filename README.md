@@ -25,8 +25,8 @@ Create a `.env.dev` file in the backend folder before running the app. See [back
 
 ```bash
 cd client
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 ## Notes
