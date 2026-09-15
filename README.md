@@ -1,6 +1,6 @@
-# HealthBridge
+# SYMPTORA
 
-HealthBridge is a healthcare-focused project with a FastAPI backend and a React frontend.
+SYMPTORA is a healthcare-focused project with a FastAPI backend and a React frontend.
 
 ## Project structure
 
