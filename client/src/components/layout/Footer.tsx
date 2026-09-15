@@ -1,5 +1,6 @@
-import { Dna, Lock, Stethoscope, Video } from 'lucide-react'
+import { Dna, Lock, Video } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import symptoraLogo from '@/assets/symptora-logo.png'
 import { APP_NAME, APP_TAGLINE } from '@/lib/constants'
 
 export function Footer() {
@@ -8,12 +9,7 @@ export function Footer() {
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-5">
           <div className="sm:col-span-2 lg:col-span-1">
-            <p className="flex items-center gap-2 text-lg font-bold text-primary">
-              <span className="icon-badge h-8 w-8">
-                <Stethoscope className="h-4 w-4 text-primary-600" />
-              </span>
-              {APP_NAME}
-            </p>
+            <img src={symptoraLogo} alt={APP_NAME} className="h-7 w-auto" />
             <p className="mt-2 max-w-xs text-sm text-ink/60">{APP_TAGLINE}</p>
           </div>
 
@@ -71,6 +67,16 @@ export function Footer() {
                   Blog
                 </Link>
               </li>
+              <li>
+                <Link to="/privacy" className="hover:text-primary">
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link to="/terms" className="hover:text-primary">
+                  Terms of Service
+                </Link>
+              </li>
             </ul>
           </div>
 
@@ -119,9 +125,19 @@ export function Footer() {
           </div>
         </div>
 
-        <p className="mt-8 border-t border-ink/10 pt-6 text-xs text-ink/50">
-          © {new Date().getFullYear()} {APP_NAME}. All rights reserved.
-        </p>
+        <div className="mt-8 flex flex-col gap-3 border-t border-ink/10 pt-6 text-xs text-ink/50 sm:flex-row sm:items-center sm:justify-between">
+          <p>
+            © {new Date().getFullYear()} {APP_NAME}. All rights reserved.
+          </p>
+          <div className="flex gap-4">
+            <Link to="/privacy" className="hover:text-primary">
+              Privacy Policy
+            </Link>
+            <Link to="/terms" className="hover:text-primary">
+              Terms of Service
+            </Link>
+          </div>
+        </div>
       </div>
     </footer>
   )
