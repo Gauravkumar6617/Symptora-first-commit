@@ -1,7 +1,8 @@
-from sqlalchemy import String,Column ,Boolean
+from sqlalchemy import String,Column ,Boolean,DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from app.models.base import BaseModel
 import uuid
+from sqlalchemy.orm import relationship
 
 def gen_uuid():
     #Generates a fresh random unique ID string for a new row's primary key
@@ -18,9 +19,12 @@ class UserModel(BaseModel):
     address=Column(String(255),nullable=True)
     avatar=Column(String,nullable=True)
     hashed_password=Column(String,nullable=False)
-
+    date_of_birth = Column(DateTime, nullable=False)
+    is_active=Column(Boolean,default=False)
+    gender = Column(String, nullable=True)
     id_doctor=Column(Boolean,default=False,nullable=False)
 
-    
+    family_members=relationship("FamilyMemberModel",back_populates="account_owner")
+    doctor_profile=relationship("DoctorProfile",back_populates="user",uselist=False,cascade="all ,delete-orphan")
 
 

@@ -21,4 +21,5 @@ class CliniModel(BaseModel):
 
     medplum_organisation_id= Column(String(),nullable=False)
 
-    doctor_profile =relationship("DoctorProfile",back_populates="clinic")
+    # back_populates target renamed to match DoctorProfile.clinic
+    doctor_profiles = relationship("DoctorProfile", back_populates="clinic")
