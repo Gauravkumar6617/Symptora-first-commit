@@ -14,6 +14,8 @@ import { ContactPage } from '@/pages/contact/ContactPage'
 import { DashboardPage } from '@/pages/dashboard/DashboardPage'
 import { FamilyPage } from '@/pages/family/FamilyPage'
 import { HomePage } from '@/pages/home/HomePage'
+import { PrivacyPolicyPage } from '@/pages/legal/PrivacyPolicyPage'
+import { TermsOfServicePage } from '@/pages/legal/TermsOfServicePage'
 import { ProfilePage } from '@/pages/profile/ProfilePage'
 import { SpecialtyPage } from '@/pages/specialties/SpecialtyPage'
 import { TelemedicinePage } from '@/pages/telemedicine/TelemedicinePage'
@@ -35,6 +37,8 @@ export const router = createBrowserRouter([
       { path: '/family', element: <FamilyPage /> },
       { path: '/about', element: <AboutPage /> },
       { path: '/contact', element: <ContactPage /> },
+      { path: '/privacy', element: <PrivacyPolicyPage /> },
+      { path: '/terms', element: <TermsOfServicePage /> },
       { path: '/apply-doctor', element: <ApplyDoctorPage /> },
       {
         element: <ProtectedRoute />,
