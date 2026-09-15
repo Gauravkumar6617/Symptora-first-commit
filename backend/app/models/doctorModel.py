@@ -1,4 +1,5 @@
 from sqlalchemy import String,Column,Integer,Boolean,ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.models.base import BaseModel
 import uuid
@@ -15,3 +16,9 @@ class DoctorProfile(BaseModel):
     user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), unique=True, nullable=False)
     specialization = Column(String,nullable=False)
     license_number= Column(String(25),nullable=False,unique=True)
+    user = relationship("UserModel", back_populates="doctor_profile")
+    # FK must point at actual clinic model/table (CliniModel/"clinic"), not the nonexistent "Clinic"
+    clinic_id = Column(UUID(as_uuid=False), ForeignKey("clinic.id"), nullable=True)
+    clinic = relationship("CliniModel", back_populates="doctor_profiles")
+    availability_slots=relationship("doctorAvailabilityModel",back_populates="doctor_profile",cascade="all, delete-orphan")
+    

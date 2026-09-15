@@ -35,3 +35,23 @@ class DayOfWeek(str, enum.Enum):
 class TimeSlot(str, enum.Enum):
     AM = "am"  
     PM = "pm"  
+
+class FamilyRelationship(str, enum.Enum):
+    MOTHER = "mother"
+    FATHER = "father"
+    SON = "son"
+    DAUGHTER = "daughter"
+    BROTHER = "brother"
+    SISTER = "sister"
+    HUSBAND = "husband"
+    WIFE = "wife"
+    GRANDMOTHER = "grandmother"
+    GRANDFATHER = "grandfather"
+    GRANDSON = "grandson"
+    GRANDDAUGHTER = "granddaughter"
+    UNCLE = "uncle"
+    AUNT = "aunt"
+    NEPHEW = "nephew"
+    NIECE = "niece"
+    COUSIN = "cousin"
+    OTHER = "other"
