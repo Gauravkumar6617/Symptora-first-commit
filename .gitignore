@@ -29,6 +29,9 @@ build/
 dist/
 
 # Editor / OS files
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+frontend-app/.vscode/
 .idea/
 .DS_Store
