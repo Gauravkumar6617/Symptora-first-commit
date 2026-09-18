@@ -1,29 +1,43 @@
+import { type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Spacing } from '@/constants/theme';
+import { Spacing, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-export function ScreenHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+export function ScreenHeader({
+  title,
+  subtitle,
+  right,
+}: {
+  title: string;
+  subtitle?: string;
+  right?: ReactNode;
+}) {
   const theme = useTheme();
 
   return (
     <View style={styles.wrapper}>
-      <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
-      {subtitle ? <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{subtitle}</Text> : null}
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
+        {subtitle ? <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{subtitle}</Text> : null}
+      </View>
+      {right}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrapper: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.three,
     marginBottom: Spacing.four,
-    gap: 4,
   },
   title: {
-    fontSize: 24,
-    fontWeight: '800',
+    ...Typography.title,
   },
   subtitle: {
-    fontSize: 14,
+    ...Typography.small,
+    marginTop: 4,
   },
 });

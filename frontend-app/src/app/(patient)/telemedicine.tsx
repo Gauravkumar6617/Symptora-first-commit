@@ -1,39 +1,56 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Chip } from '@/components/ui/chip';
 import { DoctorCard } from '@/components/ui/doctor-card';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ProgressSteps } from '@/components/ui/progress-steps';
+import { Screen } from '@/components/ui/screen';
+import { SegmentedControl } from '@/components/ui/segmented-control';
+import { SkeletonList } from '@/components/ui/skeleton';
 import { StackHeader } from '@/components/ui/stack-header';
-import { BottomTabInset, Radius, Spacing } from '@/constants/theme';
+import { TextField } from '@/components/ui/text-field';
+import { Radius, Spacing, Typography, tint } from '@/constants/theme';
 import { specialties, timeSlots } from '@/data/catalog';
+import { successFeedback } from '@/lib/haptics';
 import { useCatalogDoctors } from '@/hooks/use-queries';
 import { useTheme } from '@/hooks/use-theme';
 
 const steps = ['Specialty', 'Doctor', 'Slot'] as const;
+type Mode = 'video' | 'in-person';
 
 export default function TelemedicineScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { data: doctors } = useCatalogDoctors();
+  const { data: doctors, isLoading } = useCatalogDoctors();
 
   const [step, setStep] = useState(0);
   const [specialtySlug, setSpecialtySlug] = useState<string | null>(null);
   const [doctorId, setDoctorId] = useState<string | null>(null);
   const [slot, setSlot] = useState<string | null>(null);
-  const [mode, setMode] = useState<'video' | 'in-person'>('video');
+  const [mode, setMode] = useState<Mode>('video');
+  const [reason, setReason] = useState('');
+  const [onlyToday, setOnlyToday] = useState(false);
+
+  const selectedSpecialty = specialties.find((item) => item.slug === specialtySlug);
 
   const filteredDoctors = useMemo(() => {
     if (!doctors) return [];
-    const specialty = specialties.find((s) => s.slug === specialtySlug);
-    if (!specialty) return doctors;
-    return doctors.filter((doctor) => doctor.specialty === specialty.doctorSpecialty);
-  }, [doctors, specialtySlug]);
+    let list = selectedSpecialty
+      ? doctors.filter((doctor) => doctor.specialty === selectedSpecialty.doctorSpecialty)
+      : doctors;
+    if (onlyToday) list = list.filter((doctor) => doctor.availableToday);
+    return list;
+  }, [doctors, selectedSpecialty, onlyToday]);
 
-  const selectedDoctor = doctors?.find((d) => d.id === doctorId);
+  const selectedDoctor = doctors?.find((doctor) => doctor.id === doctorId);
 
   function handleConfirm() {
+    successFeedback();
     Alert.alert(
       'Appointment requested',
       `${mode === 'video' ? 'Video consult' : 'In-person visit'} with ${selectedDoctor?.name} at ${slot}. We'll confirm shortly.`,
@@ -42,188 +59,215 @@ export default function TelemedicineScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <StackHeader title="Book a consult" />
-      <View style={styles.stepRow}>
-        {steps.map((label, index) => (
-          <View key={label} style={styles.stepItem}>
-            <View
-              style={[
-                styles.stepDot,
-                { backgroundColor: index <= step ? theme.primary : theme.backgroundElement, borderColor: theme.border },
-              ]}>
-              <Text style={{ color: index <= step ? theme.onPrimary : theme.textSecondary, fontSize: 12, fontWeight: '700' }}>
-                {index + 1}
+    <Screen
+      header={
+        <StackHeader
+          title="Book a consult"
+          subtitle={steps[step]}
+          fallbackHref="/(patient)/(tabs)"
+        />
+      }>
+      <ProgressSteps steps={steps} current={step} />
+
+      {step === 0 ? (
+        <View style={styles.block}>
+          <Text style={[styles.heading, { color: theme.text }]}>What do you need help with?</Text>
+          <Card
+            onPress={() => {
+              setSpecialtySlug(null);
+              setStep(1);
+            }}
+            style={styles.option}>
+            <View style={[styles.optionIcon, { backgroundColor: tint(theme.primary, 0.12) }]}>
+              <Ionicons name="apps" size={18} color={theme.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.optionTitle, { color: theme.text }]}>Any specialty</Text>
+              <Text style={[styles.optionMeta, { color: theme.textSecondary }]}>
+                Show every available doctor
               </Text>
             </View>
-            <Text style={{ color: index <= step ? theme.text : theme.textSecondary, fontSize: 11, marginTop: 4 }}>{label}</Text>
-          </View>
-        ))}
-      </View>
+            <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
+          </Card>
 
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: BottomTabInset + Spacing.five }]}>
-        {step === 0 && (
-          <View style={{ gap: Spacing.two }}>
-            <Pressable
+          {specialties.map((specialty) => (
+            <Card
+              key={specialty.slug}
               onPress={() => {
-                setSpecialtySlug(null);
+                setSpecialtySlug(specialty.slug);
                 setStep(1);
               }}
-              style={[styles.specialtyOption, { borderColor: theme.border }]}>
-              <Text style={{ color: theme.text, fontWeight: '700' }}>Any specialty</Text>
-              <Text style={{ color: theme.textSecondary, fontSize: 12 }}>Show every available doctor</Text>
-            </Pressable>
-            {specialties.map((specialty) => (
-              <Pressable
-                key={specialty.slug}
-                onPress={() => {
-                  setSpecialtySlug(specialty.slug);
-                  setStep(1);
-                }}
-                style={[styles.specialtyOption, { borderColor: theme.border }]}>
-                <View style={[styles.specialtyIcon, { backgroundColor: theme.backgroundElement }]}>
-                  <Ionicons name={specialty.icon} size={18} color={theme.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: theme.text, fontWeight: '700' }}>{specialty.label}</Text>
-                  <Text style={{ color: theme.textSecondary, fontSize: 12 }}>{specialty.shortDescription}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
-              </Pressable>
-            ))}
-          </View>
-        )}
+              style={styles.option}>
+              <View style={[styles.optionIcon, { backgroundColor: tint(theme.primary, 0.12) }]}>
+                <Ionicons name={specialty.icon} size={18} color={theme.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.optionTitle, { color: theme.text }]}>{specialty.label}</Text>
+                <Text style={[styles.optionMeta, { color: theme.textSecondary }]}>
+                  {specialty.shortDescription}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
+            </Card>
+          ))}
+        </View>
+      ) : null}
 
-        {step === 1 && (
-          <View style={{ gap: Spacing.three }}>
-            {filteredDoctors.map((doctor) => (
+      {step === 1 ? (
+        <View style={styles.block}>
+          <Text style={[styles.heading, { color: theme.text }]}>
+            {selectedSpecialty ? `${selectedSpecialty.label} doctors` : 'Available doctors'}
+          </Text>
+          <View style={styles.filterRow}>
+            <Chip label="All" selected={!onlyToday} onPress={() => setOnlyToday(false)} />
+            <Chip label="Available today" selected={onlyToday} onPress={() => setOnlyToday(true)} />
+          </View>
+
+          {isLoading ? (
+            <SkeletonList count={3} />
+          ) : filteredDoctors.length === 0 ? (
+            <EmptyState
+              icon="people-outline"
+              title="No doctors free right now"
+              description="Try another specialty or turn off the availability filter."
+              actionLabel="Show all doctors"
+              onAction={() => {
+                setOnlyToday(false);
+                setSpecialtySlug(null);
+              }}
+            />
+          ) : (
+            filteredDoctors.map((doctor) => (
               <DoctorCard
                 key={doctor.id}
                 doctor={doctor}
-                selected={doctor.id === doctorId}
+                selected={doctorId === doctor.id}
                 onPress={() => {
                   setDoctorId(doctor.id);
                   setStep(2);
                 }}
               />
+            ))
+          )}
+
+          <Button label="Back" variant="ghost" size="sm" icon="chevron-back" onPress={() => setStep(0)} />
+        </View>
+      ) : null}
+
+      {step === 2 && selectedDoctor ? (
+        <View style={styles.block}>
+          <Card style={styles.summaryCard}>
+            <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>CONSULTING</Text>
+            <Text style={[styles.summaryName, { color: theme.text }]}>{selectedDoctor.name}</Text>
+            <Text style={[styles.optionMeta, { color: theme.textSecondary }]}>
+              {selectedDoctor.specialty} · ₹{selectedDoctor.fee}
+            </Text>
+          </Card>
+
+          <Text style={[styles.heading, { color: theme.text }]}>How would you like to meet?</Text>
+          <SegmentedControl
+            options={[
+              { value: 'video', label: 'Video consult' },
+              { value: 'in-person', label: 'In person' },
+            ]}
+            value={mode}
+            onChange={setMode}
+          />
+
+          <Text style={[styles.heading, { color: theme.text }]}>Pick a time</Text>
+          <View style={styles.slotGrid}>
+            {timeSlots.map((item) => (
+              <Chip key={item} label={item} selected={slot === item} onPress={() => setSlot(item)} />
             ))}
           </View>
-        )}
 
-        {step === 2 && selectedDoctor && (
-          <View style={{ gap: Spacing.four }}>
-            <View>
-              <Text style={{ color: theme.text, fontWeight: '700', fontSize: 15 }}>{selectedDoctor.name}</Text>
-              <Text style={{ color: theme.textSecondary, fontSize: 12 }}>{selectedDoctor.specialty}</Text>
-            </View>
+          <TextField
+            label="What's the concern? (optional)"
+            value={reason}
+            onChangeText={setReason}
+            placeholder="e.g. chest tightness for two days"
+            multiline
+            style={styles.multiline}
+          />
 
-            <View>
-              <Text style={{ color: theme.text, fontWeight: '700', marginBottom: Spacing.two }}>Consult type</Text>
-              <View style={styles.modeRow}>
-                {(['video', 'in-person'] as const).map((option) => (
-                  <Pressable
-                    key={option}
-                    onPress={() => setMode(option)}
-                    style={[
-                      styles.modeOption,
-                      { borderColor: mode === option ? theme.primary : theme.border, backgroundColor: mode === option ? theme.backgroundElement : 'transparent' },
-                    ]}>
-                    <Ionicons
-                      name={option === 'video' ? 'videocam' : 'location'}
-                      size={16}
-                      color={mode === option ? theme.primary : theme.textSecondary}
-                    />
-                    <Text style={{ color: mode === option ? theme.primary : theme.textSecondary, fontWeight: '600', fontSize: 13 }}>
-                      {option === 'video' ? 'Video' : 'In person'}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
+          <Card variant="muted" style={styles.note}>
+            <Ionicons name="information-circle-outline" size={16} color={theme.primary} />
+            <Text style={[styles.noteText, { color: theme.textSecondary }]}>
+              Fees are shown upfront. Chat follow-ups and an e-prescription are included.
+            </Text>
+          </Card>
 
-            <View>
-              <Text style={{ color: theme.text, fontWeight: '700', marginBottom: Spacing.two }}>Pick a time slot</Text>
-              <View style={styles.slotGrid}>
-                {timeSlots.map((time) => (
-                  <Pressable
-                    key={time}
-                    onPress={() => setSlot(time)}
-                    style={[
-                      styles.slot,
-                      { borderColor: slot === time ? theme.primary : theme.border, backgroundColor: slot === time ? theme.primary : 'transparent' },
-                    ]}>
-                    <Text style={{ color: slot === time ? theme.onPrimary : theme.text, fontSize: 13, fontWeight: '600' }}>{time}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-
-            <Button label={`Confirm for ₹${selectedDoctor.fee}`} onPress={handleConfirm} disabled={!slot} />
-          </View>
-        )}
-      </ScrollView>
-    </View>
+          <Button
+            label={slot ? `Confirm ${slot} slot` : 'Pick a slot to continue'}
+            onPress={handleConfirm}
+            disabled={!slot}
+            size="lg"
+          />
+          <Button label="Back" variant="ghost" size="sm" icon="chevron-back" onPress={() => setStep(1)} />
+        </View>
+      ) : null}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  stepRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: Spacing.five,
-    paddingVertical: Spacing.three,
+  block: {
+    gap: Spacing.two,
+    marginTop: Spacing.four,
   },
-  stepItem: {
-    alignItems: 'center',
+  heading: {
+    ...Typography.section,
+    marginTop: Spacing.two,
   },
-  stepDot: {
-    width: 28,
-    height: 28,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
-  content: {
-    paddingHorizontal: Spacing.four,
-  },
-  specialtyOption: {
+  option: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.three,
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    padding: Spacing.three,
+    gap: Spacing.three - 4,
   },
-  specialtyIcon: {
+  optionIcon: {
     width: 36,
     height: 36,
     borderRadius: Radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modeRow: {
-    flexDirection: 'row',
-    gap: Spacing.two,
+  optionTitle: {
+    ...Typography.smallStrong,
   },
-  modeOption: {
+  optionMeta: {
+    ...Typography.caption,
+  },
+  filterRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1.5,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
+    gap: Spacing.two - 2,
+    marginBottom: Spacing.two,
+  },
+  summaryCard: {
+    gap: 2,
+  },
+  summaryLabel: {
+    ...Typography.overline,
+  },
+  summaryName: {
+    ...Typography.section,
   },
   slotGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.two,
+    gap: Spacing.two - 2,
   },
-  slot: {
-    borderWidth: 1.5,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
+  multiline: {
+    minHeight: 84,
+    textAlignVertical: 'top',
+  },
+  note: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    alignItems: 'flex-start',
+  },
+  noteText: {
+    ...Typography.caption,
+    flex: 1,
+    lineHeight: 18,
   },
 });

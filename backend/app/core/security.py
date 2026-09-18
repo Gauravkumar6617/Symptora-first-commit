@@ -1,16 +1,28 @@
 from datetime import datetime, timedelta, timezone
+import bcrypt
 from jose import jwt,JWTError
-from passlib.context import CryptContext
 from app.core.config import settings
 
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+def _password_bytes(password: str) -> bytes:
+    """Encode a password for bcrypt, enforcing bcrypt's 72-byte limit."""
+    encoded_password = password.encode("utf-8")
+    if len(encoded_password) > 72:
+        raise ValueError("Password must be at most 72 bytes long.")
+    return encoded_password
 
-def hashed_pasword(password:str) ->str:
-    return pwd_context.hash(password)
 
-def verify_password(plain_password : str , hashed_password : str ) ->bool:
-    return pwd_context.verify(plain_password,hashed_password)
+def hashed_pasword(password: str) -> str:
+    return bcrypt.hashpw(_password_bytes(password), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    try:
+        return bcrypt.checkpw(
+            _password_bytes(plain_password), hashed_password.encode("utf-8")
+        )
+    except ValueError:
+        return False
 
 
 

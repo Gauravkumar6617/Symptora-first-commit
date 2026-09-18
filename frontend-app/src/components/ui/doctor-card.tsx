@@ -1,49 +1,60 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
+import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { Spacing, Typography } from '@/constants/theme';
 import type { CatalogDoctor } from '@/data/catalog';
-import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export function DoctorCard({
   doctor,
   selected,
   onPress,
+  compact,
 }: {
   doctor: CatalogDoctor;
   selected?: boolean;
   onPress?: () => void;
+  compact?: boolean;
 }) {
   const theme = useTheme();
 
   return (
-    <Pressable onPress={onPress}>
-      <Card style={[styles.card, selected ? { borderColor: theme.primary, borderWidth: 1.5 } : null]}>
-        <View style={styles.row}>
-          <View style={[styles.avatar, { backgroundColor: theme.backgroundElement }]}>
-            <Ionicons name="person" size={22} color={theme.primary} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.name, { color: theme.text }]}>{doctor.name}</Text>
-            <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-              {doctor.specialty} · {doctor.experienceYears} yrs exp
-            </Text>
+    <Card
+      onPress={onPress}
+      style={[styles.card, selected ? { borderColor: theme.primary, borderWidth: 1.5 } : null]}>
+      <View style={styles.row}>
+        <Avatar name={doctor.name.replace('Dr. ', '')} size={compact ? 40 : 48} />
+
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.name, { color: theme.text }]} numberOfLines={1}>
+            {doctor.name}
+          </Text>
+          <Text style={[styles.meta, { color: theme.textSecondary }]} numberOfLines={1}>
+            {doctor.specialty} · {doctor.experienceYears} yrs exp
+          </Text>
+          {compact ? null : (
             <View style={styles.metaRow}>
               <Ionicons name="star" size={12} color={theme.warning} />
-              <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
+              <Text style={[styles.meta, { color: theme.textSecondary }]}>
                 {doctor.rating} ({doctor.consults} consults)
               </Text>
             </View>
-          </View>
-          <View style={{ alignItems: 'flex-end', gap: 4 }}>
-            <Text style={{ color: theme.text, fontWeight: '700' }}>₹{doctor.fee}</Text>
-            {doctor.availableToday ? <Badge label="Today" tone="success" /> : <Badge label="Later" tone="neutral" />}
-          </View>
+          )}
         </View>
-      </Card>
-    </Pressable>
+
+        <View style={styles.trailing}>
+          <Text style={[styles.fee, { color: theme.text }]}>₹{doctor.fee}</Text>
+          {doctor.availableToday ? (
+            <Badge label="Today" tone="success" />
+          ) : (
+            <Badge label="Later" tone="neutral" />
+          )}
+        </View>
+      </View>
+    </Card>
   );
 }
 
@@ -54,23 +65,26 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.three,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: Radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
+    gap: Spacing.three - 4,
   },
   name: {
-    fontSize: 14,
-    fontWeight: '700',
+    ...Typography.smallStrong,
+  },
+  meta: {
+    ...Typography.caption,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     marginTop: 2,
+  },
+  trailing: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  fee: {
+    ...Typography.smallStrong,
+    fontWeight: '800',
   },
 });

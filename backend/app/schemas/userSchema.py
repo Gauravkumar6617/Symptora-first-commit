@@ -7,7 +7,8 @@ from app.schemas.common import ORMReadBase
 
 
 class UserBase(BaseModel):
-    full_name: str = Field(max_length=24)
+    first_name: str = Field(max_length=24)
+    last_name: str = Field(max_length=24)
     email: EmailStr
     number: str = Field(max_length=15)
     address: Optional[str] = Field(default=None, max_length=255)
@@ -17,17 +18,18 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    password: str = Field(min_length=8)
+    password: str = Field(min_length=8, max_length=72)
 
 
 class UserUpdate(BaseModel):
-    full_name: Optional[str] = Field(default=None, max_length=24)
+    first_name: Optional[str] = Field(default=None, max_length=24)
+    last_name: Optional[str] = Field(default=None, max_length=24)
     number: Optional[str] = Field(default=None, max_length=15)
     address: Optional[str] = Field(default=None, max_length=255)
     avatar: Optional[str] = None
     gender: Optional[str] = None
 
 
-class UserRead(UserBase, ORMReadBase):
+class UserResponse(UserBase, ORMReadBase):
     is_active: bool
     id_doctor: bool

@@ -1,22 +1,58 @@
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { StackHeader } from '@/components/ui/stack-header';
+import { EmptyState } from '@/components/ui/empty-state';
 import { QuickLinkCard } from '@/components/ui/quick-link-card';
-import { BottomTabInset, Spacing } from '@/constants/theme';
+import { Screen } from '@/components/ui/screen';
+import { StackHeader } from '@/components/ui/stack-header';
+import { TextField } from '@/components/ui/text-field';
+import { Spacing, Typography } from '@/constants/theme';
 import { specialties } from '@/data/catalog';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function SpecialtiesScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const [query, setQuery] = useState('');
+
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return specialties;
+    return specialties.filter(
+      (specialty) =>
+        specialty.label.toLowerCase().includes(needle) ||
+        specialty.shortDescription.toLowerCase().includes(needle) ||
+        specialty.commonFor.some((item) => item.toLowerCase().includes(needle)),
+    );
+  }, [query]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <StackHeader title="Specialties" />
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: BottomTabInset + Spacing.five }]}>
+    <Screen
+      header={<StackHeader title="Specialties" subtitle="Find the right kind of doctor" fallbackHref="/" />}>
+      <TextField
+        icon="search-outline"
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search a specialty or symptom"
+        autoCorrect={false}
+      />
+
+      <Text style={[styles.hint, { color: theme.textSecondary }]}>
+        Not sure who to see? Start with a Health Check and we&apos;ll point you to the right specialty.
+      </Text>
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon="search-outline"
+          title="No specialty matches that"
+          description="Try a symptom instead, like rash, fever, or anxiety."
+          actionLabel="Clear search"
+          onAction={() => setQuery('')}
+        />
+      ) : (
         <View style={styles.grid}>
-          {specialties.map((specialty) => (
+          {filtered.map((specialty) => (
             <QuickLinkCard
               key={specialty.slug}
               icon={specialty.icon}
@@ -26,15 +62,15 @@ export default function SpecialtiesScreen() {
             />
           ))}
         </View>
-      </ScrollView>
-    </View>
+      )}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.four,
+  hint: {
+    ...Typography.caption,
+    marginVertical: Spacing.three,
   },
   grid: {
     flexDirection: 'row',

@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { Radius } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { PressScale } from '@/components/ui/press-scale';
+import { Radius, Spacing, Typography, tint } from '@/constants/theme';
 import type { Specialty } from '@/data/catalog';
+import { useTheme } from '@/hooks/use-theme';
 
 export function SpecialtyChip({
   specialty,
@@ -17,41 +18,49 @@ export function SpecialtyChip({
   const theme = useTheme();
 
   return (
-    <Pressable onPress={onPress} style={styles.pressable}>
-      <View
-        style={[
-          styles.iconWrap,
-          {
-            backgroundColor: selected ? theme.primary : theme.backgroundElement,
-            borderColor: selected ? theme.primary : theme.border,
-          },
-        ]}>
-        <Ionicons name={specialty.icon} size={22} color={selected ? theme.onPrimary : theme.primary} />
+    <PressScale onPress={onPress} style={styles.pressable}>
+      <View style={styles.inner}>
+        <View
+          style={[
+            styles.iconWrap,
+            {
+              backgroundColor: selected ? theme.primary : tint(theme.primary, 0.1),
+              borderColor: selected ? theme.primary : 'transparent',
+            },
+          ]}>
+          <Ionicons name={specialty.icon} size={22} color={selected ? theme.onPrimary : theme.primary} />
+        </View>
+        <Text
+          style={[styles.label, { color: selected ? theme.primary : theme.text }]}
+          numberOfLines={2}>
+          {specialty.label}
+        </Text>
       </View>
-      <Text style={[styles.label, { color: selected ? theme.primary : theme.text }]} numberOfLines={1}>
-        {specialty.label}
-      </Text>
-    </Pressable>
+    </PressScale>
   );
 }
 
 const styles = StyleSheet.create({
   pressable: {
+    width: 80,
+  },
+  inner: {
     alignItems: 'center',
-    width: 76,
     gap: 6,
   },
   iconWrap: {
-    width: 56,
-    height: 56,
+    width: 58,
+    height: 58,
     borderRadius: Radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
   },
   label: {
-    fontSize: 11,
+    ...Typography.caption,
     fontWeight: '600',
     textAlign: 'center',
+    minHeight: 30,
+    paddingHorizontal: Spacing.half,
   },
 });

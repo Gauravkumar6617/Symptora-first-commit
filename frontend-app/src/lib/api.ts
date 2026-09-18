@@ -1,17 +1,230 @@
+/**
+ * API layer.
+ *
+ * Auth calls hit the real FastAPI backend when EXPO_PUBLIC_API_URL is set
+ * (see backend/app/routers/userRouter.py). Catalog/appointment data is still
+ * served from src/data/* mocks — each fetch* below is a one-line swap to a
+ * request once those routes exist.
+ */
+
 import { blogPosts, catalogDoctors, clinics, specialties } from '@/data/catalog';
 import {
   mockAppointments,
+  mockDoctor,
   mockDoctorAppointments,
   mockDoctors,
   mockFamilyMembers,
+  mockNotifications,
+  mockPatient,
   mockRiskChecks,
 } from '@/data/mockData';
-import type { Appointment, Doctor, FamilyMember, RiskCheck } from '@/types';
+import type {
+  Appointment,
+  AppNotification,
+  AuthSession,
+  AuthUser,
+  Doctor,
+  FamilyMember,
+  RiskCheck,
+  UserCreatePayload,
+  UserResponse,
+  UserUpdatePayload,
+} from '@/types';
 
-// Thin "API" layer over mock data, shaped like real async calls so each
-// function is a one-line swap to a fetch() against the FastAPI backend
-// (see backend/app/schemas) once those routes exist.
+/** Set EXPO_PUBLIC_API_URL (e.g. http://192.168.1.5:8000) to talk to the API. */
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, '') ?? '';
+export const API_PREFIX = '/api/v1';
+
+/** With no API URL configured the app runs against local mock data. */
+export const isDemoMode = !API_BASE_URL;
+
+export class ApiError extends Error {
+  status: number;
+  fieldErrors?: Record<string, string>;
+
+  constructor(message: string, status = 0, fieldErrors?: Record<string, string>) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.fieldErrors = fieldErrors;
+  }
+}
+
 const delay = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
+
+interface RequestOptions extends Omit<RequestInit, 'body'> {
+  body?: unknown;
+  token?: string;
+  /** Send as application/x-www-form-urlencoded (FastAPI OAuth2 login). */
+  form?: Record<string, string>;
+}
+
+async function request<T>(path: string, { body, token, form, headers, ...init }: RequestOptions = {}): Promise<T> {
+  if (isDemoMode) {
+    throw new ApiError('No API URL configured (EXPO_PUBLIC_API_URL).', 0);
+  }
+
+  const requestHeaders: Record<string, string> = {
+    Accept: 'application/json',
+    ...(headers as Record<string, string> | undefined),
+  };
+  if (token) requestHeaders.Authorization = `Bearer ${token}`;
+
+  let payload: string | undefined;
+  if (form) {
+    requestHeaders['Content-Type'] = 'application/x-www-form-urlencoded';
+    payload = new URLSearchParams(form).toString();
+  } else if (body !== undefined) {
+    requestHeaders['Content-Type'] = 'application/json';
+    payload = JSON.stringify(body);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${API_PREFIX}${path}`, {
+      ...init,
+      headers: requestHeaders,
+      body: payload,
+    });
+  } catch {
+    throw new ApiError('Could not reach the server. Check your connection.', 0);
+  }
+
+  const text = await response.text();
+  const data = text ? safeJsonParse(text) : null;
+
+  if (!response.ok) {
+    throw toApiError(data, response.status, text);
+  }
+
+  return data as T;
+}
+
+function safeJsonParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+/** FastAPI returns `detail` as a string, or a list for validation errors. */
+function toApiError(data: unknown, status: number, fallback: string): ApiError {
+  const detail = (data as { detail?: unknown } | null)?.detail;
+
+  if (typeof detail === 'string') {
+    return new ApiError(detail, status);
+  }
+
+  if (Array.isArray(detail)) {
+    const fieldErrors: Record<string, string> = {};
+    for (const item of detail) {
+      const loc = (item as { loc?: unknown[] }).loc;
+      const message = (item as { msg?: string }).msg ?? 'Invalid value.';
+      const field = Array.isArray(loc) ? String(loc[loc.length - 1]) : undefined;
+      if (field) fieldErrors[field] = message;
+    }
+    const first = Object.values(fieldErrors)[0];
+    return new ApiError(first ?? 'Please check the highlighted fields.', status, fieldErrors);
+  }
+
+  return new ApiError(status ? `Request failed (${status}).` : fallback || 'Request failed.', status);
+}
+
+/** UserResponse → AuthUser (adds the UI-only role field). */
+export function toAuthUser(user: UserResponse, specialization?: string): AuthUser {
+  return {
+    ...user,
+    role: user.id_doctor ? 'doctor' : 'patient',
+    specialization,
+  };
+}
+
+// ---------------------------------------------------------------- auth
+
+/** POST /api/v1/users/ — backend UserCreate → UserResponse. */
+export async function registerUser(payload: UserCreatePayload): Promise<AuthUser> {
+  if (isDemoMode) {
+    await delay(500);
+    const now = new Date().toISOString();
+    return toAuthUser({
+      id: `demo-${Date.now()}`,
+      created_at: now,
+      updated_at: now,
+      is_active: true,
+      id_doctor: false,
+      first_name: payload.first_name,
+      last_name: payload.last_name,
+      email: payload.email,
+      number: payload.number,
+      address: payload.address ?? null,
+      avatar: payload.avatar ?? null,
+      date_of_birth: payload.date_of_birth,
+      gender: payload.gender ?? null,
+    });
+  }
+
+  const user = await request<UserResponse>('/users/', { method: 'POST', body: payload });
+  return toAuthUser(user);
+}
+
+/**
+ * POST /api/v1/auth/login — OAuth2 password grant (see
+ * backend/app/deps/auth.py `oauth2_scheme`). The route is not implemented on
+ * the backend yet; in demo mode this resolves to a mock session instead.
+ */
+export async function loginUser(email: string, password: string, asDoctor = false): Promise<AuthSession> {
+  if (isDemoMode) {
+    await delay(450);
+    if (password.length < 8) {
+      throw new ApiError('Incorrect email or password.', 401);
+    }
+    const base = asDoctor ? mockDoctor : mockPatient;
+    return { user: { ...base, email } };
+  }
+
+  const tokens = await request<{ access_token: string; refresh_token?: string }>('/auth/login', {
+    method: 'POST',
+    form: { username: email, password, grant_type: 'password' },
+  });
+
+  const user = await request<UserResponse>('/users/me', { token: tokens.access_token });
+
+  return {
+    user: toAuthUser(user),
+    accessToken: tokens.access_token,
+    refreshToken: tokens.refresh_token,
+  };
+}
+
+/** PATCH /api/v1/users/{id} — backend UserUpdate. */
+export async function updateUser(
+  userId: string,
+  payload: UserUpdatePayload,
+  token?: string,
+): Promise<Partial<AuthUser>> {
+  if (isDemoMode) {
+    await delay(400);
+    return payload as Partial<AuthUser>;
+  }
+
+  const user = await request<UserResponse>(`/users/${userId}`, {
+    method: 'PATCH',
+    body: payload,
+    token,
+  });
+  return toAuthUser(user);
+}
+
+export async function requestPasswordReset(email: string): Promise<void> {
+  if (isDemoMode) {
+    await delay(500);
+    return;
+  }
+  await request('/auth/forgot-password', { method: 'POST', body: { email } });
+}
+
+// ------------------------------------------------------- mocked resources
 
 export async function fetchFamilyMembers(): Promise<FamilyMember[]> {
   await delay();
@@ -38,6 +251,11 @@ export async function fetchRiskChecks(): Promise<RiskCheck[]> {
   return mockRiskChecks;
 }
 
+export async function fetchNotifications(): Promise<AppNotification[]> {
+  await delay();
+  return mockNotifications;
+}
+
 export async function fetchSpecialties() {
   await delay();
   return specialties;
@@ -56,4 +274,34 @@ export async function fetchCatalogDoctors() {
 export async function fetchBlogPosts() {
   await delay();
   return blogPosts;
+}
+
+export async function sendContactMessage(payload: {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+}): Promise<void> {
+  if (isDemoMode) {
+    await delay(600);
+    return;
+  }
+  await request('/support/contact', { method: 'POST', body: payload });
+}
+
+export async function submitDoctorApplication(payload: {
+  first_name: string;
+  last_name: string;
+  email: string;
+  number: string;
+  specialization: string;
+  license_number: string;
+  experience_years: string;
+  about: string;
+}): Promise<void> {
+  if (isDemoMode) {
+    await delay(700);
+    return;
+  }
+  await request('/doctors/applications', { method: 'POST', body: payload });
 }

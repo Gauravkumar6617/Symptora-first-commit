@@ -1,12 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Chip } from '@/components/ui/chip';
 import { DoctorCard } from '@/components/ui/doctor-card';
-import { StackHeader } from '@/components/ui/stack-header';
-import { BottomTabInset, Radius, Spacing } from '@/constants/theme';
+import { EmptyState } from '@/components/ui/empty-state';
+import { GradientHeader } from '@/components/ui/gradient-header';
+import { Screen } from '@/components/ui/screen';
+import { SectionHeaderRow } from '@/components/ui/section-link';
+import { SkeletonList } from '@/components/ui/skeleton';
+import { Radius, Spacing, Typography } from '@/constants/theme';
 import { getSpecialtyBySlug } from '@/data/catalog';
 import { useCatalogDoctors } from '@/hooks/use-queries';
 import { useTheme } from '@/hooks/use-theme';
@@ -16,78 +21,103 @@ export default function SpecialtyDetailScreen() {
   const router = useRouter();
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const specialty = getSpecialtyBySlug(slug);
-  const { data: doctors } = useCatalogDoctors();
+  const { data: doctors, isLoading } = useCatalogDoctors();
 
   if (!specialty) {
     return <Redirect href="/(info)/specialties" />;
   }
 
-  const matchingDoctors = doctors?.filter((doctor) => doctor.specialty === specialty.doctorSpecialty) ?? [];
+  const matchingDoctors =
+    doctors?.filter((doctor) => doctor.specialty === specialty.doctorSpecialty) ?? [];
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <StackHeader title={specialty.label} />
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: BottomTabInset + Spacing.five }]}>
-        <Card style={styles.hero}>
-          <View style={[styles.iconWrap, { backgroundColor: theme.backgroundElement }]}>
-            <Ionicons name={specialty.icon} size={28} color={theme.primary} />
-          </View>
-          <Text style={{ color: theme.text, fontSize: 15, lineHeight: 22 }}>{specialty.longDescription}</Text>
-        </Card>
-
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Commonly treated</Text>
-        <View style={styles.chips}>
-          {specialty.commonFor.map((item) => (
-            <View key={item} style={[styles.chip, { backgroundColor: theme.backgroundElement }]}>
-              <Text style={{ color: theme.primary, fontSize: 12, fontWeight: '600' }}>{item}</Text>
+    <Screen
+      header={
+        <GradientHeader
+          title={specialty.label}
+          subtitle={specialty.shortDescription}
+          back
+          fallbackHref="/(info)/specialties"
+          right={
+            <View style={styles.headerIcon}>
+              <Ionicons name={specialty.icon} size={20} color="#FFFFFF" />
             </View>
-          ))}
-        </View>
+          }
+        />
+      }>
+      <Card style={{ gap: Spacing.two }}>
+        <Text style={[styles.body, { color: theme.text }]}>{specialty.longDescription}</Text>
+      </Card>
 
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Available doctors</Text>
+      <SectionHeaderRow title="Commonly treated" />
+      <View style={styles.chips}>
+        {specialty.commonFor.map((item) => (
+          <Chip key={item} label={item} />
+        ))}
+      </View>
+
+      <SectionHeaderRow
+        title="Available doctors"
+        subtitle={`${matchingDoctors.length} ${specialty.doctorSpecialty} profiles`}
+      />
+      {isLoading ? (
+        <SkeletonList count={2} />
+      ) : matchingDoctors.length === 0 ? (
+        <EmptyState
+          icon="people-outline"
+          title="No doctors listed yet"
+          description="We're onboarding specialists in this area. Book a general physician in the meantime."
+          actionLabel="Book a consult"
+          onAction={() => router.push('/(patient)/telemedicine')}
+        />
+      ) : (
         <View style={{ gap: Spacing.three }}>
           {matchingDoctors.map((doctor) => (
-            <DoctorCard key={doctor.id} doctor={doctor} onPress={() => router.push('/(patient)/telemedicine')} />
+            <DoctorCard
+              key={doctor.id}
+              doctor={doctor}
+              onPress={() => router.push(`/(patient)/doctors/${doctor.id}`)}
+            />
           ))}
         </View>
+      )}
 
-        <View style={{ marginTop: Spacing.four }}>
-          <Button label="Book a consult" onPress={() => router.push('/(patient)/telemedicine')} />
-        </View>
-      </ScrollView>
-    </View>
+      <View style={styles.actions}>
+        <Button
+          label="Book a consult"
+          icon="calendar-outline"
+          onPress={() => router.push('/(patient)/telemedicine')}
+        />
+        <Button
+          label="Run a Health Check first"
+          variant="outline"
+          onPress={() => router.push('/(patient)/health-check')}
+        />
+      </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.four,
-    gap: Spacing.three,
-  },
-  hero: {
-    gap: Spacing.two,
-  },
-  iconWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: Radius.lg,
+  headerIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: Radius.full,
+    backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    marginTop: Spacing.two,
+  body: {
+    ...Typography.body,
+    lineHeight: 23,
   },
   chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.two,
+    gap: Spacing.two - 2,
   },
-  chip: {
-    paddingHorizontal: Spacing.two,
-    paddingVertical: 6,
-    borderRadius: Radius.full,
+  actions: {
+    gap: Spacing.two,
+    marginTop: Spacing.five,
   },
 });
