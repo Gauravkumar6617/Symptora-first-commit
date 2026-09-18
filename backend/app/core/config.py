@@ -27,10 +27,22 @@ class Settting(BaseSettings):
     MEDPLUM_CLIENT_SECRET         : str
     MEDPLUM_PROJECT_ID            : str
 
+    #otp
+    OTP_EXPIRY_SECONDS            : int = 300
+    OTP_COOLDOWN_SECONDS          : int = 30
+    OTP_MAX_ATTEMPTS              : int = 5
+
+    # Email delivery
+    SMTP_HOST                     : str = "smtp.gmail.com"
+    SMTP_PORT                     : int = 587
+    SMTP_USER                     : str = ""
+    SMTP_PASSWORD                 : str = ""
+    FROM_EMAIL                    : str = ""
+    SMTP_USE_TLS                  : bool = True
+
 @lru_cache      # to add cache for env as after reloading it shoudl load from env 
 def get_Setting() -> Settting:
     return Settting()
 
 settings = get_Setting()
-
 
