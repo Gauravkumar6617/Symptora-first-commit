@@ -1,4 +1,6 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
+from app.core.security import hashed_pasword
 from app.models.userModel import UserModel
 from app.schemas.userSchema import UserCreate,UserUpdate
 
@@ -14,8 +16,10 @@ class UserRepository:
     # UserCreate = Pydantic schema/type of the incoming data
     # -> UserModel = this method will return a SQLAlchemy UserModel object
 
+     user_values = user.model_dump(exclude={"password"})
      db_user = UserModel(
-        **user.model_dump()
+        **user_values,
+        hashed_password=hashed_pasword(user.password),
     )
     # user.model_dump()
     # → Converts the UserCreate Pydantic object into a Python dictionary
@@ -114,4 +118,6 @@ class UserRepository:
         return True
     
     def check_user_exists(self, email: str,number: str) -> bool:
-        return self.db.query(UserModel).filter(UserModel.email == email & UserModel.number == number).first() is not None
+        return self.db.query(UserModel).filter(
+            or_(UserModel.email == email, UserModel.number == number)
+        ).first() is not None

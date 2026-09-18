@@ -20,10 +20,11 @@ class Settting(BaseSettings):
         env_file=".env.dev",
         extra="ignore"
     )
+    # medplum integration fields below it
     #medplum integration
     MEDPLUM_BASE_URL              : str
     MEDPLUM_CLIENT_ID             : str
-    MEDPLUM_CLIENT_SECRET           : str
+    MEDPLUM_CLIENT_SECRET         : str
     MEDPLUM_PROJECT_ID            : str
 
 @lru_cache      # to add cache for env as after reloading it shoudl load from env 
