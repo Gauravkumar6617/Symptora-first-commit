@@ -1,47 +1,63 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Spacing } from '@/constants/theme';
+import { Spacing, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export function SectionLink({ label, onPress }: { label: string; onPress?: () => void }) {
   const theme = useTheme();
   return (
-    <Pressable onPress={onPress} style={styles.wrapper}>
-      <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 13 }}>{label}</Text>
-      <Ionicons name="chevron-forward" size={14} color={theme.primary} />
+    <Pressable onPress={onPress} hitSlop={6} style={styles.link} accessibilityRole="button">
+      <Text style={[styles.linkLabel, { color: theme.primary }]}>{label}</Text>
+      <Ionicons name="chevron-forward" size={13} color={theme.primary} />
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
-  wrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-});
-
-export function SectionHeaderRow({ title, actionLabel, onAction }: { title: string; actionLabel?: string; onAction?: () => void }) {
+export function SectionHeaderRow({
+  title,
+  subtitle,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  subtitle?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   const theme = useTheme();
   return (
-    <View style={styles2.row}>
-      <Text style={[styles2.title, { color: theme.text }]}>{title}</Text>
+    <View style={styles.row}>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
+        {subtitle ? <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{subtitle}</Text> : null}
+      </View>
       {actionLabel ? <SectionLink label={actionLabel} onPress={onAction} /> : null}
     </View>
   );
 }
 
-const styles2 = StyleSheet.create({
+const styles = StyleSheet.create({
+  link: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  linkLabel: {
+    ...Typography.smallStrong,
+  },
   row: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: Spacing.two,
     marginTop: Spacing.four,
     marginBottom: Spacing.two,
   },
   title: {
-    fontSize: 17,
-    fontWeight: '700',
+    ...Typography.section,
+  },
+  subtitle: {
+    ...Typography.caption,
+    marginTop: 1,
   },
 });

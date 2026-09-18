@@ -1,27 +1,66 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Radius, Spacing } from '@/constants/theme';
+import { Radius, Spacing, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-export function StackHeader({ title }: { title: string }) {
+interface StackHeaderProps {
+  title: string;
+  subtitle?: string;
+  right?: ReactNode;
+  /** Where back goes when there is nothing to pop. */
+  fallbackHref?: string;
+  /** Hides the bottom hairline, for screens with their own chrome below. */
+  borderless?: boolean;
+}
+
+export function StackHeader({
+  title,
+  subtitle,
+  right,
+  fallbackHref = '/',
+  borderless,
+}: StackHeaderProps) {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.row, { paddingTop: insets.top + Spacing.two, backgroundColor: theme.background, borderBottomColor: theme.border }]}>
+    <View
+      style={[
+        styles.row,
+        {
+          paddingTop: insets.top + Spacing.two,
+          backgroundColor: theme.background,
+          borderBottomColor: borderless ? 'transparent' : theme.border,
+        },
+      ]}>
       <Pressable
-        onPress={() => (router.canGoBack() ? router.back() : router.replace('/(patient)/(tabs)'))}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+        onPress={() => {
+          if (router.canGoBack()) router.back();
+          else router.replace(fallbackHref as never);
+        }}
         style={[styles.back, { backgroundColor: theme.backgroundElement }]}>
         <Ionicons name="chevron-back" size={20} color={theme.text} />
       </Pressable>
-      <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>
-        {title}
-      </Text>
-      <View style={styles.back} />
+
+      <View style={styles.titleWrap}>
+        <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+
+      {right ?? <View style={styles.back} />}
     </View>
   );
 }
@@ -30,7 +69,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: Spacing.two,
     paddingHorizontal: Spacing.four,
     paddingBottom: Spacing.two,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -41,12 +80,15 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    opacity: 1,
+  },
+  titleWrap: {
+    flex: 1,
+    alignItems: 'center',
   },
   title: {
-    fontSize: 16,
-    fontWeight: '700',
-    flex: 1,
-    textAlign: 'center',
+    ...Typography.section,
+  },
+  subtitle: {
+    ...Typography.caption,
   },
 });

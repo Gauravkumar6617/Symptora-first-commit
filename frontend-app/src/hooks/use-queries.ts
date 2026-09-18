@@ -6,6 +6,7 @@ import {
   fetchClinics,
   fetchDoctorAppointments,
   fetchDoctors,
+  fetchNotifications,
   fetchFamilyMembers,
   fetchPatientAppointments,
   fetchRiskChecks,
@@ -42,6 +43,10 @@ export function useClinics() {
 
 export function useCatalogDoctors() {
   return useQuery({ queryKey: ['catalog-doctors'], queryFn: fetchCatalogDoctors });
+}
+
+export function useNotifications() {
+  return useQuery({ queryKey: ['notifications'], queryFn: fetchNotifications });
 }
 
 export function useBlogPosts() {

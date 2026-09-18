@@ -320,3 +320,21 @@ export const blogPosts: BlogPost[] = [
 export function getBlogPostBySlug(slug: string) {
   return blogPosts.find((post) => post.slug === slug);
 }
+
+export function getClinicById(id: string) {
+  return clinics.find((clinic) => clinic.id === id);
+}
+
+export function getCatalogDoctorById(id: string) {
+  return catalogDoctors.find((doctor) => doctor.id === id);
+}
+
+/** Every city that has at least one partner clinic, for filter chips. */
+export function clinicCities() {
+  return Array.from(new Set(clinics.map((clinic) => clinic.city)));
+}
+
+/** Every blog category, for filter chips. */
+export function blogCategories() {
+  return Array.from(new Set(blogPosts.map((post) => post.category)));
+}

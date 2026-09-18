@@ -1,0 +1,5 @@
+# pnpm 12 blocks dependency build scripts by default. unrs-resolver is a
+# transitive dep of eslint's resolver and needs its postinstall to link the
+# platform-specific native binary.
+allowBuilds:
+  unrs-resolver: true

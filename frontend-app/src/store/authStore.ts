@@ -2,13 +2,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import type { AuthUser } from '@/types';
+import type { AuthSession, AuthUser } from '@/types';
 
 interface AuthState {
   user: AuthUser | null;
+  accessToken: string | null;
+  refreshToken: string | null;
   isAuthenticated: boolean;
   hasHydrated: boolean;
-  login: (user: AuthUser) => void;
+  /** Stores the signed-in user plus any tokens returned by the API. */
+  setSession: (session: AuthSession) => void;
   logout: () => void;
   updateProfile: (updates: Partial<AuthUser>) => void;
   setHasHydrated: (value: boolean) => void;
@@ -18,10 +21,18 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       user: null,
+      accessToken: null,
+      refreshToken: null,
       isAuthenticated: false,
       hasHydrated: false,
-      login: (user) => set({ user, isAuthenticated: true }),
-      logout: () => set({ user: null, isAuthenticated: false }),
+      setSession: ({ user, accessToken, refreshToken }) =>
+        set({
+          user,
+          accessToken: accessToken ?? null,
+          refreshToken: refreshToken ?? null,
+          isAuthenticated: true,
+        }),
+      logout: () => set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false }),
       updateProfile: (updates) =>
         set((state) => ({
           user: state.user ? { ...state.user, ...updates } : state.user,
@@ -31,7 +42,12 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'symptora-auth',
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
+      partialize: (state) => ({
+        user: state.user,
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
+        isAuthenticated: state.isAuthenticated,
+      }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
       },

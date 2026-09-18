@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { Card } from '@/components/ui/card';
-import { Radius, Spacing } from '@/constants/theme';
+import { Radius, Spacing, Typography, tint } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 interface QuickLinkCardProps {
@@ -10,46 +10,47 @@ interface QuickLinkCardProps {
   title: string;
   description: string;
   onPress?: () => void;
+  tone?: 'primary' | 'teal' | 'warning' | 'success' | 'danger';
 }
 
-export function QuickLinkCard({ icon, title, description, onPress }: QuickLinkCardProps) {
+export function QuickLinkCard({ icon, title, description, onPress, tone = 'primary' }: QuickLinkCardProps) {
   const theme = useTheme();
+  const accent = theme[tone];
 
   return (
-    <Pressable onPress={onPress} style={styles.pressable}>
-      <Card style={styles.card}>
-        <View style={[styles.iconBadge, { backgroundColor: theme.backgroundElement }]}>
-          <Ionicons name={icon} size={22} color={theme.primary} />
+    <View style={styles.slot}>
+      <Card onPress={onPress} style={styles.card}>
+        <View style={[styles.iconBadge, { backgroundColor: tint(accent, 0.12) }]}>
+          <Ionicons name={icon} size={20} color={accent} />
         </View>
         <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
         <Text style={[styles.description, { color: theme.textSecondary }]}>{description}</Text>
       </Card>
-    </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  pressable: {
-    flexBasis: '48%',
+  slot: {
+    flexBasis: '47%',
     flexGrow: 1,
   },
   card: {
-    gap: Spacing.one,
+    gap: 3,
+    minHeight: 124,
   },
   iconBadge: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: Radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.one,
+    marginBottom: Spacing.two - 2,
   },
   title: {
-    fontSize: 14,
-    fontWeight: '700',
+    ...Typography.smallStrong,
   },
   description: {
-    fontSize: 12,
-    lineHeight: 16,
+    ...Typography.caption,
   },
 });

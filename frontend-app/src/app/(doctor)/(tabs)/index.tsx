@@ -1,13 +1,22 @@
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppointmentCard } from '@/components/ui/appointment-card';
+import { Avatar } from '@/components/ui/avatar';
 import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
+import { IconButton } from '@/components/ui/icon-button';
 import { QuickLinkCard } from '@/components/ui/quick-link-card';
-import { ScreenHeader } from '@/components/ui/screen-header';
-import { BottomTabInset, Spacing } from '@/constants/theme';
+import { Screen } from '@/components/ui/screen';
+import { SectionHeaderRow } from '@/components/ui/section-link';
+import { SkeletonList } from '@/components/ui/skeleton';
+import { StatTile } from '@/components/ui/stat-tile';
+import { Gradient, Radius, Spacing, Typography } from '@/constants/theme';
+import { fullName } from '@/lib/format';
 import { useDoctorAppointments } from '@/hooks/use-queries';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuthStore } from '@/store/authStore';
@@ -20,99 +29,171 @@ export default function DoctorHomeScreen() {
   const { data: appointments, isLoading } = useDoctorAppointments();
 
   const stats = useMemo(() => {
-    const scheduled = appointments?.filter((a) => a.status === 'scheduled').length ?? 0;
-    const completed = appointments?.filter((a) => a.status === 'completed').length ?? 0;
-    const patients = new Set(appointments?.map((a) => a.patientName)).size;
-    return { scheduled, completed, patients };
+    const list = appointments ?? [];
+    return {
+      upcoming: list.filter((item) => item.status === 'scheduled').length,
+      completed: list.filter((item) => item.status === 'completed').length,
+      patients: new Set(list.map((item) => item.patientName)).size,
+    };
   }, [appointments]);
 
-  const today = appointments?.filter((a) => a.status === 'scheduled').slice(0, 3);
+  const todayList = appointments?.filter((item) => item.status === 'scheduled') ?? [];
 
   return (
-    <ScrollView
-      style={{ backgroundColor: theme.background }}
-      contentContainerStyle={[
-        styles.content,
-        { paddingTop: insets.top + Spacing.four, paddingBottom: insets.bottom + BottomTabInset },
-      ]}>
-      <ScreenHeader
-        title={`Welcome, ${user?.name ?? 'Doctor'}`}
-        subtitle={user?.specialization ? `${user.specialization} · Today's overview` : "Today's overview"}
-      />
+    <Screen
+      tabBarInset
+      padded={false}
+      header={
+        <LinearGradient
+          colors={Gradient.brandDeep}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.header, { paddingTop: insets.top + Spacing.three }]}>
+          <View style={styles.headerRow}>
+            <Avatar uri={user?.avatar} name={fullName(user)} size={44} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.welcome}>Good to see you</Text>
+              <Text style={styles.greeting}>Dr. {user?.last_name ?? ''}</Text>
+            </View>
+            <IconButton
+              icon="notifications-outline"
+              tone="onGradient"
+              accessibilityLabel="Notifications"
+              onPress={() => router.push('/(account)/notifications')}
+            />
+          </View>
 
-      <View style={styles.statsRow}>
-        <Card style={styles.statCard}>
-          <Text style={[styles.statNumber, { color: theme.primary }]}>{stats.scheduled}</Text>
-          <Text style={{ color: theme.textSecondary, fontSize: 12 }}>Upcoming</Text>
-        </Card>
-        <Card style={styles.statCard}>
-          <Text style={[styles.statNumber, { color: theme.success }]}>{stats.completed}</Text>
-          <Text style={{ color: theme.textSecondary, fontSize: 12 }}>Completed</Text>
-        </Card>
-        <Card style={styles.statCard}>
-          <Text style={[styles.statNumber, { color: theme.teal }]}>{stats.patients}</Text>
-          <Text style={{ color: theme.textSecondary, fontSize: 12 }}>Patients</Text>
-        </Card>
-      </View>
+          <Text style={styles.subline}>
+            {user?.specialization ? `${user.specialization} · ` : ''}
+            {stats.upcoming} consult{stats.upcoming === 1 ? '' : 's'} scheduled
+          </Text>
 
-      <View style={styles.grid}>
-        <QuickLinkCard
-          icon="calendar"
-          title="View schedule"
-          description="See your full day"
-          onPress={() => router.push('/(doctor)/(tabs)/schedule')}
+          <View style={styles.statRow}>
+            <StatTile value={String(stats.upcoming)} label="Upcoming" onGradient />
+            <StatTile value={String(stats.completed)} label="Completed" onGradient />
+            <StatTile value={String(stats.patients)} label="Patients" onGradient />
+          </View>
+        </LinearGradient>
+      }>
+      <View style={styles.body}>
+        <SectionHeaderRow
+          title="Today's consults"
+          actionLabel="Full schedule"
+          onAction={() => router.push('/(doctor)/(tabs)/schedule')}
         />
-        <QuickLinkCard
-          icon="people"
-          title="My patients"
-          description="Browse patient history"
-          onPress={() => router.push('/(doctor)/(tabs)/patients')}
-        />
-      </View>
 
-      <Text style={[styles.sectionTitle, { color: theme.text }]}>Up next</Text>
-      {isLoading ? (
-        <ActivityIndicator color={theme.primary} />
-      ) : today && today.length > 0 ? (
-        <View style={{ gap: Spacing.three }}>
-          {today.map((appointment) => (
-            <AppointmentCard key={appointment.id} appointment={appointment} primaryLabel={appointment.patientName} />
-          ))}
+        {isLoading ? (
+          <SkeletonList count={2} lines={3} />
+        ) : todayList.length === 0 ? (
+          <EmptyState
+            icon="calendar-outline"
+            title="Nothing scheduled"
+            description="New bookings and auto-escalated High risk checks will appear here."
+          />
+        ) : (
+          <View style={{ gap: Spacing.three }}>
+            {todayList.slice(0, 3).map((appointment) => (
+              <AppointmentCard
+                key={appointment.id}
+                appointment={appointment}
+                primaryLabel={appointment.patientName}
+                onPress={() => router.push('/(doctor)/(tabs)/schedule')}
+              />
+            ))}
+          </View>
+        )}
+
+        <SectionHeaderRow title="Quick actions" />
+        <View style={styles.grid}>
+          <QuickLinkCard
+            icon="calendar"
+            title="My schedule"
+            description="Availability and slots"
+            onPress={() => router.push('/(doctor)/(tabs)/schedule')}
+          />
+          <QuickLinkCard
+            icon="people"
+            title="My patients"
+            description="Visit history and notes"
+            tone="teal"
+            onPress={() => router.push('/(doctor)/(tabs)/patients')}
+          />
+          <QuickLinkCard
+            icon="person-circle"
+            title="My profile"
+            description="Fee, languages, specialty"
+            tone="warning"
+            onPress={() => router.push('/(doctor)/(tabs)/profile')}
+          />
+          <QuickLinkCard
+            icon="book"
+            title="Health guides"
+            description="Share reading with patients"
+            tone="success"
+            onPress={() => router.push('/(info)/blog')}
+          />
         </View>
-      ) : (
-        <Text style={{ color: theme.textSecondary }}>No upcoming appointments.</Text>
-      )}
-    </ScrollView>
+
+        <Card variant="muted" style={styles.note}>
+          <Ionicons name="flash" size={17} color={theme.warning} />
+          <Text style={[styles.noteText, { color: theme.textSecondary }]}>
+            High risk Health Checks in your specialty are escalated to you automatically — they arrive at
+            the top of today&apos;s list.
+          </Text>
+        </Card>
+      </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
+  header: {
     paddingHorizontal: Spacing.four,
+    paddingBottom: Spacing.four,
+    borderBottomLeftRadius: Radius.xl,
+    borderBottomRightRadius: Radius.xl,
     gap: Spacing.three,
   },
-  statsRow: {
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three - 4,
+  },
+  welcome: {
+    ...Typography.caption,
+    color: 'rgba(255,255,255,0.85)',
+  },
+  greeting: {
+    ...Typography.heading,
+    color: '#FFFFFF',
+  },
+  subline: {
+    ...Typography.caption,
+    color: 'rgba(255,255,255,0.88)',
+    marginTop: -Spacing.two,
+  },
+  statRow: {
     flexDirection: 'row',
     gap: Spacing.two,
   },
-  statCard: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 2,
-  },
-  statNumber: {
-    fontSize: 22,
-    fontWeight: '800',
+  body: {
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.one,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.three,
   },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    marginTop: Spacing.two,
-    marginBottom: Spacing.one,
+  note: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    alignItems: 'flex-start',
+    marginTop: Spacing.five,
+  },
+  noteText: {
+    ...Typography.caption,
+    flex: 1,
+    lineHeight: 18,
   },
 });
