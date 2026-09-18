@@ -9,7 +9,7 @@ class UserRepository:
     def __init__(self,db: Session):
         self.db=db
 
-    def create_user(self, user: UserCreate) -> UserModel:
+    def create_user(self, user: UserCreate, password_hash: str | None = None) -> UserModel:
     # create_user = method/function name
     # self = the current UserRepository object
     # user = the data coming into this method
@@ -19,7 +19,7 @@ class UserRepository:
      user_values = user.model_dump(exclude={"password"})
      db_user = UserModel(
         **user_values,
-        hashed_password=hashed_pasword(user.password),
+        hashed_password=password_hash or hashed_pasword(user.password),
     )
     # user.model_dump()
     # → Converts the UserCreate Pydantic object into a Python dictionary

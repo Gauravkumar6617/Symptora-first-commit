@@ -5,7 +5,12 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.redis import redis_client
 from app.repositories.userRepositories import UserRepository
-from app.schemas.userSchema import UserCreate, UserResponse
+from app.schemas.userSchema import (
+    OTPRequestResponse,
+    RegistrationOTPVerify,
+    UserCreate,
+    UserResponse,
+)
 from app.services.userService import UserService
 from app.utils.integration.medplum.index import MedplumIntegration
 
@@ -36,10 +41,34 @@ def get_user_service(
     )
 
 
-@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register/request-otp",
+    response_model=OTPRequestResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def request_registration_otp(
+    user_data: UserCreate,
+    service: UserService = Depends(get_user_service),
+):
+    UserController.request_registration_otp(user_data=user_data, service=service)
+    return {"detail": "Verification code sent to your email address."}
+
+
+@router.post(
+    "/register/verify", response_model=UserResponse, status_code=status.HTTP_201_CREATED
+)
+def verify_registration_otp(
+    verification: RegistrationOTPVerify,
+    service: UserService = Depends(get_user_service),
+):
+    return UserController.verify_registration_otp(verification=verification, service=service)
+
+
+@router.post("/", response_model=OTPRequestResponse, status_code=status.HTTP_202_ACCEPTED)
 def create_user(
     user_data: UserCreate,
     service: UserService = Depends(get_user_service),
 ):
-    # The router delegates the actual work to the controller
-    return UserController.create_user(user_data=user_data, service=service)
+    """Begin registration. The user is created only by /register/verify."""
+    UserController.request_registration_otp(user_data=user_data, service=service)
+    return {"detail": "Verification code sent to your email address."}
