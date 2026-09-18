@@ -121,3 +121,6 @@ class UserRepository:
         return self.db.query(UserModel).filter(
             or_(UserModel.email == email, UserModel.number == number)
         ).first() is not None
+
+    def get_all_user(self):
+        return self.db.query(UserModel).all()

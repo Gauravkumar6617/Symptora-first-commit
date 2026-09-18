@@ -27,6 +27,11 @@ class Settting(BaseSettings):
     MEDPLUM_CLIENT_SECRET         : str
     MEDPLUM_PROJECT_ID            : str
 
+    #otp
+    OTP_EXPIRY_SECOND             : 300
+    OTP_COOLDOWN_TIME             : 30
+    OTP_MAX_ATTEMPT               : 5
+
 @lru_cache      # to add cache for env as after reloading it shoudl load from env 
 def get_Setting() -> Settting:
     return Settting()
