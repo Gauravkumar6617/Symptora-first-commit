@@ -40,6 +40,14 @@ class Settting(BaseSettings):
     FROM_EMAIL                    : str = ""
     SMTP_USE_TLS                  : bool = True
 
+    # cloudflare R2
+    R2_ACCOUNT_ID: str
+    R2_BUCKET: str
+    R2_ACCESS_KEY_ID: str
+    R2_SECRET_ACCESS_KEY: str
+    R2_PRESIGNED_EXPIRY_SECONDS: int = 3600
+    MAX_AVATAR_SIZE_MB: int = 5
+
 @lru_cache      # to add cache for env as after reloading it shoudl load from env 
 def get_Setting() -> Settting:
     return Settting()

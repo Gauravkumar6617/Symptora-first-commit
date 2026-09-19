@@ -2,6 +2,7 @@ import { type FormEvent, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AuthSplitLayout } from '@/components/auth/AuthSplitLayout'
 import { FormField } from '@/components/auth/FormField'
+import { ApiError, loginUser } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 
 export function LoginPage() {
@@ -10,17 +11,29 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (!email || !password) {
       setError('Enter your email and password.')
       return
     }
     setError('')
-    // TODO: replace with real API call once auth endpoints are ready
-    login({ id: 'mock-user', name: email.split('@')[0], email })
-    navigate('/dashboard')
+    setSubmitting(true)
+    try {
+      const { access_token } = await loginUser(email, password)
+      // The backend has no /users/me yet, so the token is what identifies the
+      // session; the display name comes from the email until it does.
+      login({ id: email, name: email.split('@')[0], email }, access_token)
+      navigate('/dashboard')
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : 'Something went wrong. Try again.',
+      )
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -53,9 +66,10 @@ export function LoginPage() {
         {error && <p className="text-sm text-danger">{error}</p>}
         <button
           type="submit"
-          className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90"
+          disabled={submitting}
+          className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
         >
-          Log in
+          {submitting ? 'Logging in…' : 'Log in'}
         </button>
       </form>
       <p className="mt-6 text-center text-sm text-ink/60">

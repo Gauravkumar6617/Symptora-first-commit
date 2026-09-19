@@ -57,9 +57,14 @@ interface RequestOptions extends Omit<RequestInit, 'body'> {
   token?: string;
   /** Send as application/x-www-form-urlencoded (FastAPI OAuth2 login). */
   form?: Record<string, string>;
+  /** Send as multipart/form-data (registration uploads the avatar file). */
+  formData?: FormData;
 }
 
-async function request<T>(path: string, { body, token, form, headers, ...init }: RequestOptions = {}): Promise<T> {
+async function request<T>(
+  path: string,
+  { body, token, form, formData, headers, ...init }: RequestOptions = {},
+): Promise<T> {
   if (isDemoMode) {
     throw new ApiError('No API URL configured (EXPO_PUBLIC_API_URL).', 0);
   }
@@ -70,8 +75,11 @@ async function request<T>(path: string, { body, token, form, headers, ...init }:
   };
   if (token) requestHeaders.Authorization = `Bearer ${token}`;
 
-  let payload: string | undefined;
-  if (form) {
+  let payload: BodyInit | undefined;
+  if (formData) {
+    // Content-Type is left unset so fetch adds the multipart boundary.
+    payload = formData;
+  } else if (form) {
     requestHeaders['Content-Type'] = 'application/x-www-form-urlencoded';
     payload = new URLSearchParams(form).toString();
   } else if (body !== undefined) {
@@ -142,8 +150,45 @@ export function toAuthUser(user: UserResponse, specialization?: string): AuthUse
 
 // ---------------------------------------------------------------- auth
 
-/** POST /api/v1/users/ — backend UserCreate → UserResponse. */
-export async function registerUser(payload: UserCreatePayload): Promise<AuthUser> {
+/**
+ * Starts registration without creating a user, then emails a verification code.
+ *
+ * POST /api/v1/users/register/request-otp takes multipart/form-data
+ * (`UserCreate.as_form` plus an optional `avatar` file), so the picked image
+ * URI is attached as a file part rather than sent as a string.
+ */
+export async function requestRegistrationOtp(payload: UserCreatePayload): Promise<void> {
+  if (isDemoMode) {
+    await delay(500);
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('first_name', payload.first_name);
+  formData.append('last_name', payload.last_name);
+  formData.append('email', payload.email);
+  formData.append('number', payload.number);
+  formData.append('password', payload.password);
+  formData.append('date_of_birth', payload.date_of_birth);
+  if (payload.address) formData.append('address', payload.address);
+  if (payload.gender) formData.append('gender', payload.gender);
+  if (payload.avatar) formData.append('avatar', uriToFilePart(payload.avatar));
+
+  await request<{ detail: string }>('/users/register/request-otp', {
+    method: 'POST',
+    formData,
+  });
+}
+
+/** React Native sends a local file URI to FormData as {uri, name, type}. */
+function uriToFilePart(uri: string) {
+  const extension = uri.split('.').pop()?.split('?')[0]?.toLowerCase() || 'jpg';
+  const type = extension === 'png' ? 'image/png' : 'image/jpeg';
+  return { uri, name: `avatar.${extension}`, type } as unknown as Blob;
+}
+
+/** Verifies the emailed code and creates the account. */
+export async function verifyRegistrationOtp(email: string, otp: string): Promise<AuthUser> {
   if (isDemoMode) {
     await delay(500);
     const now = new Date().toISOString();
@@ -153,25 +198,27 @@ export async function registerUser(payload: UserCreatePayload): Promise<AuthUser
       updated_at: now,
       is_active: true,
       id_doctor: false,
-      first_name: payload.first_name,
-      last_name: payload.last_name,
-      email: payload.email,
-      number: payload.number,
-      address: payload.address ?? null,
-      avatar: payload.avatar ?? null,
-      date_of_birth: payload.date_of_birth,
-      gender: payload.gender ?? null,
+      first_name: 'Demo',
+      last_name: 'User',
+      email,
+      number: '',
+      address: null,
+      avatar: null,
+      date_of_birth: now,
+      gender: null,
     });
   }
-
-  const user = await request<UserResponse>('/users/', { method: 'POST', body: payload });
+  const user = await request<UserResponse>('/users/register/verify', {
+    method: 'POST',
+    body: { email, otp },
+  });
   return toAuthUser(user);
 }
 
 /**
- * POST /api/v1/auth/login — OAuth2 password grant (see
- * backend/app/deps/auth.py `oauth2_scheme`). The route is not implemented on
- * the backend yet; in demo mode this resolves to a mock session instead.
+ * POST /api/v1/users/login — see backend/app/routers/userRouter.py. Returns a
+ * bearer token; there is no /users/me yet, so the session user is built from
+ * what was typed until that route lands.
  */
 export async function loginUser(email: string, password: string, asDoctor = false): Promise<AuthSession> {
   if (isDemoMode) {
@@ -183,18 +230,29 @@ export async function loginUser(email: string, password: string, asDoctor = fals
     return { user: { ...base, email } };
   }
 
-  const tokens = await request<{ access_token: string; refresh_token?: string }>('/auth/login', {
+  const tokens = await request<{ access_token: string; token_type: string }>('/users/login', {
     method: 'POST',
-    form: { username: email, password, grant_type: 'password' },
+    body: { email, password },
   });
 
-  const user = await request<UserResponse>('/users/me', { token: tokens.access_token });
+  const now = new Date().toISOString();
+  const user = toAuthUser({
+    id: email,
+    created_at: now,
+    updated_at: now,
+    is_active: true,
+    id_doctor: asDoctor,
+    first_name: email.split('@')[0],
+    last_name: '',
+    email,
+    number: '',
+    address: null,
+    avatar: null,
+    date_of_birth: now,
+    gender: null,
+  });
 
-  return {
-    user: toAuthUser(user),
-    accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token,
-  };
+  return { user, accessToken: tokens.access_token };
 }
 
 /** PATCH /api/v1/users/{id} — backend UserUpdate. */

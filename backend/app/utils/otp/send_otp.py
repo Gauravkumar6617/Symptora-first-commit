@@ -24,7 +24,7 @@ def _otp_email_html(otp: str) -> str:
 
 
 def send_otp_email(to_email: str, otp: str) -> None:
-    """Send a styled HTML email with a plaintext fallback."""
+  
     if not settings.SMTP_USER or not settings.SMTP_PASSWORD or not settings.FROM_EMAIL:
         raise RuntimeError("SMTP credentials are not configured.")
 

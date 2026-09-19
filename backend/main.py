@@ -12,6 +12,14 @@ app = FastAPI(
 
 app.include_router(UserRouter, prefix="/api/v1")
 
+
+
+
+@app.get("/")
+def intialPage():
+    return {
+        "message":"Welcome to Symptora"
+    }
 # Health api for project ---current(server)
 @app.get("/api/v1/health")
 def health_check():

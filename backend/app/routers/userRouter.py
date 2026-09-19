@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, File, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -8,8 +8,10 @@ from app.repositories.userRepositories import UserRepository
 from app.schemas.userSchema import (
     OTPRequestResponse,
     RegistrationOTPVerify,
+    TokenResponse,
     UserCreate,
     UserResponse,
+    UserLogin
 )
 from app.services.userService import UserService
 from app.utils.integration.medplum.index import MedplumIntegration
@@ -47,10 +49,14 @@ def get_user_service(
     status_code=status.HTTP_202_ACCEPTED,
 )
 def request_registration_otp(
-    user_data: UserCreate,
+    user_data: UserCreate = Depends(UserCreate.as_form),
+    avatar: UploadFile = File(None),
     service: UserService = Depends(get_user_service),
 ):
-    UserController.request_registration_otp(user_data=user_data, service=service)
+    """Begin registration. Send as multipart/form-data with an optional avatar file."""
+    UserController.request_registration_otp(
+        user_data=user_data, service=service, avatar=avatar
+    )
     return {"detail": "Verification code sent to your email address."}
 
 
@@ -64,11 +70,9 @@ def verify_registration_otp(
     return UserController.verify_registration_otp(verification=verification, service=service)
 
 
-@router.post("/", response_model=OTPRequestResponse, status_code=status.HTTP_202_ACCEPTED)
-def create_user(
-    user_data: UserCreate,
+@router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
+def login_user(
+    user_data: UserLogin,
     service: UserService = Depends(get_user_service),
 ):
-    """Begin registration. The user is created only by /register/verify."""
-    UserController.request_registration_otp(user_data=user_data, service=service)
-    return {"detail": "Verification code sent to your email address."}
+    return UserController.login_user(user_data=user_data, service=service)

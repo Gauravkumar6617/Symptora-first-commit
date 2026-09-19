@@ -15,7 +15,7 @@ import { ProgressSteps } from '@/components/ui/progress-steps';
 import { SelectField } from '@/components/ui/select-field';
 import { TextField } from '@/components/ui/text-field';
 import { Gradient, MaxFormWidth, Radius, Spacing, Typography } from '@/constants/theme';
-import { ApiError, registerUser } from '@/lib/api';
+import { ApiError, requestRegistrationOtp, verifyRegistrationOtp } from '@/lib/api';
 import { errorFeedback, successFeedback } from '@/lib/haptics';
 import {
   emptyDateParts,
@@ -60,6 +60,8 @@ export default function SignupScreen() {
   const [errors, setErrors] = useState<SignupFieldErrors>({});
   const [formError, setFormError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [verificationPending, setVerificationPending] = useState(false);
+  const [otp, setOtp] = useState('');
 
   function update<K extends keyof SignupForm>(key: K, value: SignupForm[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -88,11 +90,9 @@ export default function SignupScreen() {
 
     setLoading(true);
     try {
-      // POST /api/v1/users/ — see backend/app/schemas/userSchema.py UserCreate.
-      const user = await registerUser(signupFormToPayload(form));
+      await requestRegistrationOtp(signupFormToPayload(form));
       successFeedback();
-      setSession({ user });
-      router.replace(user.role === 'doctor' ? '/(doctor)/(tabs)' : '/(patient)/(tabs)');
+      setVerificationPending(true);
     } catch (error) {
       errorFeedback();
       if (error instanceof ApiError) {
@@ -106,6 +106,28 @@ export default function SignupScreen() {
       } else {
         setFormError('Could not create your account. Please try again.');
       }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleVerify() {
+    if (!/^\d{6}$/.test(otp)) {
+      setFormError('Enter the six-digit code from your email.');
+      errorFeedback();
+      return;
+    }
+
+    setLoading(true);
+    setFormError('');
+    try {
+      const user = await verifyRegistrationOtp(form.email, otp);
+      successFeedback();
+      setSession({ user });
+      router.replace(user.role === 'doctor' ? '/(doctor)/(tabs)' : '/(patient)/(tabs)');
+    } catch (error) {
+      errorFeedback();
+      setFormError(error instanceof ApiError ? error.message : 'Could not verify your email. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -132,19 +154,49 @@ export default function SignupScreen() {
 
           <Card style={styles.card}>
             <View style={styles.headerBlock}>
-              <Text style={[styles.title, { color: theme.text }]}>Create your account</Text>
+              <Text style={[styles.title, { color: theme.text }]}>{verificationPending ? 'Verify your email' : 'Create your account'}</Text>
               <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-                {step === 0
+                {verificationPending
+                  ? `We sent a six-digit code to ${form.email}.`
+                  : step === 0
                   ? 'Start your first Health Check in minutes.'
                   : 'These details help doctors read your results correctly.'}
               </Text>
             </View>
 
-            <ProgressSteps steps={steps} current={step} />
+            {!verificationPending ? <ProgressSteps steps={steps} current={step} /> : null}
 
             {formError ? <AlertBanner tone="error" message={formError} /> : null}
 
-            {step === 0 ? (
+            {verificationPending ? (
+              <View style={styles.form}>
+                <TextField
+                  label="Verification code"
+                  icon="shield-checkmark-outline"
+                  value={otp}
+                  onChangeText={(text) => setOtp(text.replace(/\D/g, ''))}
+                  placeholder="123456"
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  autoFocus
+                />
+                <Button label="Verify and create account" onPress={handleVerify} loading={loading} size="lg" />
+                <Button
+                  label="Resend code"
+                  variant="ghost"
+                  size="sm"
+                  onPress={handleSubmit}
+                  disabled={loading}
+                />
+                <Button
+                  label="Use a different email"
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => { setVerificationPending(false); setOtp(''); setFormError(''); setStep(0); }}
+                  disabled={loading}
+                />
+              </View>
+            ) : step === 0 ? (
               <View style={styles.form}>
                 <AvatarPicker
                   value={form.avatar}

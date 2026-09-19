@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import decode_token
 from app.models.userModel import UserModel
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/users/login")
 #take token fromt this url
 
 def get_current_user(token : str = Depends(oauth2_scheme),db: Session = Depends(get_db),) -> UserModel: #takes token or db from session
@@ -24,7 +24,12 @@ def get_current_user(token : str = Depends(oauth2_scheme),db: Session = Depends(
     if user_id is None:#check the user if found ok if not rasie error
         raise credentials_exception
 
-    user = db.query(UserModel).filter(UserModel.id == UUID(user_id)).first()
+    try:
+        UUID(user_id)  # a malformed ``sub`` is a bad token, not a 500
+    except (ValueError, AttributeError, TypeError):
+        raise credentials_exception
+
+    user = db.query(UserModel).filter(UserModel.id == user_id).first()
     if user is None or not user.is_active:
         raise credentials_exception#find user id from db
 

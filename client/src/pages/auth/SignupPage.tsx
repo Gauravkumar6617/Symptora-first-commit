@@ -3,22 +3,45 @@ import { Link, useNavigate } from 'react-router-dom'
 import { AuthSplitLayout } from '@/components/auth/AuthSplitLayout'
 import { FormField } from '@/components/auth/FormField'
 import { AvatarUpload } from '@/components/ui/AvatarUpload'
+import {
+  ApiError,
+  dataUrlToFile,
+  requestRegistrationOtp,
+  verifyRegistrationOtp,
+} from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
+
+const genderOptions = ['male', 'female', 'other', 'unknown']
 
 export function SignupPage() {
   const navigate = useNavigate()
   const login = useAuthStore((state) => state.login)
-  const [name, setName] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
+  const [number, setNumber] = useState('')
+  const [address, setAddress] = useState('')
+  const [dateOfBirth, setDateOfBirth] = useState('')
+  const [gender, setGender] = useState('')
   const [password, setPassword] = useState('')
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [avatar, setAvatar] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [otp, setOtp] = useState('')
+  const [otpSent, setOtpSent] = useState(false)
+  const [notice, setNotice] = useState('')
 
-  function handleSubmit(event: FormEvent) {
+  async function handleDetailsSubmit(event: FormEvent) {
     event.preventDefault()
-    if (!name || !email || !phone || !password) {
-      setError('All fields are required.')
+    if (
+      !firstName ||
+      !lastName ||
+      !email ||
+      !number ||
+      !dateOfBirth ||
+      !password
+    ) {
+      setError('Please fill in all required fields.')
       return
     }
     if (password.length < 8) {
@@ -26,15 +49,98 @@ export function SignupPage() {
       return
     }
     setError('')
-    // TODO: replace with real API call once auth endpoints are ready
-    login({
-      id: 'mock-user',
-      name,
-      email,
-      phone,
-      avatarUrl: avatarUrl ?? undefined,
-    })
-    navigate('/dashboard')
+    setSubmitting(true)
+    try {
+      const { detail } = await requestRegistrationOtp({
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        number,
+        password,
+        date_of_birth: new Date(dateOfBirth).toISOString(),
+        address: address || undefined,
+        gender: gender || undefined,
+        avatar: avatar ? await dataUrlToFile(avatar) : null,
+      })
+      setNotice(detail)
+      setOtpSent(true)
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : 'Something went wrong. Try again.',
+      )
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleOtpSubmit(event: FormEvent) {
+    event.preventDefault()
+    if (otp.length !== 6) {
+      setError('Enter the 6-digit code from your email.')
+      return
+    }
+    setError('')
+    setSubmitting(true)
+    try {
+      const user = await verifyRegistrationOtp(email, otp)
+      login({
+        id: user.id,
+        name: `${user.first_name} ${user.last_name}`.trim(),
+        email: user.email,
+        phone: user.number,
+        address: user.address ?? undefined,
+        avatarUrl: user.avatar ?? undefined,
+        isDoctor: user.id_doctor,
+      })
+      navigate('/dashboard')
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : 'Something went wrong. Try again.',
+      )
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (otpSent) {
+    return (
+      <AuthSplitLayout
+        title="Verify your email"
+        subtitle={`We sent a 6-digit code to ${email}`}
+      >
+        <form className="space-y-4" onSubmit={handleOtpSubmit}>
+          <FormField
+            id="otp"
+            label="Verification code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+            placeholder="123456"
+          />
+          {error && <p className="text-sm text-danger">{error}</p>}
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
+          >
+            {submitting ? 'Verifying…' : 'Verify and create account'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOtpSent(false)
+              setOtp('')
+              setError('')
+            }}
+            className="w-full text-center text-sm font-medium text-primary"
+          >
+            Edit your details
+          </button>
+        </form>
+      </AuthSplitLayout>
+    )
   }
 
   return (
@@ -42,19 +148,30 @@ export function SignupPage() {
       title="Create your account"
       subtitle="Start your first health check in minutes"
     >
-      <form className="space-y-4" onSubmit={handleSubmit}>
+      <form className="space-y-4" onSubmit={handleDetailsSubmit}>
         <AvatarUpload
-          value={avatarUrl}
-          onChange={setAvatarUrl}
+          value={avatar}
+          onChange={setAvatar}
           label="Profile photo (optional)"
         />
-        <FormField
-          id="name"
-          label="Full name"
-          autoComplete="name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField
+            id="first_name"
+            label="First name"
+            autoComplete="given-name"
+            maxLength={24}
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+          />
+          <FormField
+            id="last_name"
+            label="Last name"
+            autoComplete="family-name"
+            maxLength={24}
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+          />
+        </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField
             id="email"
@@ -65,29 +182,74 @@ export function SignupPage() {
             onChange={(e) => setEmail(e.target.value)}
           />
           <FormField
-            id="phone"
+            id="number"
             label="Phone number"
             type="tel"
             autoComplete="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            maxLength={15}
+            value={number}
+            onChange={(e) => setNumber(e.target.value)}
             placeholder="+91 98765 43210"
           />
+        </div>
+        <FormField
+          id="address"
+          label="Address (optional)"
+          autoComplete="street-address"
+          maxLength={255}
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+        />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField
+            id="date_of_birth"
+            label="Date of birth"
+            type="date"
+            autoComplete="bday"
+            max={new Date().toISOString().slice(0, 10)}
+            value={dateOfBirth}
+            onChange={(e) => setDateOfBirth(e.target.value)}
+          />
+          <div>
+            <label
+              htmlFor="gender"
+              className="block text-sm font-medium text-ink"
+            >
+              Gender (optional)
+            </label>
+            <select
+              id="gender"
+              value={gender}
+              onChange={(e) => setGender(e.target.value)}
+              className="mt-1.5 w-full rounded-lg border border-ink/15 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="">Select</option>
+              {genderOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option.charAt(0).toUpperCase() + option.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <FormField
           id="password"
           label="Password"
           type="password"
           autoComplete="new-password"
+          minLength={8}
+          maxLength={72}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
+        {notice && <p className="text-sm text-ink/60">{notice}</p>}
         {error && <p className="text-sm text-danger">{error}</p>}
         <button
           type="submit"
-          className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90"
+          disabled={submitting}
+          className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
         >
-          Sign up
+          {submitting ? 'Sending code…' : 'Sign up'}
         </button>
       </form>
       <p className="mt-6 text-center text-sm text-ink/60">
