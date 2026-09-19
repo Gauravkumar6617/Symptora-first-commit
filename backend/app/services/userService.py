@@ -23,6 +23,9 @@ class InactiveUserError(Exception):
 class UserAlreadyExistsError(Exception):
     pass
 
+class OTPDeliveryError(Exception):
+    pass
+
 class UserService:
     def __init__(
         self,
@@ -44,7 +47,13 @@ class UserService:
         ``avatar`` is an optional UploadFile. It is pushed to R2 here and only
         its object key travels through Redis and into the user row.
         """
-        if self.user_repository.check_user_exists(user_data.email, user_data.number):
+        # Only a verified account claims an email/number for good. A row left
+        # behind by a registration that never completed must not lock its own
+        # owner out forever; verify_registration_otp replaces it.
+        existing = self.user_repository.find_by_email_or_number(
+            user_data.email, user_data.number
+        )
+        if existing and existing.is_active:
             raise ValueError("User with this email or number already exists.")
 
         otp, error = generate_store_otp(user_data.email)
@@ -80,7 +89,9 @@ class UserService:
                     delete_key(avatar_key)
                 except Exception:
                     pass
-            raise
+            raise OTPDeliveryError(
+                "Unable to send verification email. Please try again later."
+            )
 
     def verify_registration_otp(self, email: str, otp: str):
         valid, message = verify_otp(email, otp)
@@ -146,21 +157,35 @@ class UserService:
     def create_user(
         self, user_data, password_hash: str | None = None, is_active: bool = False
     ):
-        # 1. Check if user already exists
-        existing_user = self.user_repository.check_user_exists(
+        # 1. A verified account blocks the address; an unverified leftover is
+        # dropped so this registration can take its place.
+        existing_user = self.user_repository.find_by_email_or_number(
             user_data.email, user_data.number
         )
         if existing_user:
-            raise ValueError("User with this email or number already exists.")
+            if existing_user.is_active:
+                raise ValueError("User with this email or number already exists.")
+            stale_avatar = existing_user.avatar
+            self.user_repository.delete_user(existing_user.id)
+            if stale_avatar and not stale_avatar.startswith("http"):
+                try:
+                    delete_key(stale_avatar)
+                except Exception:
+                    pass
 
         # 2. Save user to database
         new_user = self.user_repository.create_user(
             user_data, password_hash=password_hash, is_active=is_active
         )
 
-        # 3. Create patient in Medplum
-        fhir_patient_data = self.create_fhir_patient(user_data, new_user.id)
-        medplum_patient = self.medplum.create_patient(fhir_patient_data)
+        # 3. Create patient in Medplum. A failure here would otherwise leave a
+        # row that blocks the user from ever retrying, so it is rolled back.
+        try:
+            fhir_patient_data = self.create_fhir_patient(user_data, new_user.id)
+            medplum_patient = self.medplum.create_patient(fhir_patient_data)
+        except Exception:
+            self.user_repository.delete_user(new_user.id)
+            raise
 
         # 4. Save Medplum ID into user record
         new_user.medplum_patient_id = medplum_patient.get("id")

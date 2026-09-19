@@ -1,8 +1,10 @@
 import io
+import logging
 import uuid
 
 import boto3
 from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import HTTPException, UploadFile
 from PIL import Image
 
@@ -21,13 +23,15 @@ EXT = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 BUCKET = settings.R2_BUCKET
 MAX_SIZE = settings.MAX_AVATAR_SIZE_MB * 1024 * 1024
 
+logger = logging.getLogger(__name__)
+
 
 def upload_avatar(file: UploadFile) -> str:
-    """Validate an uploaded image and store it in R2. Returns the object key.
+    #Validate an uploaded image and store it in R2. Returns the object key.
 
-    Synchronous on purpose: the service layer is sync, so the bytes are read
-    straight off the SpooledTemporaryFile instead of awaiting UploadFile.read().
-    """
+    #Synchronous on purpose: the service layer is sync, so the bytes are read
+  #  straight off the SpooledTemporaryFile instead of awaiting UploadFile.read().
+    
     if file.content_type not in EXT:
         raise HTTPException(415, "File must be in png, jpeg or webp format")
 
@@ -48,9 +52,15 @@ def upload_avatar(file: UploadFile) -> str:
         raise HTTPException(400, "Invalid image")
 
     key = f"avatars/{uuid.uuid4()}.{EXT[file.content_type]}"
-    s3.put_object(
-        Bucket=BUCKET, Key=key, Body=data, ContentType=file.content_type
-    )
+    try:
+        s3.put_object(
+            Bucket=BUCKET, Key=key, Body=data, ContentType=file.content_type
+        )
+    except (ClientError, BotoCoreError) as exc:
+        # A storage misconfiguration is ours, not the caller's, and must not be
+        # reported as some unrelated failure further up the stack.
+        logger.exception("R2 upload failed for bucket %s", BUCKET)
+        raise HTTPException(502, f"Avatar upload failed: {exc}") from exc
     return key
 
 

@@ -123,10 +123,13 @@ class UserRepository:
         self.db.commit()
         return True
     
-    def check_user_exists(self, email: str,number: str) -> bool:
+    def find_by_email_or_number(self, email: str, number: str) -> UserModel | None:
         return self.db.query(UserModel).filter(
             or_(UserModel.email == email, UserModel.number == number)
-        ).first() is not None
+        ).first()
+
+    def check_user_exists(self, email: str,number: str) -> bool:
+        return self.find_by_email_or_number(email, number) is not None
 
     def get_all_user(self,page:int=1 , page_size:int =10):
         skip = (page-1) * page_size

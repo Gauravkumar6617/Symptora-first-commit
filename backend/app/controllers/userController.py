@@ -3,6 +3,7 @@ from app.schemas.userSchema import RegistrationOTPVerify, UserCreate ,UserLogin
 from app.services.userService import (
     InactiveUserError,
     InvalidCredentialsError,
+    OTPDeliveryError,
     UserService,
 )
 
@@ -17,13 +18,17 @@ class UserController:
             service.request_registration_otp(user_data, avatar=avatar)
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-        except HTTPException:
-            # Upload validation errors (size, type, bad image) keep their status.
-            raise
-        except Exception:
+        except OTPDeliveryError as e:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Unable to send verification email. Please try again later.",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)
+            )
+        except HTTPException:
+            # Upload errors (size, type, bad image, storage) keep their status.
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Registration failed: {e}",
             )
 
     @staticmethod
