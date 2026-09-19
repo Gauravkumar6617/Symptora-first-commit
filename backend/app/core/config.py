@@ -48,6 +48,11 @@ class Settting(BaseSettings):
     R2_PRESIGNED_EXPIRY_SECONDS: int = 3600
     MAX_AVATAR_SIZE_MB: int = 5
 
+    ##google alender
+    GOOGLE_CLIENT_ID: str
+    GOOGLE_CLIENT_SECRET: str
+    GOOGLE_REFRESH_TOKEN: str
+
 @lru_cache      # to add cache for env as after reloading it shoudl load from env 
 def get_Setting() -> Settting:
     return Settting()

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -8,6 +8,12 @@ import {
   type TextInputProps,
   View,
 } from 'react-native';
+import Animated, {
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { Radius, Spacing, Typography, tint } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -37,44 +43,59 @@ export function TextField({
   ...rest
 }: TextFieldProps) {
   const theme = useTheme();
-  const [focused, setFocused] = useState(false);
   const [revealed, setRevealed] = useState(false);
 
-  const borderColor = error ? theme.danger : focused ? theme.primary : theme.border;
+  // Focus is a shared value, not React state. Re-rendering this component on
+  // focus was making the native input lose focus immediately; driving the ring
+  // on the UI thread means focusing causes no React render at all.
+  const focus = useSharedValue(0);
+
+  // TEMP KEYBOARD DIAGNOSTIC — remove once the flicker is traced.
+  const renders = useRef(0);
+  renders.current += 1;
+  console.log('[KBD] render TextField', label, renders.current);
+
+  useEffect(() => {
+    console.log('[KBD] MOUNT', label);
+    return () => console.log('[KBD] UNMOUNT', label);
+  }, [label]);
+
+  const ringStyle = useAnimatedStyle(() => ({
+    borderColor: error
+      ? theme.danger
+      : interpolateColor(focus.get(), [0, 1], [theme.border, theme.primary]),
+    shadowColor: theme.primary,
+    shadowOpacity: focus.get() * 0.18,
+    shadowRadius: focus.get() * 6,
+  }));
 
   return (
     <View style={styles.wrapper}>
       {label ? <Text style={[styles.label, { color: theme.text }]}>{label}</Text> : null}
 
-      <View
-        style={[
-          styles.inputRow,
-          {
-            borderColor,
-            backgroundColor: theme.backgroundElement,
-            shadowColor: focused ? theme.primary : 'transparent',
-          },
-          focused ? styles.focusRing : null,
-        ]}>
+      <Animated.View
+        style={[styles.inputRow, { backgroundColor: theme.backgroundElement }, ringStyle]}>
         {icon ? (
-          <Ionicons name={icon} size={17} color={error ? theme.danger : focused ? theme.primary : theme.textMuted} />
+          <Ionicons name={icon} size={17} color={error ? theme.danger : theme.textMuted} />
         ) : null}
 
         <TextInput
+          placeholderTextColor={theme.textMuted}
+          {...rest}
           value={value}
           maxLength={maxLength}
-          placeholderTextColor={theme.textMuted}
           secureTextEntry={password ? !revealed : rest.secureTextEntry}
           onFocus={(event) => {
-            setFocused(true);
+            console.log('[KBD] FOCUS', label);
+            focus.set(withTiming(1, { duration: 120 }));
             rest.onFocus?.(event);
           }}
           onBlur={(event) => {
-            setFocused(false);
+            console.log('[KBD] BLUR', label);
+            focus.set(withTiming(0, { duration: 120 }));
             rest.onBlur?.(event);
           }}
           style={[styles.input, { color: theme.text }, style]}
-          {...rest}
         />
 
         {password ? (
@@ -86,7 +107,7 @@ export function TextField({
             <Ionicons name={revealed ? 'eye-off-outline' : 'eye-outline'} size={19} color={theme.textSecondary} />
           </Pressable>
         ) : null}
-      </View>
+      </Animated.View>
 
       <View style={styles.footerRow}>
         <View style={{ flex: 1 }}>
@@ -158,11 +179,8 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderRadius: Radius.md,
     paddingHorizontal: Spacing.three,
-  },
-  focusRing: {
+    // Always present so focusing never introduces a new style key.
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
   },
   input: {
     flex: 1,

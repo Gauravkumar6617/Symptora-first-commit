@@ -2,10 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Link, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -41,6 +39,11 @@ export default function LoginScreen() {
   const [formError, setFormError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // TEMP KEYBOARD DIAGNOSTIC — remove once traced.
+  const screenRenders = useRef(0);
+  screenRenders.current += 1;
+  console.log('[KBD] render LoginScreen', screenRenders.current);
+
   async function handleSubmit() {
     const nextErrors = validateLogin(email, password);
     setErrors(nextErrors);
@@ -67,16 +70,14 @@ export default function LoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <LinearGradient colors={Gradient.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.flex}>
+    <LinearGradient colors={Gradient.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.flex}>
         <ScrollView
           contentContainerStyle={[
             styles.scroll,
             { paddingTop: insets.top + Spacing.five, paddingBottom: insets.bottom + Spacing.five },
           ]}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
+          automaticallyAdjustKeyboardInsets
           showsVerticalScrollIndicator={false}>
           <View style={styles.hero}>
             <Image
@@ -114,7 +115,10 @@ export default function LoginScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
-              autoComplete="email"
+              // TEMP autofill diagnostic — restore autoComplete="email" once traced.
+              autoComplete="off"
+              textContentType="none"
+              importantForAutofill="no"
               placeholder="you@example.com"
               returnKeyType="next"
             />
@@ -126,7 +130,10 @@ export default function LoginScreen() {
               onChangeText={setPassword}
               error={errors.password}
               password
-              autoComplete="current-password"
+              // TEMP autofill diagnostic — restore autoComplete="current-password".
+              autoComplete="off"
+              textContentType="none"
+              importantForAutofill="no"
               placeholder="••••••••"
               returnKeyType="go"
               onSubmitEditing={handleSubmit}
@@ -159,10 +166,11 @@ export default function LoginScreen() {
             <ExploreLink icon="help-circle-outline" label="How it works" href="/(info)/how-it-works" />
             <ExploreLink icon="information-circle-outline" label="About" href="/(info)/about" />
             <ExploreLink icon="chatbubble-ellipses-outline" label="Contact" href="/(info)/contact" />
+            {/* TEMP keyboard diagnostic route — remove once traced. */}
+            <ExploreLink icon="bug-outline" label="KBD TEST" href="/kbd-test" />
           </View>
         </ScrollView>
-      </LinearGradient>
-    </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
 

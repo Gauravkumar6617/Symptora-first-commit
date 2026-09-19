@@ -3,12 +3,25 @@ from app.core.database import database_check
 from app.core.config import settings
 from app.core.redis import redis_health_check
 from app.routers.userRouter import router as UserRouter
+from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI(
     title=settings.APP_NAME,
     version=str(settings.VERSION)
 ) #making object of fastapi and tranfering to app
 
+origins = [
+    "http://localhost:3000",   # your frontend dev URL
+    "http://localhost:5173",   # e.g. Vite default
+    "https://yourdomain.com",  # production frontend
+]
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],   # or restrict: ["GET", "POST", "PUT", "DELETE"]
+    allow_headers=["*"],   # or restrict: ["Authorization", "Content-Type"]
+)
 
 app.include_router(UserRouter, prefix="/api/v1")
 

@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlertBanner } from '@/components/ui/alert-banner';
@@ -136,14 +136,14 @@ export default function SignupScreen() {
   const strength = passwordStrength(form.password);
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <LinearGradient colors={Gradient.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.flex}>
+    <LinearGradient colors={Gradient.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.flex}>
         <ScrollView
           contentContainerStyle={[
             styles.scroll,
             { paddingTop: insets.top + Spacing.four, paddingBottom: insets.bottom + Spacing.five },
           ]}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
+          automaticallyAdjustKeyboardInsets
           showsVerticalScrollIndicator={false}>
           <Image
             source={require('@/assets/images/symptora-logo.png')}
@@ -382,8 +382,7 @@ export default function SignupScreen() {
             Practising doctor? Sign up as a patient first, then apply from your profile.
           </Text>
         </ScrollView>
-      </LinearGradient>
-    </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
 

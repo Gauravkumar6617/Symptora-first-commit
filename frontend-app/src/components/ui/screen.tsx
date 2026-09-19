@@ -59,7 +59,8 @@ export function Screen({
     <ScrollView
       style={styles.flex}
       contentContainerStyle={{ paddingTop, paddingBottom }}
-      keyboardShouldPersistTaps="handled"
+      keyboardShouldPersistTaps="always"
+      automaticallyAdjustKeyboardInsets={keyboardAware}
       showsVerticalScrollIndicator={false}
       refreshControl={
         onRefresh ? (
@@ -79,7 +80,11 @@ export function Screen({
     </View>
   );
 
-  if (!keyboardAware) return content;
+  // A scrolling body handles the keyboard natively via
+  // automaticallyAdjustKeyboardInsets above. KeyboardAvoidingView is only
+  // needed for non-scrolling bodies, and driving the resize through JS layout
+  // is what made taps land on the ScrollView and dismiss the keyboard.
+  if (!keyboardAware || scroll) return content;
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
