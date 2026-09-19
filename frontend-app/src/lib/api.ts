@@ -142,8 +142,17 @@ export function toAuthUser(user: UserResponse, specialization?: string): AuthUse
 
 // ---------------------------------------------------------------- auth
 
-/** POST /api/v1/users/ — backend UserCreate → UserResponse. */
-export async function registerUser(payload: UserCreatePayload): Promise<AuthUser> {
+/** Starts registration without creating a user, then emails a verification code. */
+export async function requestRegistrationOtp(payload: UserCreatePayload): Promise<void> {
+  if (isDemoMode) {
+    await delay(500);
+    return;
+  }
+  await request<{ detail: string }>('/users/register/request-otp', { method: 'POST', body: payload });
+}
+
+/** Verifies the emailed code and creates the account. */
+export async function verifyRegistrationOtp(email: string, otp: string): Promise<AuthUser> {
   if (isDemoMode) {
     await delay(500);
     const now = new Date().toISOString();
@@ -153,18 +162,20 @@ export async function registerUser(payload: UserCreatePayload): Promise<AuthUser
       updated_at: now,
       is_active: true,
       id_doctor: false,
-      first_name: payload.first_name,
-      last_name: payload.last_name,
-      email: payload.email,
-      number: payload.number,
-      address: payload.address ?? null,
-      avatar: payload.avatar ?? null,
-      date_of_birth: payload.date_of_birth,
-      gender: payload.gender ?? null,
+      first_name: 'Demo',
+      last_name: 'User',
+      email,
+      number: '',
+      address: null,
+      avatar: null,
+      date_of_birth: now,
+      gender: null,
     });
   }
-
-  const user = await request<UserResponse>('/users/', { method: 'POST', body: payload });
+  const user = await request<UserResponse>('/users/register/verify', {
+    method: 'POST',
+    body: { email, otp },
+  });
   return toAuthUser(user);
 }
 

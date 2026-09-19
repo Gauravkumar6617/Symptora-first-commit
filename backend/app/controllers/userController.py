@@ -1,15 +1,25 @@
 from fastapi import HTTPException, status
-from app.schemas.userSchema import RegistrationOTPVerify, UserCreate
-from app.services.userService import UserService
+from app.schemas.userSchema import RegistrationOTPVerify, UserCreate ,UserLogin
+from app.services.userService import (
+    InactiveUserError,
+    InvalidCredentialsError,
+    UserService,
+)
+
 
 
 class UserController:
     @staticmethod
-    def request_registration_otp(user_data: UserCreate, service: UserService):
+    def request_registration_otp(
+        user_data: UserCreate, service: UserService, avatar=None
+    ):
         try:
-            service.request_registration_otp(user_data)
+            service.request_registration_otp(user_data, avatar=avatar)
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        except HTTPException:
+            # Upload validation errors (size, type, bad image) keep their status.
+            raise
         except Exception:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -30,12 +40,23 @@ class UserController:
             )
 
     @staticmethod
-    def create_user(user_data: UserCreate, service: UserService):
+    def login_user(user_data:UserLogin ,service:UserService):
         try:
-            return service.create_user(user_data)
+            return service.login_user(user_data)
+        except InvalidCredentialsError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=str(e),
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        except InactiveUserError as e:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e),
+            )
         except ValueError as e:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, 
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(e)
             )
         except HTTPException:

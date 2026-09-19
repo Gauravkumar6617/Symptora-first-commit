@@ -6,7 +6,7 @@ import { APP_NAME } from '@/lib/constants'
 import { useAuthStore } from '@/store/authStore'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  `text-sm font-medium transition-colors hover:text-primary ${
+  `whitespace-nowrap text-sm font-medium transition-colors hover:text-primary ${
     isActive ? 'text-primary' : 'text-ink/70'
   }`
 
@@ -27,12 +27,12 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/60 bg-surface/95 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_2px_6px_rgba(30,41,59,0.06)] backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
-        <Link to="/" className="flex items-center">
+      <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-4 sm:px-6 lg:px-8">
+        <Link to="/" className="flex shrink-0 items-center">
           <img src={symptoraLogo} alt={APP_NAME} className="h-8 w-auto sm:h-9" />
         </Link>
 
-        <nav className="hidden items-center gap-6 xl:flex">
+        <nav className="hidden min-w-0 flex-1 items-center justify-center gap-5 xl:flex 2xl:gap-7">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -45,12 +45,12 @@ export function Header() {
           ))}
         </nav>
 
-        <div className="hidden items-center gap-3 xl:flex">
+        <div className="ml-auto hidden shrink-0 items-center gap-2 xl:flex 2xl:gap-3">
           {isAuthenticated ? (
             <>
               <Link
                 to="/profile"
-                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-ink hover:bg-ink/5"
+                className="flex max-w-[12rem] items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-ink hover:bg-ink/5"
               >
                 <span className="icon-badge h-8 w-8 overflow-hidden">
                   {user?.avatarUrl ? (
@@ -63,12 +63,12 @@ export function Header() {
                     <UserRound className="h-4 w-4 text-primary-600" />
                   )}
                 </span>
-                {user?.name}
+                <span className="truncate">{user?.name}</span>
               </Link>
               <button
                 type="button"
                 onClick={logout}
-                className="rounded-lg border border-ink/15 px-3 py-1.5 text-sm font-medium text-ink hover:bg-ink/5"
+                className="shrink-0 whitespace-nowrap rounded-lg border border-ink/15 px-3 py-1.5 text-sm font-medium text-ink hover:bg-ink/5"
               >
                 Log out
               </button>
@@ -77,11 +77,14 @@ export function Header() {
             <>
               <Link
                 to="/login"
-                className="rounded-lg px-3 py-1.5 text-sm font-medium text-ink hover:bg-ink/5"
+                className="shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium text-ink hover:bg-ink/5"
               >
                 Log in
               </Link>
-              <Link to="/signup" className="btn-raised px-4 py-2 text-sm">
+              <Link
+                to="/signup"
+                className="btn-raised shrink-0 whitespace-nowrap px-4 py-2 text-sm"
+              >
                 Get started
               </Link>
             </>
@@ -91,7 +94,7 @@ export function Header() {
         <button
           type="button"
           onClick={() => setMenuOpen((open) => !open)}
-          className="rounded-lg border border-ink/15 p-2 xl:hidden"
+          className="ml-auto shrink-0 rounded-lg border border-ink/15 p-2 xl:hidden"
           aria-label="Toggle menu"
         >
           <Menu className="h-5 w-5 text-ink" />
@@ -146,7 +149,7 @@ export function Header() {
                 <Link
                   to="/signup"
                   onClick={() => setMenuOpen(false)}
-                  className="btn-raised px-4 py-2 text-sm"
+                  className="btn-raised whitespace-nowrap px-4 py-2 text-sm"
                 >
                   Get started
                 </Link>

@@ -9,7 +9,12 @@ class UserRepository:
     def __init__(self,db: Session):
         self.db=db
 
-    def create_user(self, user: UserCreate, password_hash: str | None = None) -> UserModel:
+    def create_user(
+        self,
+        user: UserCreate,
+        password_hash: str | None = None,
+        is_active: bool = False,
+    ) -> UserModel:
     # create_user = method/function name
     # self = the current UserRepository object
     # user = the data coming into this method
@@ -20,6 +25,7 @@ class UserRepository:
      db_user = UserModel(
         **user_values,
         hashed_password=password_hash or hashed_pasword(user.password),
+        is_active=is_active,
     )
     # user.model_dump()
     # → Converts the UserCreate Pydantic object into a Python dictionary
@@ -122,5 +128,9 @@ class UserRepository:
             or_(UserModel.email == email, UserModel.number == number)
         ).first() is not None
 
-    def get_all_user(self):
-        return self.db.query(UserModel).all()
+    def get_all_user(self,page:int=1 , page_size:int =10):
+        skip = (page-1) * page_size
+        return (
+            self.db.query(UserModel).offset(skip).limit(page_size).all()
+        )
+        
