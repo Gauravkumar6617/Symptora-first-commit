@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -50,16 +50,6 @@ export function TextField({
   // on the UI thread means focusing causes no React render at all.
   const focus = useSharedValue(0);
 
-  // TEMP KEYBOARD DIAGNOSTIC — remove once the flicker is traced.
-  const renders = useRef(0);
-  renders.current += 1;
-  console.log('[KBD] render TextField', label, renders.current);
-
-  useEffect(() => {
-    console.log('[KBD] MOUNT', label);
-    return () => console.log('[KBD] UNMOUNT', label);
-  }, [label]);
-
   const ringStyle = useAnimatedStyle(() => ({
     borderColor: error
       ? theme.danger
@@ -86,12 +76,10 @@ export function TextField({
           maxLength={maxLength}
           secureTextEntry={password ? !revealed : rest.secureTextEntry}
           onFocus={(event) => {
-            console.log('[KBD] FOCUS', label);
             focus.set(withTiming(1, { duration: 120 }));
             rest.onFocus?.(event);
           }}
           onBlur={(event) => {
-            console.log('[KBD] BLUR', label);
             focus.set(withTiming(0, { duration: 120 }));
             rest.onBlur?.(event);
           }}
