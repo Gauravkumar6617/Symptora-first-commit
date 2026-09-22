@@ -32,7 +32,7 @@ app = FastAPI(
 origins = [
     "http://localhost:3000",   # your frontend dev URL
     "http://localhost:5173",   # e.g. Vite default
-    "https://yourdomain.com",  # production frontend
+    "https://symptora-ten.vercel.app",  # production frontend
 ]
 
 app.add_middleware(
