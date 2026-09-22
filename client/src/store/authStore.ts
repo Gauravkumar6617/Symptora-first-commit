@@ -9,6 +9,7 @@ export interface AuthUser {
   address?: string
   avatarUrl?: string
   isDoctor?: boolean
+  isAdmin?: boolean
 }
 
 interface AuthState {

@@ -6,6 +6,8 @@
  * Leaving it unset keeps requests same-origin (useful behind a proxy).
  */
 
+import type { AuthUser } from '@/store/authStore'
+
 /** Base URL of the API server, without a trailing slash. */
 export const API_BASE_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, '') ?? ''
 export const API_PREFIX = '/api/v1'
@@ -133,11 +135,13 @@ export interface UserResponse {
   number: string
   address: string | null
   avatar: string | null
+  avatar_url?: string | null
   date_of_birth: string
   gender: string | null
-  medplum_patient_id: string
+  medplum_patient_id: string | null
   is_active: boolean
   id_doctor: boolean
+  is_admin: boolean
 }
 
 /** backend TokenResponse. */
@@ -195,6 +199,43 @@ export interface DoctorClinic {
   updated_at: string
 }
 
+/** POST /admin/clinics request body — the admin-typed fields; the backend
+ * derives medplum_organisation_id itself by creating the Organization. */
+export interface ClinicCreatePayload {
+  name: string
+  picture: string
+  description?: string
+  address?: string
+  phone?: string
+}
+
+// ----------------------------------------------------------------- admin
+
+/** backend GET /admin/stats. */
+export interface AdminStats {
+  patients: number
+  doctors: number
+  clinics: number
+  pending_applications: number
+}
+
+/** backend AdminDoctorRead — an approved doctor plus their user info and clinics. */
+export interface AdminDoctor {
+  id: string
+  user_id: string
+  specialization: string
+  license_number: string
+  clinic_id: string | null
+  medplum_practitioner_id: string | null
+  status: DoctorApplicationStatus
+  first_name: string
+  last_name: string
+  email: string
+  clinics: Clinic[]
+  created_at: string
+  updated_at: string
+}
+
 // ---------------------------------------------------------------- auth
 
 /**
@@ -243,6 +284,25 @@ export async function loginUser(
   })
 }
 
+/** GET /users/me — the caller's own account, identified by the bearer token. */
+export async function getCurrentUser(token: string): Promise<UserResponse> {
+  return request<UserResponse>('/users/me', { token })
+}
+
+/** backend UserResponse → the store's AuthUser shape. */
+export function toAuthUser(user: UserResponse): AuthUser {
+  return {
+    id: user.id,
+    name: `${user.first_name} ${user.last_name}`.trim(),
+    email: user.email,
+    phone: user.number,
+    address: user.address ?? undefined,
+    avatarUrl: user.avatar_url ?? undefined,
+    isDoctor: user.id_doctor,
+    isAdmin: user.is_admin,
+  }
+}
+
 // ---------------------------------------------------------------- helpers
 
 /**
@@ -267,6 +327,35 @@ export async function getMyDoctorApplication(
   return request<DoctorApplication | null>('/doctor/me', { token })
 }
 
+/** GET /doctor/pending — every application awaiting admin review. */
+export async function listPendingDoctorApplications(
+  token: string,
+): Promise<DoctorApplication[]> {
+  return request<DoctorApplication[]>('/doctor/pending', { token })
+}
+
+/** PATCH /doctor/{id}/approve — creates the Medplum Practitioner and makes the user a doctor. */
+export async function approveDoctorApplication(
+  token: string,
+  doctorId: string,
+): Promise<DoctorApplication> {
+  return request<DoctorApplication>(`/doctor/${doctorId}/approve`, {
+    method: 'PATCH',
+    token,
+  })
+}
+
+/** PATCH /doctor/{id}/reject */
+export async function rejectDoctorApplication(
+  token: string,
+  doctorId: string,
+): Promise<DoctorApplication> {
+  return request<DoctorApplication>(`/doctor/${doctorId}/reject`, {
+    method: 'PATCH',
+    token,
+  })
+}
+
 /** GET /clinics — every clinic, e.g. for a doctor picking one to join. */
 export async function listClinics(token: string): Promise<Clinic[]> {
   return request<Clinic[]>('/clinics', { token })
@@ -287,6 +376,36 @@ export async function assignDoctorToClinic(
 ): Promise<DoctorClinic> {
   return request<DoctorClinic>(`/doctor/clinics/${clinicId}/assign`, {
     method: 'POST',
+    token,
+  })
+}
+
+/** GET /admin/stats — counts for the dashboard header. */
+export async function fetchAdminStats(token: string): Promise<AdminStats> {
+  return request<AdminStats>('/admin/stats', { token })
+}
+
+/** GET /admin/patients — every non-doctor account. */
+export async function fetchAdminPatients(token: string): Promise<UserResponse[]> {
+  return request<UserResponse[]>('/admin/patients', { token })
+}
+
+/** GET /admin/doctors — every approved doctor, with their clinic links. */
+export async function fetchAdminDoctors(token: string): Promise<AdminDoctor[]> {
+  return request<AdminDoctor[]>('/admin/doctors', { token })
+}
+
+/**
+ * POST /admin/clinics — creates the clinic's Organization in Medplum, then
+ * the local row; `medplum_organisation_id` is derived server-side.
+ */
+export async function createClinic(
+  token: string,
+  payload: ClinicCreatePayload,
+): Promise<Clinic> {
+  return request<Clinic>('/admin/clinics', {
+    method: 'POST',
+    body: payload,
     token,
   })
 }

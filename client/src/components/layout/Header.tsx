@@ -48,6 +48,14 @@ export function Header() {
         <div className="ml-auto hidden shrink-0 items-center gap-2 xl:flex 2xl:gap-3">
           {isAuthenticated ? (
             <>
+              {user?.isAdmin && (
+                <Link
+                  to="/admin"
+                  className="shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium text-ink hover:bg-ink/5"
+                >
+                  Admin
+                </Link>
+              )}
               <Link
                 to="/profile"
                 className="flex max-w-[12rem] items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-ink hover:bg-ink/5"
@@ -119,6 +127,15 @@ export function Header() {
           <div className="mt-4 flex items-center gap-3 border-t border-ink/10 pt-4">
             {isAuthenticated ? (
               <>
+                {user?.isAdmin && (
+                  <Link
+                    to="/admin"
+                    onClick={() => setMenuOpen(false)}
+                    className="rounded-lg px-3 py-1.5 text-sm font-medium text-ink"
+                  >
+                    Admin
+                  </Link>
+                )}
                 <Link
                   to="/profile"
                   onClick={() => setMenuOpen(false)}

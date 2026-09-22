@@ -9,13 +9,7 @@
  */
 
 import { blogPosts, catalogDoctors, partnerClinics } from '@/data/mock/directory';
-import {
-  mockAppointments,
-  mockDoctor,
-  mockDoctorAppointments,
-  mockNotifications,
-  mockPatient,
-} from '@/data/mock/people';
+import { mockDoctor, mockNotifications, mockPatient } from '@/data/mock/people';
 import { specialties } from '@/data/specialties';
 import type {
   Appointment,
@@ -286,15 +280,20 @@ export async function requestPasswordReset(email: string): Promise<void> {
 // app reads/writes those from useFamilyStore/useHealthCheckStore (backed by
 // on-device AsyncStorage), which start empty for a new user. There is no
 // fetchFamilyMembers/fetchRiskChecks; don't add screens that call one.
+//
+// Appointments start empty too — there is no booking flow or backend route
+// yet, so there is nothing real to seed a new user with. `mockAppointments`/
+// `mockDoctorAppointments` in src/data/mock/people.ts are kept only as
+// sample shapes for whoever wires up the real appointments endpoint.
 
 export async function fetchPatientAppointments(): Promise<Appointment[]> {
   await delay();
-  return mockAppointments;
+  return [];
 }
 
 export async function fetchDoctorAppointments(): Promise<Appointment[]> {
   await delay();
-  return mockDoctorAppointments;
+  return [];
 }
 
 export async function fetchNotifications(): Promise<AppNotification[]> {

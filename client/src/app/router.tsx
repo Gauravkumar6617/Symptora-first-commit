@@ -1,7 +1,9 @@
 import { createBrowserRouter } from 'react-router-dom'
+import { AdminRoute } from '@/components/auth/AdminRoute'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { RootLayout } from '@/components/layout/RootLayout'
 import { AboutPage } from '@/pages/about/AboutPage'
+import { AdminDashboardPage } from '@/pages/admin/AdminDashboardPage'
 import { ApplyDoctorPage } from '@/pages/apply-doctor/ApplyDoctorPage'
 import { AppointmentsPage } from '@/pages/appointments/AppointmentsPage'
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage'
@@ -46,6 +48,10 @@ export const router = createBrowserRouter([
           { path: '/profile', element: <ProfilePage /> },
           { path: '/apply-doctor', element: <ApplyDoctorPage /> },
         ],
+      },
+      {
+        element: <AdminRoute />,
+        children: [{ path: '/admin', element: <AdminDashboardPage /> }],
       },
     ],
   },

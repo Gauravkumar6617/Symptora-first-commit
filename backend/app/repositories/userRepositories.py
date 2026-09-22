@@ -136,4 +136,8 @@ class UserRepository:
         return (
             self.db.query(UserModel).offset(skip).limit(page_size).all()
         )
+
+    def list_patients(self) -> list[UserModel]:
+        """Every non-doctor account, for the admin dashboard."""
+        return self.db.query(UserModel).filter(UserModel.id_doctor == False).all()  # noqa: E712
         

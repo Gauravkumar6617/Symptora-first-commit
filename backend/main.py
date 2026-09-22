@@ -5,6 +5,7 @@ from app.core.redis import redis_health_check
 from app.routers.userRouter import router as UserRouter
 from app.routers.doctorRouter import router as DoctorRouter
 from app.routers.clinicRouter import router as ClinicRouter
+from app.routers.adminRouter import router as AdminRouter
 from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI(
     title=settings.APP_NAME,
@@ -28,6 +29,7 @@ app.add_middleware(
 app.include_router(UserRouter, prefix="/api/v1")
 app.include_router(DoctorRouter,prefix="/api/v1")
 app.include_router(ClinicRouter,prefix="/api/v1")
+app.include_router(AdminRouter,prefix="/api/v1")
 
 
 

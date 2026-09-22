@@ -2,7 +2,7 @@ import { type FormEvent, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AuthSplitLayout } from '@/components/auth/AuthSplitLayout'
 import { FormField } from '@/components/auth/FormField'
-import { ApiError, loginUser } from '@/lib/api'
+import { ApiError, getCurrentUser, loginUser, toAuthUser } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 
 export function LoginPage() {
@@ -23,10 +23,9 @@ export function LoginPage() {
     setSubmitting(true)
     try {
       const { access_token } = await loginUser(email, password)
-      // The backend has no /users/me yet, so the token is what identifies the
-      // session; the display name comes from the email until it does.
-      login({ id: email, name: email.split('@')[0], email }, access_token)
-      navigate('/dashboard')
+      const user = await getCurrentUser(access_token)
+      login(toAuthUser(user), access_token)
+      navigate(user.is_admin ? '/admin' : '/dashboard')
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : 'Something went wrong. Try again.',

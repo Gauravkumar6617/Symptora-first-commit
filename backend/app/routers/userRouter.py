@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.redis import redis_client
+from app.deps.auth import get_current_user
+from app.models.userModel import UserModel
 from app.repositories.userRepositories import UserRepository
 from app.schemas.userSchema import (
     OTPRequestResponse,
@@ -70,6 +72,12 @@ def verify_registration_otp(
     service: UserService = Depends(get_user_service),
 ):
     return UserController.verify_registration_otp(verification=verification, service=service)
+
+
+@router.get("/me", response_model=UserResponse)
+def get_current_user_profile(current_user: UserModel = Depends(get_current_user)):
+    """The caller's own account, identified by their bearer token."""
+    return current_user
 
 
 @router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)

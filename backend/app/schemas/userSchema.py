@@ -71,7 +71,8 @@ class UserUpdate(BaseModel):
 
 
 class UserResponse(UserBase, ORMReadBase):
-    medplum_patient_id: str
+    # Nullable in the DB — not every account has a Medplum Patient yet.
+    medplum_patient_id: Optional[str] = None
     is_active: bool
     id_doctor: bool
     is_admin: bool
