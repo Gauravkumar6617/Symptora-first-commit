@@ -2,6 +2,7 @@
 
 from app.models.base import BaseModel
 from app.models.clinicModel import CliniModel
+from app.models.doctorClinicModel import DoctorClinicModel
 from app.models.doctorAvailabilityModel import doctorAvailabilityModel
 from app.models.doctorModel import DoctorProfile
 from app.models.familyMemeberModel import FamilyMemberModel
@@ -10,6 +11,7 @@ from app.models.userModel import UserModel
 __all__ = [
     "BaseModel",
     "CliniModel",
+    "DoctorClinicModel",
     "DoctorProfile",
     "FamilyMemberModel",
     "UserModel",

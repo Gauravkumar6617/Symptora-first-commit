@@ -2,7 +2,7 @@
 import httpx
 from fastapi import HTTPException
 from app.schemas.doctor import DoctorProfileCreate
-
+from app.schemas.clinic import ClinicCreate
 
 class MedplumIntegration:
 
@@ -116,4 +116,84 @@ class MedplumIntegration:
                 status_code=response.status_code,
                 detail="Failed to create practitioner in Medplum."
             )
+
+    def create_practitioner_role(self, practitioner_id: str, organization_id: str) -> dict:
+        access_token = self.get_access_token()
+
+        url = f"{self.base_url.rstrip('/')}/fhir/R4/PractitionerRole"
+
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "resourceType": "PractitionerRole",
+            "active": True,
+            "practitioner": {"reference": f"Practitioner/{practitioner_id}"},
+            "organization": {"reference": f"Organization/{organization_id}"}
+        }
+
+        response = httpx.post(
+            url,
+            json=payload,
+            headers=headers
+        )
+
+        if response.status_code == 201:
+            return response.json()
+        else:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail="Failed to create practitioner role in Medplum."
+            )
+
+  
+
+def create_organisation(self, clinic_data: ClinicCreate):
+    try:
+        access_token = self.access_token()
+        url = f"{self.base_url.rstrip('/')}/fhir/R4/Organization"
+
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        }
+
+        payload = {
+            "resourceType": "Organization",
+            "name": clinic_data.name,
+            "telecom": [
+                {
+                    "system": "phone",
+                    "value": clinic_data.phone,
+                }
+            ] if clinic_data.phone else [],
+            "address": [
+                {
+                    "text": clinic_data.address,
+                }
+            ] if clinic_data.address else [],
+        }
+
+        response = httpx.post(
+            url,
+            json=payload,
+            headers=headers,
+        )
+
+        if response.status_code == 201:
+            return response.json()
+        else:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail="Failed to create Organisation in Medplum.",
+            )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create Organisation: {str(e)}",
+        )
+
 

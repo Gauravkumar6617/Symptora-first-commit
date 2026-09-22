@@ -26,8 +26,11 @@ class DoctorProfile(BaseModel):
         server_default=Status.PENDING.name,
     )
     user = relationship("UserModel", back_populates="doctor_profile")
+    # DEPRECATED: single-clinic FK, superseded by clinic_links (doctor_clinic).
+    # Kept until existing callers are migrated.
     # FK must point at actual clinic model/table (CliniModel/"clinic"), not the nonexistent "Clinic"
     clinic_id = Column(UUID(as_uuid=False), ForeignKey("clinic.id"), nullable=True)
     clinic = relationship("CliniModel", back_populates="doctor_profiles")
+    clinic_links = relationship("DoctorClinicModel", back_populates="doctor_profile", cascade="all, delete-orphan")
     availability_slots=relationship("doctorAvailabilityModel",back_populates="doctor_profile",cascade="all, delete-orphan")
     

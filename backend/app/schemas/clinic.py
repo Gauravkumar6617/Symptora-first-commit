@@ -27,3 +27,9 @@ class ClinicUpdate(BaseModel):
 
 class ClinicRead(ClinicBase, ORMReadBase):
     medplum_organisation_id: str
+
+
+class DoctorClinicRead(ORMReadBase):
+    doctor_profile_id: str
+    clinic_id: str
+    medplum_practitioner_role_id: Optional[str] = None

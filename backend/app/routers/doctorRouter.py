@@ -2,6 +2,9 @@ from typing import List, Optional
 
 from app.controllers.doctorController import DoctorController
 from app.services.doctorService import DoctorService
+from app.controllers.doctorClinicController import DoctorClinicController
+from app.services.doctorClinicService import DoctorClinicService
+from app.schemas.clinic import DoctorClinicRead
 from app.schemas.doctor import (
     DoctorProfileCreate,
     DoctorAvailabilityRead,
@@ -83,3 +86,19 @@ def reject_doctor_application(
 ):
     service = DoctorService(db)
     return DoctorController.reject_doctor(doctor_id, current_admin, service)
+
+
+@router.post(
+    "/clinics/{clinic_id}/assign",
+    response_model=DoctorClinicRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def assign_doctor_to_clinic(
+    clinic_id: str,
+    current_user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Link the calling (approved) doctor to a clinic, creating a
+    PractitionerRole in Medplum."""
+    service = DoctorClinicService(db)
+    return DoctorClinicController.assign_to_clinic(clinic_id, current_user, service)

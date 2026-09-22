@@ -22,4 +22,6 @@ class CliniModel(BaseModel):
     medplum_organisation_id= Column(String(),nullable=False)
 
     # back_populates target renamed to match DoctorProfile.clinic
+    # DEPRECATED: pairs with DoctorProfile.clinic_id; use doctor_links instead.
     doctor_profiles = relationship("DoctorProfile", back_populates="clinic")
+    doctor_links = relationship("DoctorClinicModel", back_populates="clinic", cascade="all, delete-orphan")
