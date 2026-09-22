@@ -55,3 +55,9 @@ class DoctorClinicService:
         except Exception:
             self.db.rollback()
             raise
+
+    def list_my_clinics(self, user_id: str) -> list[DoctorClinicModel]:
+        doctor_profile = self.doctor_repo.get_by_user_id(user_id)
+        if not doctor_profile:
+            raise ValueError("Doctor profile not found")
+        return self.doctor_clinic_repo.list_clinics_for_doctor(doctor_profile.id)

@@ -102,3 +102,16 @@ def assign_doctor_to_clinic(
     PractitionerRole in Medplum."""
     service = DoctorClinicService(db)
     return DoctorClinicController.assign_to_clinic(clinic_id, current_user, service)
+
+
+@router.get(
+    "/my-clinics",
+    response_model=List[DoctorClinicRead],
+)
+def list_my_clinics(
+    current_user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Clinics the calling doctor is currently assigned to."""
+    service = DoctorClinicService(db)
+    return DoctorClinicController.list_my_clinics(current_user, service)
