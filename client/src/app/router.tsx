@@ -39,12 +39,12 @@ export const router = createBrowserRouter([
       { path: '/contact', element: <ContactPage /> },
       { path: '/privacy', element: <PrivacyPolicyPage /> },
       { path: '/terms', element: <TermsOfServicePage /> },
-      { path: '/apply-doctor', element: <ApplyDoctorPage /> },
       {
         element: <ProtectedRoute />,
         children: [
           { path: '/dashboard', element: <DashboardPage /> },
           { path: '/profile', element: <ProfilePage /> },
+          { path: '/apply-doctor', element: <ApplyDoctorPage /> },
         ],
       },
     ],

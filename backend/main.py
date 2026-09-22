@@ -3,6 +3,7 @@ from app.core.database import database_check
 from app.core.config import settings
 from app.core.redis import redis_health_check
 from app.routers.userRouter import router as UserRouter
+from app.routers.doctorRouter import router as DoctorRouter
 from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI(
     title=settings.APP_NAME,
@@ -24,6 +25,7 @@ app.add_middleware(
 )
 
 app.include_router(UserRouter, prefix="/api/v1")
+app.include_router(DoctorRouter,prefix="/api/v1")
 
 
 

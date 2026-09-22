@@ -1,9 +1,15 @@
-import { CheckCircle2, ClipboardCheck, ShieldCheck, Video } from 'lucide-react'
-import { type FormEvent, useState } from 'react'
+import { CheckCircle2, ClipboardCheck, Clock, ShieldCheck, Video, XCircle } from 'lucide-react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { AuthSplitLayout } from '@/components/auth/AuthSplitLayout'
 import { FormField } from '@/components/auth/FormField'
-import { AvatarUpload } from '@/components/ui/AvatarUpload'
+import {
+  ApiError,
+  applyToBecomeDoctor,
+  type DoctorApplication,
+  getMyDoctorApplication,
+} from '@/lib/api'
 import { APP_NAME } from '@/lib/constants'
+import { useAuthStore } from '@/store/authStore'
 
 const specialties = [
   'General Physician',
@@ -32,46 +38,74 @@ const perks = [
 ]
 
 export function ApplyDoctorPage() {
-  const [fullName, setFullName] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
+  const token = useAuthStore((state) => state.token)
   const [specialization, setSpecialization] = useState(specialties[0])
   const [licenseNumber, setLicenseNumber] = useState('')
-  const [experienceYears, setExperienceYears] = useState('')
-  const [licenseDoc, setLicenseDoc] = useState<string | null>(null)
-  const [message, setMessage] = useState('')
-  const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [loadingStatus, setLoadingStatus] = useState(true)
+  const [application, setApplication] = useState<DoctorApplication | null>(null)
 
-  function handleSubmit(event: FormEvent) {
+  // Someone who has already applied (or is already approved) sees their
+  // status instead of the form — the backend also rejects a second /promote.
+  useEffect(() => {
+    if (!token) {
+      setLoadingStatus(false)
+      return
+    }
+    let cancelled = false
+    getMyDoctorApplication(token)
+      .then((result) => {
+        if (!cancelled) setApplication(result)
+      })
+      .catch(() => {
+        // Best-effort: if the check fails, fall back to showing the form.
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingStatus(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [token])
+
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    if (!fullName || !email || !phone || !licenseNumber || !experienceYears) {
-      setError('Please fill in all required fields.')
+    if (!token) {
+      setError('You need to be logged in to apply.')
+      return
+    }
+    if (!licenseNumber.trim()) {
+      setError('Please enter your medical license number.')
       return
     }
     setError('')
-    // TODO: submit to a real doctor-application endpoint (creates a DoctorProfile pending review)
-    setSubmitted(true)
+    setSubmitting(true)
+    try {
+      const result = await applyToBecomeDoctor(token, {
+        specialization,
+        license_number: licenseNumber.trim(),
+      })
+      setApplication(result)
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : 'Something went wrong. Try again.',
+      )
+    } finally {
+      setSubmitting(false)
+    }
   }
 
-  if (submitted) {
+  if (loadingStatus) {
     return (
-      <AuthSplitLayout
-        title="Application received"
-        subtitle="We'll review your details and get back to you"
-      >
-        <div className="card-raised flex flex-col items-center p-8 text-center">
-          <span className="icon-badge h-14 w-14">
-            <CheckCircle2 className="h-7 w-7 text-success" />
-          </span>
-          <h2 className="mt-4 text-lg font-bold text-ink">Thanks, {fullName.split(' ')[0]}!</h2>
-          <p className="mt-2 text-sm text-ink/60">
-            Our credentialing team verifies your license and will email{' '}
-            {email} within 2–3 business days with next steps.
-          </p>
-        </div>
+      <AuthSplitLayout title="Apply as a doctor" subtitle="Checking your application status…">
+        <div className="card-raised p-8 text-center text-sm text-ink/50">Loading…</div>
       </AuthSplitLayout>
     )
+  }
+
+  if (application) {
+    return <ApplicationStatusCard application={application} />
   }
 
   return (
@@ -80,91 +114,36 @@ export function ApplyDoctorPage() {
       subtitle={`Join the ${APP_NAME} network and offer telemedicine consultations`}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        <AvatarUpload
-          value={licenseDoc}
-          onChange={setLicenseDoc}
-          label="Medical license / ID proof (optional)"
-        />
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField
-            id="fullName"
-            label="Full name"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            placeholder="Dr. Jane Doe"
-          />
-          <FormField
-            id="email"
-            label="Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField
-            id="phone"
-            label="Phone number"
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-          <FormField
-            id="experience"
-            label="Years of experience"
-            type="number"
-            min={0}
-            value={experienceYears}
-            onChange={(e) => setExperienceYears(e.target.value)}
-          />
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label htmlFor="specialization" className="block text-sm font-medium text-ink">
-              Specialization
-            </label>
-            <select
-              id="specialization"
-              value={specialization}
-              onChange={(e) => setSpecialization(e.target.value)}
-              className="mt-1.5 w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-primary"
-            >
-              {specialties.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </div>
-          <FormField
-            id="licenseNumber"
-            label="Medical license number"
-            value={licenseNumber}
-            onChange={(e) => setLicenseNumber(e.target.value)}
-          />
-        </div>
-
         <div>
-          <label htmlFor="message" className="block text-sm font-medium text-ink">
-            Anything else we should know?{' '}
-            <span className="font-normal text-ink/40">(optional)</span>
+          <label htmlFor="specialization" className="block text-sm font-medium text-ink">
+            Specialization
           </label>
-          <textarea
-            id="message"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            rows={3}
-            className="mt-1.5 w-full resize-none rounded-lg border border-ink/15 px-3 py-2 text-sm text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-          />
+          <select
+            id="specialization"
+            value={specialization}
+            onChange={(e) => setSpecialization(e.target.value)}
+            className="mt-1.5 w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-primary"
+          >
+            {specialties.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
         </div>
+
+        <FormField
+          id="licenseNumber"
+          label="Medical license number"
+          value={licenseNumber}
+          onChange={(e) => setLicenseNumber(e.target.value)}
+          placeholder="e.g. MCI-123456"
+        />
 
         {error && <p className="text-sm text-danger">{error}</p>}
 
-        <button type="submit" className="btn-raised w-full">
-          Submit application
+        <button type="submit" className="btn-raised w-full" disabled={submitting}>
+          {submitting ? 'Submitting…' : 'Submit application'}
         </button>
 
         <div className="space-y-2 border-t border-ink/10 pt-4">
@@ -176,6 +155,59 @@ export function ApplyDoctorPage() {
           ))}
         </div>
       </form>
+    </AuthSplitLayout>
+  )
+}
+
+function ApplicationStatusCard({ application }: { application: DoctorApplication }) {
+  if (application.status === 'APPROVED') {
+    return (
+      <AuthSplitLayout title="You're a verified doctor" subtitle="Your application was approved">
+        <div className="card-raised flex flex-col items-center p-8 text-center">
+          <span className="icon-badge h-14 w-14">
+            <CheckCircle2 className="h-7 w-7 text-success" />
+          </span>
+          <h2 className="mt-4 text-lg font-bold text-ink">You're all set</h2>
+          <p className="mt-2 text-sm text-ink/60">
+            Your {application.specialization} profile is live. Head back to your dashboard to
+            manage availability and consultations.
+          </p>
+        </div>
+      </AuthSplitLayout>
+    )
+  }
+
+  if (application.status === 'REJECTED') {
+    return (
+      <AuthSplitLayout title="Application not approved" subtitle="Here's what happened">
+        <div className="card-raised flex flex-col items-center p-8 text-center">
+          <span className="icon-badge h-14 w-14">
+            <XCircle className="h-7 w-7 text-danger" />
+          </span>
+          <h2 className="mt-4 text-lg font-bold text-ink">
+            We couldn't verify this application
+          </h2>
+          <p className="mt-2 text-sm text-ink/60">
+            Our credentialing team wasn't able to approve your license details. Contact support
+            if you think this is a mistake.
+          </p>
+        </div>
+      </AuthSplitLayout>
+    )
+  }
+
+  return (
+    <AuthSplitLayout title="Application received" subtitle="We're reviewing your details">
+      <div className="card-raised flex flex-col items-center p-8 text-center">
+        <span className="icon-badge h-14 w-14">
+          <Clock className="h-7 w-7 text-primary-600" />
+        </span>
+        <h2 className="mt-4 text-lg font-bold text-ink">Under review</h2>
+        <p className="mt-2 text-sm text-ink/60">
+          Our credentialing team is verifying your {application.specialization} license (
+          {application.license_number}). We'll email you within 2–3 business days.
+        </p>
+      </div>
     </AuthSplitLayout>
   )
 }

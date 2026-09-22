@@ -146,6 +146,30 @@ export interface TokenResponse {
   token_type: string
 }
 
+// -------------------------------------------------------------- doctors
+
+export type DoctorApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+
+/** backend DoctorProfileCreate. */
+export interface DoctorApplicationPayload {
+  specialization: string
+  license_number: string
+  clinic_id?: string | null
+}
+
+/** backend DoctorProfileRead. */
+export interface DoctorApplication {
+  id: string
+  user_id: string
+  specialization: string
+  license_number: string
+  clinic_id: string | null
+  medplum_practitioner_id: string | null
+  status: DoctorApplicationStatus
+  created_at: string
+  updated_at: string
+}
+
 // ---------------------------------------------------------------- auth
 
 /**
@@ -195,6 +219,28 @@ export async function loginUser(
 }
 
 // ---------------------------------------------------------------- helpers
+
+/**
+ * POST /doctor/promote — submits a doctor application. It stays pending
+ * until an admin approves it; nothing about the account changes yet.
+ */
+export async function applyToBecomeDoctor(
+  token: string,
+  payload: DoctorApplicationPayload,
+): Promise<DoctorApplication> {
+  return request<DoctorApplication>('/doctor/promote', {
+    method: 'POST',
+    body: payload,
+    token,
+  })
+}
+
+/** GET /doctor/me — the caller's own application, or null if they never applied. */
+export async function getMyDoctorApplication(
+  token: string,
+): Promise<DoctorApplication | null> {
+  return request<DoctorApplication | null>('/doctor/me', { token })
+}
 
 /** Turns the AvatarUpload data URL into a File for the multipart request. */
 export async function dataUrlToFile(

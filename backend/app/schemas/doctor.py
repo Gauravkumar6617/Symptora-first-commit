@@ -2,6 +2,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.models.enumModel import Status
 from app.schemas.common import ORMReadBase
 from app.schemas.doctor_availability import DoctorAvailabilityRead
 
@@ -14,7 +15,7 @@ class DoctorProfileBase(BaseModel):
 
 
 class DoctorProfileCreate(DoctorProfileBase):
-    user_id: str
+    pass
 
 
 class DoctorProfileUpdate(BaseModel):
@@ -23,6 +24,11 @@ class DoctorProfileUpdate(BaseModel):
     medplum_practitioner_id: Optional[str] = None
 
 
+class DoctorProfileReject(BaseModel):
+    reason: Optional[str] = None
+
+
 class DoctorProfileRead(DoctorProfileBase, ORMReadBase):
     user_id: str
+    status: Status
     availability_slots: List[DoctorAvailabilityRead] = []

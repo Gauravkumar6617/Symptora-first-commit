@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import decode_token
 from app.models.userModel import UserModel
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/users/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/users/token")
 #take token fromt this url
 
 def get_current_user(token : str = Depends(oauth2_scheme),db: Session = Depends(get_db),) -> UserModel: #takes token or db from session
@@ -34,3 +34,12 @@ def get_current_user(token : str = Depends(oauth2_scheme),db: Session = Depends(
         raise credentials_exception#find user id from db
 
     return user
+
+
+def get_current_admin(current_user: UserModel = Depends(get_current_user)) -> UserModel:
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required.",
+        )
+    return current_user

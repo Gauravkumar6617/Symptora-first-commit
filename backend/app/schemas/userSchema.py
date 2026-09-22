@@ -74,6 +74,7 @@ class UserResponse(UserBase, ORMReadBase):
     medplum_patient_id: str
     is_active: bool
     id_doctor: bool
+    is_admin: bool
     # Presigned, short-lived download url derived from ``avatar``.
     avatar_url: Optional[str] = None
 

@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, File, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -75,4 +77,22 @@ def login_user(
     user_data: UserLogin,
     service: UserService = Depends(get_user_service),
 ):
+    return UserController.login_user(user_data=user_data, service=service)
+
+
+@router.post("/token", response_model=TokenResponse, include_in_schema=False)
+def login_for_swagger(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    service: UserService = Depends(get_user_service),
+):
+    # Swagger's Authorize button sends form data (username/password),
+    # so this maps it onto the normal JSON login. username = email.
+    try:
+        user_data = UserLogin(email=form_data.username, password=form_data.password)
+    except ValidationError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return UserController.login_user(user_data=user_data, service=service)
