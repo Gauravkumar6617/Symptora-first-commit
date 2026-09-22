@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { PressScale } from '@/components/ui/press-scale';
 import { Radius, Spacing, Typography, tint } from '@/constants/theme';
-import type { Specialty } from '@/data/catalog';
+import type { Specialty } from '@/data/specialties';
 import { useTheme } from '@/hooks/use-theme';
 
 export function SpecialtyChip({

@@ -8,7 +8,7 @@ import { Screen } from '@/components/ui/screen';
 import { StackHeader } from '@/components/ui/stack-header';
 import { TextField } from '@/components/ui/text-field';
 import { Spacing, Typography } from '@/constants/theme';
-import { specialties } from '@/data/catalog';
+import { specialties } from '@/data/specialties';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function SpecialtiesScreen() {

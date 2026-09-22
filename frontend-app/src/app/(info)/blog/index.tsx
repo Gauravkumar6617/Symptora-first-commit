@@ -10,7 +10,7 @@ import { Screen } from '@/components/ui/screen';
 import { SkeletonList } from '@/components/ui/skeleton';
 import { StackHeader } from '@/components/ui/stack-header';
 import { Gradient, Radius, Spacing, Typography } from '@/constants/theme';
-import { blogCategories } from '@/data/catalog';
+import { blogCategories } from '@/data/mock/directory';
 import { useBlogPosts } from '@/hooks/use-queries';
 import { useTheme } from '@/hooks/use-theme';
 

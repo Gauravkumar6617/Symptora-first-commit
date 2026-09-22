@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { type DoctorApplication, getMyDoctorApplication } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 import { useFamilyStore } from '@/store/familyStore'
+import { MyClinicsCard } from './MyClinicsCard'
 
 const quickLinks = [
   { to: '/', icon: Stethoscope, title: 'New Health Check', description: 'Get a risk report in minutes' },
@@ -60,6 +61,7 @@ export function DashboardPage() {
       </div>
 
       {application !== undefined && <DoctorApplicationCard application={application} />}
+      {application?.status === 'APPROVED' && <MyClinicsCard />}
 
       <div className="mt-10">
         <div className="flex items-center justify-between">

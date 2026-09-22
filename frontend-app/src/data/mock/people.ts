@@ -1,15 +1,22 @@
-import type {
-  Appointment,
-  AppNotification,
-  AuthUser,
-  Doctor,
-  FamilyMember,
-  RiskCheck,
-} from '@/types';
+import type { Appointment, AppNotification, AuthUser } from '@/types';
 
-// Mock data uses the same field names as the backend schemas
-// (backend/app/schemas/userSchema.py, app/models/enumModel.py) so swapping the
-// fetch* functions in src/lib/api.ts for real HTTP calls needs no mapping.
+/**
+ * MOCK DATA — fake sample records standing in for backend responses that
+ * don't exist yet:
+ *   - `mockPatient` / `mockDoctor` → demo-mode login identities only (see
+ *     `loginUser` in src/lib/api.ts); real sessions come from POST /users/login.
+ *   - `mockAppointments` / `mockDoctorAppointments` → an appointments endpoint.
+ *   - `mockNotifications`         → a notifications endpoint.
+ *
+ * Family members and Health Check history are NOT here — they live in
+ * useFamilyStore/useHealthCheckStore, which start empty for a new user
+ * instead of being seeded with sample people/history.
+ *
+ * Field names deliberately match the backend schemas
+ * (backend/app/schemas/userSchema.py, app/models/enumModel.py) so swapping
+ * the fetch* functions in src/lib/api.ts for real HTTP calls needs no
+ * mapping layer once those routes exist.
+ */
 
 const NOW = '2026-09-18T09:00:00.000Z';
 
@@ -47,18 +54,6 @@ export const mockDoctor: AuthUser = {
   role: 'doctor',
   specialization: 'Cardiology',
 };
-
-export const mockFamilyMembers: FamilyMember[] = [
-  { id: 'f1', name: 'Meera Sharma', relation: 'mother', age: 54, gender: 'female', lastCheck: 'Last check 3 days ago' },
-  { id: 'f2', name: 'Kabir Sharma', relation: 'son', age: 9, gender: 'male', lastCheck: 'Last check 2 weeks ago' },
-  { id: 'f3', name: 'Rohan Sharma', relation: 'brother', age: 29, gender: 'male', lastCheck: 'No checks yet' },
-];
-
-export const mockDoctors: Doctor[] = [
-  { id: 'd1', name: 'Dr. Priya Nair', specialization: 'Cardiology', clinic: 'HeartCare Clinic', rating: 4.8 },
-  { id: 'd2', name: 'Dr. Arjun Mehta', specialization: 'Dermatology', clinic: 'SkinFirst Clinic', rating: 4.6 },
-  { id: 'd3', name: 'Dr. Sana Iqbal', specialization: 'Pediatrics', clinic: 'Little Steps Clinic', rating: 4.9 },
-];
 
 export const mockAppointments: Appointment[] = [
   {
@@ -150,25 +145,6 @@ export const mockDoctorAppointments: Appointment[] = [
     status: 'rescheduled',
     mode: 'video',
     reason: 'Palpitations',
-  },
-];
-
-export const mockRiskChecks: RiskCheck[] = [
-  {
-    id: 'r1',
-    title: 'Chest pain & shortness of breath',
-    riskLevel: 'high',
-    createdAt: '2026-09-14T18:40:00.000Z',
-    score: 82,
-    summary: 'Escalated to a cardiologist video consult within 3 minutes.',
-  },
-  {
-    id: 'r2',
-    title: 'Seasonal cold symptoms',
-    riskLevel: 'low',
-    createdAt: '2026-09-10T08:05:00.000Z',
-    score: 18,
-    summary: 'Self-care advice: rest, fluids, and monitor for 48 hours.',
   },
 ];
 

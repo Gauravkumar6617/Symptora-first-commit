@@ -11,7 +11,7 @@ import { SelectField } from '@/components/ui/select-field';
 import { StackHeader } from '@/components/ui/stack-header';
 import { TextField } from '@/components/ui/text-field';
 import { MaxFormWidth, Radius, Spacing, Typography, tint } from '@/constants/theme';
-import { specialties } from '@/data/catalog';
+import { specialties } from '@/data/specialties';
 import { ApiError, submitDoctorApplication } from '@/lib/api';
 import { successFeedback } from '@/lib/haptics';
 import { LIMITS, validateEmail, validateNumber } from '@/lib/validation';

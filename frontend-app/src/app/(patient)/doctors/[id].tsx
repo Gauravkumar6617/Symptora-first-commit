@@ -12,7 +12,7 @@ import { Screen } from '@/components/ui/screen';
 import { SectionHeaderRow } from '@/components/ui/section-link';
 import { StackHeader } from '@/components/ui/stack-header';
 import { Gradient, Radius, Spacing, Typography } from '@/constants/theme';
-import { getCatalogDoctorById, getClinicById, timeSlots } from '@/data/catalog';
+import { getCatalogDoctorById, getClinicById, timeSlots } from '@/data/mock/directory';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function DoctorDetailScreen() {

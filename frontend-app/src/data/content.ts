@@ -1,7 +1,9 @@
 import type { Ionicons } from '@expo/vector-icons';
 
-// Marketing + informational copy, ported from client/src (web app) so the
-// mobile app tells the same story. Keep both in sync when copy changes.
+// Real static content (marketing/informational copy) — not mock data, see
+// src/data/mock/ for fake sample records standing in for backend responses.
+// Ported from client/src (web app) so the mobile app tells the same story.
+// Keep both in sync when copy changes.
 
 export const APP_NAME = 'Symptora';
 export const APP_TAGLINE = "Know when it matters. Act before it's late.";

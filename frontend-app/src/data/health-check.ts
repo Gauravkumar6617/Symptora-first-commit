@@ -3,13 +3,14 @@ import type { Ionicons } from '@expo/vector-icons';
 import type { RiskLevel } from '@/types';
 
 /**
- * The Health Check triage questionnaire.
+ * The Health Check triage questionnaire — real, working client-side scoring
+ * logic (not a fake sample record from src/data/mock/), used until a
+ * backend triage service exists to take over the scoring itself.
  *
  * Scoring is deliberately simple and transparent: every answer carries a
  * weight, the weights are normalised to 0–100, and any "red flag" answer
  * forces a High risk result regardless of the total. This mirrors the
- * Low/Medium/High contract of backend enumModel.RiskLevel and is a stand-in
- * until the backend triage service exists.
+ * Low/Medium/High contract of backend enumModel.RiskLevel.
  */
 
 export interface HealthCheckOption {

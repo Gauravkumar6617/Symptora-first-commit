@@ -3,29 +3,27 @@
  *
  * Auth calls hit the real FastAPI backend when EXPO_PUBLIC_API_URL is set
  * (see backend/app/routers/userRouter.py). Catalog/appointment data is still
- * served from src/data/* mocks — each fetch* below is a one-line swap to a
- * request once those routes exist.
+ * served from src/data/mock/* — each fetch* below is a one-line swap to a
+ * request once those routes exist. `src/data/specialties.ts` is NOT mock;
+ * it's real static content this app ships with.
  */
 
-import { blogPosts, catalogDoctors, clinics, specialties } from '@/data/catalog';
+import { blogPosts, catalogDoctors, partnerClinics } from '@/data/mock/directory';
 import {
   mockAppointments,
   mockDoctor,
   mockDoctorAppointments,
-  mockDoctors,
-  mockFamilyMembers,
   mockNotifications,
   mockPatient,
-  mockRiskChecks,
-} from '@/data/mockData';
+} from '@/data/mock/people';
+import { specialties } from '@/data/specialties';
 import type {
   Appointment,
   AppNotification,
   AuthSession,
   AuthUser,
-  Doctor,
-  FamilyMember,
-  RiskCheck,
+  ClinicRecord,
+  DoctorClinicLink,
   UserCreatePayload,
   UserResponse,
   UserUpdatePayload,
@@ -283,16 +281,11 @@ export async function requestPasswordReset(email: string): Promise<void> {
 }
 
 // ------------------------------------------------------- mocked resources
-
-export async function fetchFamilyMembers(): Promise<FamilyMember[]> {
-  await delay();
-  return mockFamilyMembers;
-}
-
-export async function fetchDoctors(): Promise<Doctor[]> {
-  await delay();
-  return mockDoctors;
-}
+//
+// Family members and Health Check history are NOT fetched from here — the
+// app reads/writes those from useFamilyStore/useHealthCheckStore (backed by
+// on-device AsyncStorage), which start empty for a new user. There is no
+// fetchFamilyMembers/fetchRiskChecks; don't add screens that call one.
 
 export async function fetchPatientAppointments(): Promise<Appointment[]> {
   await delay();
@@ -302,11 +295,6 @@ export async function fetchPatientAppointments(): Promise<Appointment[]> {
 export async function fetchDoctorAppointments(): Promise<Appointment[]> {
   await delay();
   return mockDoctorAppointments;
-}
-
-export async function fetchRiskChecks(): Promise<RiskCheck[]> {
-  await delay();
-  return mockRiskChecks;
 }
 
 export async function fetchNotifications(): Promise<AppNotification[]> {
@@ -319,9 +307,10 @@ export async function fetchSpecialties() {
   return specialties;
 }
 
+/** Mock "find a partner clinic" directory — unrelated to fetchClinicOptions below. */
 export async function fetchClinics() {
   await delay();
-  return clinics;
+  return partnerClinics;
 }
 
 export async function fetchCatalogDoctors() {
@@ -362,4 +351,61 @@ export async function submitDoctorApplication(payload: {
     return;
   }
   await request('/doctors/applications', { method: 'POST', body: payload });
+}
+
+// ---------------------------------------------------------- doctor clinics
+
+const demoClinicOptions: ClinicRecord[] = [
+  {
+    id: 'demo-clinic-1',
+    name: 'Symptora City Clinic',
+    picture: '',
+    description: 'Demo clinic (no EXPO_PUBLIC_API_URL configured).',
+    address: null,
+    phone: null,
+    medplum_organisation_id: 'demo-org-1',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
+/** GET /api/v1/clinics — every clinic, e.g. for a doctor picking one to join. */
+export async function fetchClinicOptions(token: string): Promise<ClinicRecord[]> {
+  if (isDemoMode) {
+    await delay();
+    return demoClinicOptions;
+  }
+  return request<ClinicRecord[]>('/clinics', { token });
+}
+
+/** GET /api/v1/doctor/my-clinics — clinics the calling doctor is assigned to. */
+export async function fetchMyClinicLinks(token: string): Promise<DoctorClinicLink[]> {
+  if (isDemoMode) {
+    await delay();
+    return [];
+  }
+  return request<DoctorClinicLink[]>('/doctor/my-clinics', { token });
+}
+
+/**
+ * POST /api/v1/doctor/clinics/{clinic_id}/assign — links the calling
+ * (approved) doctor to a clinic, creating a PractitionerRole in Medplum.
+ */
+export async function assignDoctorToClinic(token: string, clinicId: string): Promise<DoctorClinicLink> {
+  if (isDemoMode) {
+    await delay(500);
+    const now = new Date().toISOString();
+    return {
+      id: `demo-link-${clinicId}`,
+      doctor_profile_id: 'demo-doctor',
+      clinic_id: clinicId,
+      medplum_practitioner_role_id: 'demo-role',
+      created_at: now,
+      updated_at: now,
+    };
+  }
+  return request<DoctorClinicLink>(`/doctor/clinics/${clinicId}/assign`, {
+    method: 'POST',
+    token,
+  });
 }

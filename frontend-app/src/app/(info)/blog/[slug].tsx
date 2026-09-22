@@ -8,7 +8,7 @@ import { Chip } from '@/components/ui/chip';
 import { Screen } from '@/components/ui/screen';
 import { StackHeader } from '@/components/ui/stack-header';
 import { Radius, Spacing, Typography, tint } from '@/constants/theme';
-import { blogPosts, getBlogPostBySlug } from '@/data/catalog';
+import { blogPosts, getBlogPostBySlug } from '@/data/mock/directory';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function BlogPostScreen() {

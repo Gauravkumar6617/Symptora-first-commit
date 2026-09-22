@@ -5,21 +5,14 @@ import {
   fetchCatalogDoctors,
   fetchClinics,
   fetchDoctorAppointments,
-  fetchDoctors,
   fetchNotifications,
-  fetchFamilyMembers,
   fetchPatientAppointments,
-  fetchRiskChecks,
   fetchSpecialties,
 } from '@/lib/api';
 
-export function useFamilyMembers() {
-  return useQuery({ queryKey: ['family-members'], queryFn: fetchFamilyMembers });
-}
-
-export function useDoctors() {
-  return useQuery({ queryKey: ['doctors'], queryFn: fetchDoctors });
-}
+// Family members and Health Check history come from
+// useFamilyStore/useHealthCheckStore, not a query hook here — see the note
+// in src/lib/api.ts.
 
 export function usePatientAppointments() {
   return useQuery({ queryKey: ['appointments', 'patient'], queryFn: fetchPatientAppointments });
@@ -27,10 +20,6 @@ export function usePatientAppointments() {
 
 export function useDoctorAppointments() {
   return useQuery({ queryKey: ['appointments', 'doctor'], queryFn: fetchDoctorAppointments });
-}
-
-export function useRiskChecks() {
-  return useQuery({ queryKey: ['risk-checks'], queryFn: fetchRiskChecks });
 }
 
 export function useSpecialties() {

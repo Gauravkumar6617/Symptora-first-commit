@@ -2,7 +2,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import { mockFamilyMembers } from '@/data/mockData';
 import type { FamilyMember } from '@/types';
 
 interface FamilyState {
@@ -14,7 +13,7 @@ interface FamilyState {
 export const useFamilyStore = create<FamilyState>()(
   persist(
     (set) => ({
-      members: mockFamilyMembers,
+      members: [],
       addMember: (member) =>
         set((state) => ({
           members: [
@@ -25,7 +24,10 @@ export const useFamilyStore = create<FamilyState>()(
       removeMember: (id) => set((state) => ({ members: state.members.filter((m) => m.id !== id) })),
     }),
     {
-      name: 'symptora-family',
+      // Renamed from `symptora-family` so a device that already persisted
+      // the old seeded sample family members starts fresh instead of
+      // reloading them from storage.
+      name: 'symptora-family-v2',
       storage: createJSONStorage(() => AsyncStorage),
     },
   ),

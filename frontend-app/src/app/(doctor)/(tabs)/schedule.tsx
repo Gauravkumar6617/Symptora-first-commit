@@ -9,7 +9,7 @@ import { Screen } from '@/components/ui/screen';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { SkeletonList } from '@/components/ui/skeleton';
 import { Spacing, Typography } from '@/constants/theme';
-import { timeSlots } from '@/data/catalog';
+import { timeSlots } from '@/data/mock/directory';
 import { formatDate } from '@/lib/format';
 import { useDoctorAppointments } from '@/hooks/use-queries';
 import { useTheme } from '@/hooks/use-theme';

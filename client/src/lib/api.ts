@@ -170,6 +170,31 @@ export interface DoctorApplication {
   updated_at: string
 }
 
+// ---------------------------------------------------------------- clinics
+
+/** backend ClinicRead. */
+export interface Clinic {
+  id: string
+  name: string
+  picture: string
+  description: string | null
+  address: string | null
+  phone: string | null
+  medplum_organisation_id: string
+  created_at: string
+  updated_at: string
+}
+
+/** backend DoctorClinicRead — a doctor's link to one clinic. */
+export interface DoctorClinic {
+  id: string
+  doctor_profile_id: string
+  clinic_id: string
+  medplum_practitioner_role_id: string | null
+  created_at: string
+  updated_at: string
+}
+
 // ---------------------------------------------------------------- auth
 
 /**
@@ -240,6 +265,30 @@ export async function getMyDoctorApplication(
   token: string,
 ): Promise<DoctorApplication | null> {
   return request<DoctorApplication | null>('/doctor/me', { token })
+}
+
+/** GET /clinics — every clinic, e.g. for a doctor picking one to join. */
+export async function listClinics(token: string): Promise<Clinic[]> {
+  return request<Clinic[]>('/clinics', { token })
+}
+
+/** GET /doctor/my-clinics — clinics the calling doctor is currently assigned to. */
+export async function getMyClinics(token: string): Promise<DoctorClinic[]> {
+  return request<DoctorClinic[]>('/doctor/my-clinics', { token })
+}
+
+/**
+ * POST /doctor/clinics/{clinic_id}/assign — links the calling (approved)
+ * doctor to a clinic, creating a PractitionerRole in Medplum.
+ */
+export async function assignDoctorToClinic(
+  token: string,
+  clinicId: string,
+): Promise<DoctorClinic> {
+  return request<DoctorClinic>(`/doctor/clinics/${clinicId}/assign`, {
+    method: 'POST',
+    token,
+  })
 }
 
 /** Turns the AvatarUpload data URL into a File for the multipart request. */

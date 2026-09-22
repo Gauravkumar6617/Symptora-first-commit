@@ -10,7 +10,7 @@ import { SkeletonList } from '@/components/ui/skeleton';
 import { StackHeader } from '@/components/ui/stack-header';
 import { TextField } from '@/components/ui/text-field';
 import { Radius, Spacing, Typography, tint } from '@/constants/theme';
-import { clinicCities } from '@/data/catalog';
+import { clinicCities } from '@/data/mock/directory';
 import { useClinics } from '@/hooks/use-queries';
 import { useTheme } from '@/hooks/use-theme';
 

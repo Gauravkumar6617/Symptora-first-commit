@@ -105,6 +105,29 @@ export interface AuthSession {
   refreshToken?: string;
 }
 
+/** backend: ClinicRead — GET /api/v1/clinics. */
+export interface ClinicRecord {
+  id: string;
+  name: string;
+  picture: string;
+  description?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  medplum_organisation_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** backend: DoctorClinicRead — the calling doctor's link to one clinic. */
+export interface DoctorClinicLink {
+  id: string;
+  doctor_profile_id: string;
+  clinic_id: string;
+  medplum_practitioner_role_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Field-level errors keyed by the payload field name. */
 export type FieldErrors<T> = Partial<Record<keyof T, string>>;
 
@@ -130,14 +153,6 @@ export interface Appointment {
   reason?: string;
 }
 
-export interface Doctor {
-  id: string;
-  name: string;
-  specialization: string;
-  clinic: string;
-  rating: number;
-  avatarUrl?: string;
-}
 
 export interface RiskCheck {
   id: string;
