@@ -1,0 +1,25 @@
+name: Keep backend warm
+
+# Render's free tier spins the service down after 15 minutes idle. This pings
+# the health endpoint often enough (10 min) to stop that from happening.
+# It does NOT give you zero-downtime or uptime guarantees — a deploy or a
+# crash still causes a cold start.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /api/v1/health
+        env:
+          HEALTH_URL: ${{ vars.RENDER_HEALTH_URL }}
+        run: |
+          if [ -z "$HEALTH_URL" ]; then
+            echo "::error::RENDER_HEALTH_URL repo variable is not set. Settings > Secrets and variables > Actions > Variables, add RENDER_HEALTH_URL = https://<your-service>.onrender.com/api/v1/health"
+            exit 1
+          fi
+          curl --fail --show-error --max-time 20 "$HEALTH_URL"
