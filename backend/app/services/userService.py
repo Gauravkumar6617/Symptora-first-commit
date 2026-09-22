@@ -3,7 +3,7 @@ import json
 from app.core.config import settings
 from app.core.security import hashed_pasword
 from app.repositories.userRepositories import UserRepository
-from app.schemas.userSchema import UserCreate , UserLogin
+from app.schemas.userSchema import CurrentUserResponse, UserCreate, UserLogin, UserUpdate
 from app.utils.integration.cloudflarR2.index import delete_key, upload_avatar
 from app.utils.integration.medplum.index import MedplumIntegration
 from app.utils.otp.index import discard_otp , generate_store_otp, verify_otp
@@ -219,3 +219,45 @@ class UserService:
         # ``sub`` is the user id because that is what deps/auth.py looks up.
         token = create_access_token({"sub": str(user.id)})
         return {"access_token": token, "token_type": "bearer"}
+
+    @staticmethod
+    def to_current_user(user) -> CurrentUserResponse:
+        """The caller's account plus their doctor application, if any."""
+        response = CurrentUserResponse.model_validate(user)
+        profile = user.doctor_profile
+        if profile is not None:
+            response.doctor_status = profile.status
+            response.specialization = profile.specialization
+        return response
+
+    def update_profile(self, user, updates: UserUpdate, avatar=None):
+        """Apply a self-service profile edit, optionally replacing the avatar."""
+        if updates.number and updates.number != user.number:
+            clash = self.user_repository.find_by_email_or_number(user.email, updates.number)
+            if clash and clash.id != user.id:
+                raise ValueError("This phone number is already in use.")
+
+        old_avatar = user.avatar
+        new_avatar = None
+        if avatar is not None and avatar.filename:
+            new_avatar = upload_avatar(avatar)
+            updates = updates.model_copy(update={"avatar": new_avatar})
+
+        try:
+            updated = self.user_repository.update_user(user.id, updates)
+        except Exception:
+            if new_avatar:
+                try:
+                    delete_key(new_avatar)
+                except Exception:
+                    pass
+            raise
+
+        if new_avatar and old_avatar and not old_avatar.startswith("http"):
+            try:
+                delete_key(old_avatar)
+            except Exception:
+                pass
+
+        self.redis_user.delete(f"user:{updated.id}")
+        return self.to_current_user(updated)

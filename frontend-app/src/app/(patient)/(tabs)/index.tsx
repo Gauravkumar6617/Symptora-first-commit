@@ -50,7 +50,7 @@ export default function PatientHomeScreen() {
           style={[styles.header, { paddingTop: insets.top + Spacing.three }]}>
           <View style={styles.headerRow}>
             <PressScale onPress={() => router.push('/(patient)/(tabs)/profile')}>
-              <Avatar uri={user?.avatar} name={user ? `${user.first_name} ${user.last_name}` : undefined} size={44} />
+              <Avatar uri={user?.avatar_url} name={user ? `${user.first_name} ${user.last_name}` : undefined} size={44} />
             </PressScale>
             <View style={{ flex: 1 }}>
               <Text style={styles.welcome}>Welcome back</Text>

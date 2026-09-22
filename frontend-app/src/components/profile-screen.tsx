@@ -52,7 +52,7 @@ export function ProfileScreen() {
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[styles.header, { paddingTop: insets.top + Spacing.four }]}>
-          <Avatar uri={user?.avatar} name={fullName(user)} size={78} />
+          <Avatar uri={user?.avatar_url} name={fullName(user)} size={78} />
           <Text style={styles.name}>{fullName(user) || 'Your profile'}</Text>
           <Text style={styles.email}>{user?.email}</Text>
           <View style={styles.badgeRow}>

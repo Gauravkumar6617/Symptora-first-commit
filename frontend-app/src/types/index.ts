@@ -88,15 +88,28 @@ export interface UserResponse extends UserBase {
   updated_at: string;
   is_active: boolean;
   id_doctor: boolean;
+  is_admin?: boolean;
+  /** Presigned, short-lived url for `avatar` (which is only a storage key). */
+  avatar_url?: string | null;
+}
+
+/** backend: enumModel.Status — a doctor application's review state. */
+export type DoctorApplicationStatus = 'pending' | 'approved' | 'rejected';
+
+/** backend: CurrentUserResponse — GET/PATCH /api/v1/users/me. */
+export interface CurrentUserResponse extends UserResponse {
+  doctor_status?: DoctorApplicationStatus | null;
+  specialization?: string | null;
 }
 
 /**
- * The signed-in user as the app holds it: the API shape plus the UI-only
- * bits (role derived from `id_doctor`, doctor specialization).
+ * The signed-in user as the app holds it: the /users/me shape plus the
+ * UI-only role, derived from `id_doctor` exactly as the website does.
  */
 export interface AuthUser extends UserResponse {
   role: UserRole;
   specialization?: string;
+  doctor_status?: DoctorApplicationStatus | null;
 }
 
 export interface AuthSession {
