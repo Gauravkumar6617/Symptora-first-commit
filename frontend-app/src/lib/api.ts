@@ -2,14 +2,16 @@
  * API layer.
  *
  * Auth calls hit the real FastAPI backend when EXPO_PUBLIC_API_URL is set
- * (see backend/app/routers/userRouter.py). Catalog/appointment data is still
+ * (see backend/app/routers/userRouter.py). The signed-in user always comes
+ * from GET /users/me — the same source the website uses. Catalog/appointment data is still
  * served from src/data/mock/* — each fetch* below is a one-line swap to a
  * request once those routes exist. `src/data/specialties.ts` is NOT mock;
  * it's real static content this app ships with.
  */
 
 import { blogPosts, catalogDoctors, partnerClinics } from '@/data/mock/directory';
-import { mockDoctor, mockNotifications, mockPatient } from '@/data/mock/people';
+import { mockNotifications, mockPatient } from '@/data/mock/people';
+import { useAuthStore } from '@/store/authStore';
 import { specialties } from '@/data/specialties';
 import type {
   Appointment,
@@ -17,6 +19,7 @@ import type {
   AuthSession,
   AuthUser,
   ClinicRecord,
+  CurrentUserResponse,
   DoctorClinicLink,
   UserCreatePayload,
   UserResponse,
@@ -40,6 +43,11 @@ export class ApiError extends Error {
     this.status = status;
     this.fieldErrors = fieldErrors;
   }
+}
+
+/** Demo mode only: the signed-in user, to merge a local-only edit into. */
+function currentUserSnapshot(): AuthUser {
+  return useAuthStore.getState().user ?? mockPatient;
 }
 
 const delay = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -131,12 +139,17 @@ function toApiError(data: unknown, status: number, fallback: string): ApiError {
   return new ApiError(status ? `Request failed (${status}).` : fallback || 'Request failed.', status);
 }
 
-/** UserResponse → AuthUser (adds the UI-only role field). */
-export function toAuthUser(user: UserResponse, specialization?: string): AuthUser {
+/**
+ * /users/me → AuthUser. Role comes from the server's `id_doctor` flag only —
+ * the same rule the website uses — so both clients always agree.
+ */
+export function toAuthUser(user: UserResponse | CurrentUserResponse): AuthUser {
+  const me = user as CurrentUserResponse;
   return {
     ...user,
     role: user.id_doctor ? 'doctor' : 'patient',
-    specialization,
+    specialization: me.specialization ?? undefined,
+    doctor_status: me.doctor_status ?? null,
   };
 }
 
@@ -207,60 +220,58 @@ export async function verifyRegistrationOtp(email: string, otp: string): Promise
   return toAuthUser(user);
 }
 
+/** GET /api/v1/users/me — the account the bearer token belongs to. */
+export async function fetchCurrentUser(token: string): Promise<AuthUser> {
+  const user = await request<CurrentUserResponse>('/users/me', { token });
+  return toAuthUser(user);
+}
+
 /**
- * POST /api/v1/users/login — see backend/app/routers/userRouter.py. Returns a
- * bearer token; there is no /users/me yet, so the session user is built from
- * what was typed until that route lands.
+ * POST /api/v1/users/login, then GET /users/me. The role is whatever the
+ * server says the account is — never picked on the login screen.
  */
-export async function loginUser(email: string, password: string, asDoctor = false): Promise<AuthSession> {
+export async function loginUser(email: string, password: string): Promise<AuthSession> {
   if (isDemoMode) {
     await delay(450);
     if (password.length < 8) {
       throw new ApiError('Incorrect email or password.', 401);
     }
-    const base = asDoctor ? mockDoctor : mockPatient;
-    return { user: { ...base, email } };
+    return { user: { ...mockPatient, email } };
   }
 
   const tokens = await request<{ access_token: string; token_type: string }>('/users/login', {
     method: 'POST',
     body: { email, password },
   });
-
-  const now = new Date().toISOString();
-  const user = toAuthUser({
-    id: email,
-    created_at: now,
-    updated_at: now,
-    is_active: true,
-    id_doctor: asDoctor,
-    first_name: email.split('@')[0],
-    last_name: '',
-    email,
-    number: '',
-    address: null,
-    avatar: null,
-    date_of_birth: now,
-    gender: null,
-  });
-
+  const user = await fetchCurrentUser(tokens.access_token);
   return { user, accessToken: tokens.access_token };
 }
 
-/** PATCH /api/v1/users/{id} — backend UserUpdate. */
-export async function updateUser(
-  userId: string,
-  payload: UserUpdatePayload,
-  token?: string,
-): Promise<Partial<AuthUser>> {
-  if (isDemoMode) {
+/**
+ * PATCH /api/v1/users/me — multipart, like registration, so a newly picked
+ * avatar (a local file URI) is uploaded as a file part. An avatar that is
+ * already a remote url is the unchanged current one and is not re-sent.
+ */
+export async function updateMyProfile(payload: UserUpdatePayload, token?: string | null): Promise<AuthUser> {
+  if (isDemoMode || !token) {
     await delay(400);
-    return payload as Partial<AuthUser>;
+    const current = currentUserSnapshot();
+    return { ...current, ...payload, avatar_url: payload.avatar ?? null } as AuthUser;
   }
 
-  const user = await request<UserResponse>(`/users/${userId}`, {
+  const formData = new FormData();
+  if (payload.first_name !== undefined) formData.append('first_name', payload.first_name);
+  if (payload.last_name !== undefined) formData.append('last_name', payload.last_name);
+  if (payload.number !== undefined) formData.append('number', payload.number);
+  if (payload.address !== undefined) formData.append('address', payload.address ?? '');
+  if (payload.gender !== undefined) formData.append('gender', payload.gender ?? '');
+  if (payload.avatar && !/^https?:\/\//.test(payload.avatar)) {
+    formData.append('avatar', uriToFilePart(payload.avatar));
+  }
+
+  const user = await request<CurrentUserResponse>('/users/me', {
     method: 'PATCH',
-    body: payload,
+    formData,
     token,
   });
   return toAuthUser(user);
@@ -335,21 +346,22 @@ export async function sendContactMessage(payload: {
   await request('/support/contact', { method: 'POST', body: payload });
 }
 
-export async function submitDoctorApplication(payload: {
-  first_name: string;
-  last_name: string;
-  email: string;
-  number: string;
-  specialization: string;
-  license_number: string;
-  experience_years: string;
-  about: string;
-}): Promise<void> {
+/**
+ * POST /api/v1/doctor/promote — the same endpoint the website uses. The
+ * account stays a patient until an admin approves it.
+ */
+export async function submitDoctorApplication(
+  token: string | null | undefined,
+  payload: { specialization: string; license_number: string },
+): Promise<void> {
   if (isDemoMode) {
     await delay(700);
     return;
   }
-  await request('/doctors/applications', { method: 'POST', body: payload });
+  if (!token) {
+    throw new ApiError('Your session has expired. Please log in again.', 401);
+  }
+  await request('/doctor/promote', { method: 'POST', body: payload, token });
 }
 
 // ---------------------------------------------------------- doctor clinics

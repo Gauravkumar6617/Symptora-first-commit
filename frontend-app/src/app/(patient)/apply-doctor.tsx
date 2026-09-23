@@ -36,6 +36,7 @@ export default function ApplyDoctorScreen() {
   const theme = useTheme();
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const accessToken = useAuthStore((state) => state.accessToken);
 
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
   const [lastName, setLastName] = useState(user?.last_name ?? '');
@@ -60,6 +61,7 @@ export default function ApplyDoctorScreen() {
     if (numberError) nextErrors.number = numberError;
     if (!specialization) nextErrors.specialization = 'Pick your specialty.';
     if (license.trim().length < 4) nextErrors.license_number = 'Enter your medical licence number.';
+    else if (license.trim().length > 25) nextErrors.license_number = 'Licence number is at most 25 characters.';
     const years = Number(experience);
     if (!experience || Number.isNaN(years) || years < 0 || years > 70) {
       nextErrors.experience_years = 'Enter years of experience (0–70).';
@@ -71,15 +73,11 @@ export default function ApplyDoctorScreen() {
 
     setLoading(true);
     try {
-      await submitDoctorApplication({
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-        email: email.trim().toLowerCase(),
-        number: number.trim(),
+      // POST /doctor/promote only takes these two; name/email/number come
+      // from the signed-in account on the server.
+      await submitDoctorApplication(accessToken, {
         specialization: specialization as string,
         license_number: license.trim(),
-        experience_years: experience,
-        about: about.trim(),
       });
       successFeedback();
       setSubmitted(true);

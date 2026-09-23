@@ -10,12 +10,14 @@ from app.deps.auth import get_current_user
 from app.models.userModel import UserModel
 from app.repositories.userRepositories import UserRepository
 from app.schemas.userSchema import (
+    CurrentUserResponse,
     OTPRequestResponse,
     RegistrationOTPVerify,
     TokenResponse,
     UserCreate,
     UserResponse,
-    UserLogin
+    UserLogin,
+    UserUpdate,
 )
 from app.services.userService import UserService
 from app.utils.integration.medplum.index import MedplumIntegration
@@ -74,10 +76,25 @@ def verify_registration_otp(
     return UserController.verify_registration_otp(verification=verification, service=service)
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me", response_model=CurrentUserResponse)
 def get_current_user_profile(current_user: UserModel = Depends(get_current_user)):
-    """The caller's own account, identified by their bearer token."""
-    return current_user
+    """The caller's own account, identified by their bearer token.
+
+    This is the source of truth for role: web and app both re-read it on
+    launch, so an admin approving a doctor shows up everywhere.
+    """
+    return UserService.to_current_user(current_user)
+
+
+@router.patch("/me", response_model=CurrentUserResponse)
+def update_current_user_profile(
+    updates: UserUpdate = Depends(UserUpdate.as_form),
+    avatar: UploadFile = File(None),
+    current_user: UserModel = Depends(get_current_user),
+    service: UserService = Depends(get_user_service),
+):
+    """Edit your own profile. Send as multipart/form-data with an optional avatar file."""
+    return UserController.update_profile(current_user, updates, service, avatar=avatar)
 
 
 @router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)

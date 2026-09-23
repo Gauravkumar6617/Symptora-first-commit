@@ -51,7 +51,7 @@ export default function DoctorHomeScreen() {
           end={{ x: 1, y: 1 }}
           style={[styles.header, { paddingTop: insets.top + Spacing.three }]}>
           <View style={styles.headerRow}>
-            <Avatar uri={user?.avatar} name={fullName(user)} size={44} />
+            <Avatar uri={user?.avatar_url} name={fullName(user)} size={44} />
             <View style={{ flex: 1 }}>
               <Text style={styles.welcome}>Good to see you</Text>
               <Text style={styles.greeting}>Dr. {user?.last_name ?? ''}</Text>

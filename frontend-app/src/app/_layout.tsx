@@ -8,6 +8,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AnimatedSplashOverlay } from '@/components/animated-splash';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useSessionSync } from '@/hooks/use-session-sync';
 import { queryClient } from '@/lib/queryClient';
 import { useAuthStore } from '@/store/authStore';
 import { useOnboardingStore } from '@/store/onboardingStore';
@@ -24,6 +25,7 @@ export default function RootLayout() {
   const authHydrated = useAuthStore((state) => state.hasHydrated);
   const onboardingHydrated = useOnboardingStore((state) => state.hasHydrated);
   const hasHydrated = authHydrated && onboardingHydrated;
+  useSessionSync(authHydrated);
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.background }}>

@@ -1,5 +1,5 @@
 from fastapi import HTTPException, status
-from app.schemas.userSchema import RegistrationOTPVerify, UserCreate ,UserLogin
+from app.schemas.userSchema import RegistrationOTPVerify, UserCreate, UserLogin, UserUpdate
 from app.services.userService import (
     InactiveUserError,
     InvalidCredentialsError,
@@ -71,4 +71,20 @@ class UserController:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
                 detail=str(e)
+            )
+
+
+    @staticmethod
+    def update_profile(user, updates: UserUpdate, service: UserService, avatar=None):
+        try:
+            return service.update_profile(user, updates, avatar=avatar)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        except HTTPException:
+            # Upload errors (size, type, bad image, storage) keep their status.
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Could not update profile: {e}",
             )

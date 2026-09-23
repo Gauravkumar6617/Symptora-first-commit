@@ -53,6 +53,10 @@ class Settting(BaseSettings):
     GOOGLE_CLIENT_SECRET: str
     GOOGLE_REFRESH_TOKEN: str
 
+    # keep-alive scheduler (Render sets RENDER_EXTERNAL_URL automatically; empty = disabled)
+    RENDER_EXTERNAL_URL: str = ""
+    KEEP_ALIVE_INTERVAL_SECONDS: int = 600  # must stay under Render's 15 min idle timeout
+
 @lru_cache      # to add cache for env as after reloading it shoudl load from env 
 def get_Setting() -> Settting:
     return Settting()
