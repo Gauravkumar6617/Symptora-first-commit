@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { type DoctorApplication, getMyDoctorApplication } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
-import { useFamilyStore } from '@/store/familyStore'
+import { relationLabel, useFamilyStore } from '@/store/familyStore'
 import { MyClinicsCard } from './MyClinicsCard'
 
 const quickLinks = [
@@ -17,7 +17,13 @@ export function DashboardPage() {
   const user = useAuthStore((state) => state.user)
   const token = useAuthStore((state) => state.token)
   const members = useFamilyStore((state) => state.members)
+  const loadMembers = useFamilyStore((state) => state.loadMembers)
   const [application, setApplication] = useState<DoctorApplication | null | undefined>(undefined)
+
+  useEffect(() => {
+    // Offline: the persisted list stays on screen.
+    loadMembers().catch(() => {})
+  }, [loadMembers])
 
   // Drives the "apply as a doctor" card below: undefined = still loading,
   // null = never applied, otherwise their pending/approved/rejected status.
@@ -75,7 +81,7 @@ export function DashboardPage() {
             <div key={member.id} className="card-raised p-4">
               <p className="text-sm font-semibold text-ink">{member.name}</p>
               <p className="text-xs text-ink/50">
-                {member.relation} · {member.age} yrs
+                {relationLabel(member.relation)} · {member.age} yrs
               </p>
               <p className="mt-2 text-xs text-ink/60">{member.lastCheck}</p>
             </div>

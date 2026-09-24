@@ -22,8 +22,10 @@ class FamilyMemberCreate(FamilyMemberBase):
 
 class FamilyMemberUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, max_length=50)
+    email: Optional[EmailStr] = None
     profile: Optional[str] = None
     relationship_to_owner: Optional[FamilyRelationship] = None
+    date_of_birth: Optional[datetime] = None
     gender: Optional[str] = None
 
 

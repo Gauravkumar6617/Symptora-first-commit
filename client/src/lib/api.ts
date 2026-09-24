@@ -410,6 +410,78 @@ export async function createClinic(
   })
 }
 
+// ---------------------------------------------------------- family members
+
+/** backend enumModel.FamilyRelationship */
+export const FAMILY_RELATIONSHIPS = [
+  'mother',
+  'father',
+  'son',
+  'daughter',
+  'brother',
+  'sister',
+  'husband',
+  'wife',
+  'grandmother',
+  'grandfather',
+  'grandson',
+  'granddaughter',
+  'uncle',
+  'aunt',
+  'nephew',
+  'niece',
+  'cousin',
+  'other',
+] as const
+export type FamilyRelationship = (typeof FAMILY_RELATIONSHIPS)[number]
+
+/** backend FamilyMemberRead. */
+export interface FamilyMemberRecord {
+  id: string
+  account_owner_id: string
+  full_name: string
+  email: string | null
+  /** Photo as a data URL. */
+  profile: string | null
+  relationship_to_owner: FamilyRelationship | null
+  date_of_birth: string
+  gender: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** backend FamilyMemberCreate. */
+export interface FamilyMemberCreatePayload {
+  full_name: string
+  relationship_to_owner: FamilyRelationship
+  /** YYYY-MM-DD */
+  date_of_birth: string
+  gender?: string | null
+  profile?: string | null
+}
+
+/** GET /family-members — the caller's family profiles. */
+export async function listFamilyMembers(token: string): Promise<FamilyMemberRecord[]> {
+  return request<FamilyMemberRecord[]>('/family-members', { token })
+}
+
+/** POST /family-members */
+export async function createFamilyMember(
+  token: string,
+  payload: FamilyMemberCreatePayload,
+): Promise<FamilyMemberRecord> {
+  return request<FamilyMemberRecord>('/family-members', {
+    method: 'POST',
+    body: payload,
+    token,
+  })
+}
+
+/** DELETE /family-members/{member_id} */
+export async function deleteFamilyMember(token: string, memberId: string): Promise<void> {
+  await request(`/family-members/${memberId}`, { method: 'DELETE', token })
+}
+
 /** Turns the AvatarUpload data URL into a File for the multipart request. */
 export async function dataUrlToFile(
   dataUrl: string,

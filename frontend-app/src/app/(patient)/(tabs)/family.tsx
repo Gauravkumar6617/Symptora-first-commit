@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 
 import { Avatar } from '@/components/ui/avatar';
@@ -10,6 +11,7 @@ import { IconButton } from '@/components/ui/icon-button';
 import { Screen } from '@/components/ui/screen';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Spacing, Typography } from '@/constants/theme';
+import { ApiError } from '@/lib/api';
 import { relationshipLabel } from '@/lib/format';
 import { useTheme } from '@/hooks/use-theme';
 import { useFamilyStore } from '@/store/familyStore';
@@ -17,12 +19,32 @@ import { useFamilyStore } from '@/store/familyStore';
 export default function FamilyScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { members, removeMember } = useFamilyStore();
+  const { members, loadMembers, removeMember } = useFamilyStore();
+
+  // Refresh on focus so members added on the website show up here too.
+  useFocusEffect(
+    useCallback(() => {
+      loadMembers().catch(() => {
+        // Keep showing the last-known list; the next focus retries.
+      });
+    }, [loadMembers]),
+  );
+
+  async function remove(id: string) {
+    try {
+      await removeMember(id);
+    } catch (error) {
+      Alert.alert(
+        'Could not remove profile',
+        error instanceof ApiError ? error.message : 'Please try again.',
+      );
+    }
+  }
 
   function confirmRemove(id: string, name: string) {
     Alert.alert('Remove profile?', `${name} will be removed from your family profiles.`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => removeMember(id) },
+      { text: 'Remove', style: 'destructive', onPress: () => remove(id) },
     ]);
   }
 

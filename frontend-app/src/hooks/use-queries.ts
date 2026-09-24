@@ -11,8 +11,7 @@ import {
 } from '@/lib/api';
 
 // Family members and Health Check history come from
-// useFamilyStore/useHealthCheckStore, not a query hook here — see the note
-// in src/lib/api.ts.
+// useFamilyStore/useHealthCheckStore, not a query hook here.
 
 export function usePatientAppointments() {
   return useQuery({ queryKey: ['appointments', 'patient'], queryFn: fetchPatientAppointments });

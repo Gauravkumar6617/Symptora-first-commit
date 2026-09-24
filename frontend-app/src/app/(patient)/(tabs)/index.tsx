@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,7 +17,7 @@ import { SectionHeaderRow } from '@/components/ui/section-link';
 import { SkeletonList } from '@/components/ui/skeleton';
 import { SpecialtyChip } from '@/components/ui/specialty-chip';
 import { Gradient, Radius, RiskTone, Spacing, Typography, tint } from '@/constants/theme';
-import { formatDate, firstName, relativeTime } from '@/lib/format';
+import { formatDate, firstName, relationshipLabel, relativeTime } from '@/lib/format';
 import { useBlogPosts, useCatalogDoctors, usePatientAppointments, useSpecialties } from '@/hooks/use-queries';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuthStore } from '@/store/authStore';
@@ -29,11 +30,18 @@ export default function PatientHomeScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const members = useFamilyStore((state) => state.members);
+  const loadMembers = useFamilyStore((state) => state.loadMembers);
   const checks = useHealthCheckStore((state) => state.checks);
   const { data: specialties } = useSpecialties();
   const { data: doctors, isLoading: doctorsLoading } = useCatalogDoctors();
   const { data: posts } = useBlogPosts();
   const { data: appointments } = usePatientAppointments();
+
+  useEffect(() => {
+    loadMembers().catch(() => {
+      // Offline: the persisted list stays on screen.
+    });
+  }, [loadMembers]);
 
   const latestCheck = checks[0];
   const nextAppointment = appointments?.find((item) => item.status === 'scheduled');
@@ -250,7 +258,7 @@ export default function PatientHomeScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.doctorName, { color: theme.text }]}>{member.name}</Text>
                 <Text style={[styles.doctorMeta, { color: theme.textSecondary }]}>
-                  {member.relation} · {member.age} yrs
+                  {relationshipLabel(member.relation)} · {member.age} yrs
                 </Text>
               </View>
               <Text style={[styles.doctorMeta, { color: theme.textMuted }]}>{member.lastCheck}</Text>

@@ -153,6 +153,30 @@ export interface FamilyMember {
   lastCheck: string;
 }
 
+/** backend: schemas/family_member.FamilyMemberRead */
+export interface FamilyMemberRecord {
+  id: string;
+  account_owner_id: string;
+  full_name: string;
+  email: string | null;
+  profile: string | null;
+  relationship_to_owner: FamilyRelationship | null;
+  date_of_birth: string;
+  gender: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** backend: schemas/family_member.FamilyMemberCreate */
+export interface FamilyMemberCreatePayload {
+  full_name: string;
+  relationship_to_owner: FamilyRelationship;
+  /** YYYY-MM-DD */
+  date_of_birth: string;
+  gender?: Gender | null;
+  email?: string | null;
+}
+
 export interface Appointment {
   id: string;
   patientName: string;

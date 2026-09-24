@@ -21,6 +21,10 @@ import type {
   ClinicRecord,
   CurrentUserResponse,
   DoctorClinicLink,
+  FamilyMember,
+  FamilyMemberCreatePayload,
+  FamilyMemberRecord,
+  Gender,
   UserCreatePayload,
   UserResponse,
   UserUpdatePayload,
@@ -285,12 +289,66 @@ export async function requestPasswordReset(email: string): Promise<void> {
   await request('/auth/forgot-password', { method: 'POST', body: { email } });
 }
 
+// ---------------------------------------------------------- family members
+//
+// Screens read family members from useFamilyStore, which calls these and
+// falls back to on-device storage in demo mode (no EXPO_PUBLIC_API_URL).
+
+/** The backend stores a date of birth; the app only asks for an age. */
+export function ageToDateOfBirth(age: number): string {
+  const today = new Date();
+  const year = today.getUTCFullYear() - age;
+  const month = String(today.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(today.getUTCDate()).padStart(2, '0');
+  // 29 Feb in a non-leap year rolls to 1 Mar, which is still the right age.
+  return new Date(`${year}-${month}-${day}T00:00:00Z`).toISOString().slice(0, 10);
+}
+
+function ageFromDateOfBirth(dateOfBirth: string): number {
+  const dob = new Date(`${dateOfBirth.slice(0, 10)}T00:00:00Z`);
+  const now = new Date();
+  let age = now.getUTCFullYear() - dob.getUTCFullYear();
+  const beforeBirthday =
+    now.getUTCMonth() < dob.getUTCMonth() ||
+    (now.getUTCMonth() === dob.getUTCMonth() && now.getUTCDate() < dob.getUTCDate());
+  if (beforeBirthday) age -= 1;
+  return Math.max(age, 0);
+}
+
+export function toFamilyMember(record: FamilyMemberRecord): Omit<FamilyMember, 'lastCheck'> {
+  return {
+    id: record.id,
+    name: record.full_name,
+    relation: record.relationship_to_owner ?? 'other',
+    age: ageFromDateOfBirth(record.date_of_birth),
+    gender: (record.gender as Gender | null) ?? undefined,
+  };
+}
+
+/** GET /api/v1/family-members — the caller's family profiles. */
+export async function fetchFamilyMembers(token: string): Promise<FamilyMemberRecord[]> {
+  return request<FamilyMemberRecord[]>('/family-members', { token });
+}
+
+/** POST /api/v1/family-members */
+export async function createFamilyMember(
+  token: string,
+  payload: FamilyMemberCreatePayload,
+): Promise<FamilyMemberRecord> {
+  return request<FamilyMemberRecord>('/family-members', { method: 'POST', body: payload, token });
+}
+
+/** DELETE /api/v1/family-members/{member_id} */
+export async function deleteFamilyMember(token: string, memberId: string): Promise<void> {
+  await request(`/family-members/${memberId}`, { method: 'DELETE', token });
+}
+
 // ------------------------------------------------------- mocked resources
 //
-// Family members and Health Check history are NOT fetched from here — the
-// app reads/writes those from useFamilyStore/useHealthCheckStore (backed by
-// on-device AsyncStorage), which start empty for a new user. There is no
-// fetchFamilyMembers/fetchRiskChecks; don't add screens that call one.
+// Health Check history is NOT fetched from here — the app reads/writes it
+// from useHealthCheckStore (backed by on-device AsyncStorage), which starts
+// empty for a new user. There is no fetchRiskChecks; don't add screens that
+// call one.
 //
 // Appointments start empty too — there is no booking flow or backend route
 // yet, so there is nothing real to seed a new user with. `mockAppointments`/

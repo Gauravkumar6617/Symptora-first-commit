@@ -94,3 +94,4 @@ class DoctorService:
         self.db.commit()
         self.db.refresh(doctor_profile)
         return doctor_profile
+

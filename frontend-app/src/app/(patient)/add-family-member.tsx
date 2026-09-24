@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { AlertBanner } from '@/components/ui/alert-banner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Screen } from '@/components/ui/screen';
@@ -9,7 +10,8 @@ import { SelectField } from '@/components/ui/select-field';
 import { StackHeader } from '@/components/ui/stack-header';
 import { TextField } from '@/components/ui/text-field';
 import { MaxFormWidth, Spacing, Typography } from '@/constants/theme';
-import { successFeedback } from '@/lib/haptics';
+import { ApiError } from '@/lib/api';
+import { errorFeedback, successFeedback } from '@/lib/haptics';
 import { titleCase } from '@/lib/format';
 import { useTheme } from '@/hooks/use-theme';
 import { useFamilyStore } from '@/store/familyStore';
@@ -44,8 +46,10 @@ export default function AddFamilyMemberScreen() {
   const [gender, setGender] = useState<Gender | null>(null);
   const [age, setAge] = useState('');
   const [errors, setErrors] = useState<Errors>({});
+  const [formError, setFormError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  function handleSubmit() {
+  async function handleSubmit() {
     const nextErrors: Errors = {};
     if (!name.trim()) nextErrors.name = 'Enter their name.';
     if (!relation) nextErrors.relation = 'Pick a relationship.';
@@ -55,16 +59,28 @@ export default function AddFamilyMemberScreen() {
     }
 
     setErrors(nextErrors);
+    setFormError('');
     if (Object.keys(nextErrors).length > 0) return;
 
-    addMember({
-      name: name.trim(),
-      relation: relation as FamilyRelationship,
-      age: parsedAge,
-      gender: gender ?? undefined,
-    });
-    successFeedback();
-    router.back();
+    setLoading(true);
+    try {
+      // POST /api/v1/family-members — the same endpoint the website saves to.
+      await addMember({
+        name: name.trim(),
+        relation: relation as FamilyRelationship,
+        age: parsedAge,
+        gender: gender ?? undefined,
+      });
+      successFeedback();
+      router.back();
+    } catch (error) {
+      errorFeedback();
+      setFormError(
+        error instanceof ApiError ? error.message : 'Could not add this family member. Please try again.',
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -123,7 +139,9 @@ export default function AddFamilyMemberScreen() {
           </View>
         </View>
 
-        <Button label="Add member" icon="person-add-outline" onPress={handleSubmit} />
+        {formError ? <AlertBanner tone="error" message={formError} /> : null}
+
+        <Button label="Add member" icon="person-add-outline" onPress={handleSubmit} loading={loading} />
       </Card>
     </Screen>
   );
