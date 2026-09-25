@@ -6,7 +6,7 @@
  * Leaving it unset keeps requests same-origin (useful behind a proxy).
  */
 
-import type { AuthUser } from '@/store/authStore'
+import { type AuthUser, useAuthStore } from '@/store/authStore'
 
 /** Base URL of the API server, without a trailing slash. */
 export const API_BASE_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, '') ?? ''
@@ -67,6 +67,12 @@ async function request<T>(
   const data = text ? safeJsonParse(text) : null
 
   if (!response.ok) {
+    // Access tokens expire after 30 minutes and there's no refresh endpoint,
+    // so a rejected token ends the session; ProtectedRoute then sends to /login.
+    if (response.status === 401 && token) {
+      useAuthStore.getState().logout()
+      throw new ApiError('Your session has expired. Please log in again.', 401)
+    }
     throw toApiError(data, response.status, text)
   }
 
@@ -298,6 +304,8 @@ export function toAuthUser(user: UserResponse): AuthUser {
     phone: user.number,
     address: user.address ?? undefined,
     avatarUrl: user.avatar_url ?? undefined,
+    dateOfBirth: user.date_of_birth,
+    gender: user.gender ?? undefined,
     isDoctor: user.id_doctor,
     isAdmin: user.is_admin,
   }
@@ -480,6 +488,105 @@ export async function createFamilyMember(
 /** DELETE /family-members/{member_id} */
 export async function deleteFamilyMember(token: string, memberId: string): Promise<void> {
   await request(`/family-members/${memberId}`, { method: 'DELETE', token })
+}
+
+// ---------------------------------------------------------- symptom checker
+
+/** backend schemas/prediction.SymptomRead */
+export interface Symptom {
+  /** Send this back in predictDisease(), e.g. "high_fever". */
+  id: string
+  /** Human-readable, e.g. "High fever". */
+  label: string
+  /** Severity 1 (mild) .. 7 (serious). */
+  weight: number
+}
+
+/** backend schemas/prediction.DiseasePrediction */
+export interface DiseasePrediction {
+  disease: string
+  label: string
+  /** 0..1 — relative likelihood among the 41 known conditions. */
+  probability: number
+  description: string
+  precautions: string[]
+}
+
+/** backend schemas/prediction.Gender */
+export const GENDERS = [
+  { value: 'male', label: 'Male' },
+  { value: 'female', label: 'Female' },
+  { value: 'other', label: 'Other' },
+  { value: 'prefer_not_to_say', label: 'Prefer not to say' },
+] as const
+export type Gender = (typeof GENDERS)[number]['value']
+
+/** backend schemas/prediction.Duration — how long the symptoms have lasted. */
+export const SYMPTOM_DURATIONS = [
+  { value: 'today', label: 'Today' },
+  { value: 'few_days', label: '1–6 days' },
+  { value: 'week', label: '1–4 weeks' },
+  { value: 'longer', label: 'Over a month' },
+] as const
+export type SymptomDuration = (typeof SYMPTOM_DURATIONS)[number]['value']
+
+/** Who the check is for. Feeds the urgency safety rules, not the model. */
+export interface PatientDetails {
+  age: number
+  gender: Gender
+  duration: SymptomDuration
+  /** Free text the symptoms were parsed from; red flags in it raise urgency. */
+  description?: string
+}
+
+/** backend schemas/prediction.ParseResponse */
+export interface ParsedSymptoms {
+  /** Confidently matched; pre-select these. */
+  symptoms: Symptom[]
+  /** Vague words (e.g. "blood") with the symptoms they could mean. */
+  suggestions: { phrase: string; options: Symptom[] }[]
+  duration: SymptomDuration | null
+  /** Urgent-care warnings to show straight away. */
+  red_flags: string[]
+}
+
+/** POST /symptoms/parse — "vomiting for two days and there's blood" → symptoms to confirm. */
+export async function parseSymptoms(token: string, text: string): Promise<ParsedSymptoms> {
+  return request<ParsedSymptoms>('/symptoms/parse', { method: 'POST', body: { text }, token })
+}
+
+/** backend schemas/prediction.PredictResponse */
+export interface PredictionResult {
+  /** The normalised symptom ids that were used. */
+  symptoms: string[]
+  /** Most likely first (top 3). */
+  predictions: DiseasePrediction[]
+  urgency: 'low' | 'medium' | 'high'
+  /** Why the urgency is what it is, e.g. "Adults 65 and over are at higher risk." */
+  urgency_reasons: string[]
+  disclaimer: string
+}
+
+/** GET /symptoms — every symptom the model knows, for the picker. */
+export async function listSymptoms(token: string): Promise<Symptom[]> {
+  return request<Symptom[]>('/symptoms', { token })
+}
+
+/**
+ * POST /predict — top 3 likely conditions for the given symptom ids
+ * (from listSymptoms). Patient details only adjust the urgency flag.
+ * Not a diagnosis; show the disclaimer with the result.
+ */
+export async function predictDisease(
+  token: string,
+  symptoms: string[],
+  patient?: PatientDetails,
+): Promise<PredictionResult> {
+  return request<PredictionResult>('/predict', {
+    method: 'POST',
+    body: { symptoms, ...patient },
+    token,
+  })
 }
 
 /** Turns the AvatarUpload data URL into a File for the multipart request. */

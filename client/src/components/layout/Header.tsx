@@ -12,13 +12,16 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 const navItems = [
   { to: '/', label: 'Home', end: true },
+  { to: '/symptom-checker', label: 'Symptom checker' },
   { to: '/telemedicine', label: 'Telemedicine' },
   { to: '/appointments', label: 'Appointments' },
   { to: '/family', label: 'Family' },
   { to: '/clinics', label: 'Clinics' },
-  { to: '/blog', label: 'Blog' },
-  { to: '/about', label: 'About' },
-  { to: '/contact', label: 'Contact' },
+  // Secondary links: mobile menu only; on desktop they live in the footer
+  // (the header row is capped at max-w-7xl, so they never fit next to the account links).
+  { to: '/blog', label: 'Blog', secondary: true },
+  { to: '/about', label: 'About', secondary: true },
+  { to: '/contact', label: 'Contact', secondary: true },
 ]
 
 export function Header() {
@@ -33,7 +36,7 @@ export function Header() {
         </Link>
 
         <nav className="hidden min-w-0 flex-1 items-center justify-center gap-5 xl:flex 2xl:gap-7">
-          {navItems.map((item) => (
+          {navItems.filter((item) => !('secondary' in item)).map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

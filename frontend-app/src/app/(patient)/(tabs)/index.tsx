@@ -173,6 +173,13 @@ export default function PatientHomeScreen() {
             onPress={() => router.push('/(patient)/health-check')}
           />
           <QuickLinkCard
+            icon="medkit"
+            title="Symptom checker"
+            description="See what your symptoms may mean"
+            tone="danger"
+            onPress={() => router.push('/(patient)/symptom-checker')}
+          />
+          <QuickLinkCard
             icon="videocam"
             title="Video consult"
             description="Talk to a doctor now"

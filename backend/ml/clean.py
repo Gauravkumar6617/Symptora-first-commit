@@ -49,9 +49,13 @@ severity = severity.groupby("symptom", as_index=False)["weight"].max()
 # ---------- Clean description and precaution tables ----------
 description.columns = ["disease", "description"]
 description["disease"] = description["disease"].map(clean_disease)
+description["description"] = description["description"].str.strip()
 
 precaution.columns = ["disease", "precaution_1", "precaution_2", "precaution_3", "precaution_4"]
 precaution["disease"] = precaution["disease"].map(clean_disease)
+precaution_cols = precaution.columns[1:]
+precaution[precaution_cols] = precaution[precaution_cols].apply(lambda c: c.str.strip())
+# some diseases have fewer than 4 precautions; those cells stay blank
 
 # ---------- Verify: do the files agree now? ----------
 dataset_symptoms = {s for s in pd.unique(dataset[symptom_cols].values.ravel()) if pd.notna(s)}

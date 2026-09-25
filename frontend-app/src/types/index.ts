@@ -210,3 +210,68 @@ export interface AppNotification {
   kind: 'appointment' | 'result' | 'reminder' | 'system';
   read: boolean;
 }
+
+// ---------------------------------------------------------- symptom checker
+
+/** backend: schemas/prediction.SymptomRead */
+export interface Symptom {
+  /** Send this back in predictDisease(), e.g. "high_fever". */
+  id: string;
+  /** Human-readable, e.g. "High fever". */
+  label: string;
+  /** Severity 1 (mild) .. 7 (serious). */
+  weight: number;
+}
+
+/** backend: schemas/prediction.DiseasePrediction */
+export interface DiseasePrediction {
+  disease: string;
+  label: string;
+  /** 0..1 — relative likelihood among the 41 known conditions. */
+  probability: number;
+  description: string;
+  precautions: string[];
+}
+
+/** backend: schemas/prediction.Duration — how long the symptoms have lasted. */
+export const SYMPTOM_DURATIONS = ['today', 'few_days', 'week', 'longer'] as const;
+export type SymptomDuration = (typeof SYMPTOM_DURATIONS)[number];
+
+export const SYMPTOM_DURATION_LABELS: Record<SymptomDuration, string> = {
+  today: 'Today',
+  few_days: '1–6 days',
+  week: '1–4 weeks',
+  longer: 'Over a month',
+};
+
+/** Who the check is for. Feeds the urgency safety rules, not the model. */
+export interface PatientDetails {
+  age: number;
+  gender: Gender;
+  duration: SymptomDuration;
+  /** Free text the symptoms were parsed from; red flags in it raise urgency. */
+  description?: string;
+}
+
+/** backend: schemas/prediction.ParseResponse */
+export interface ParsedSymptoms {
+  /** Confidently matched; pre-select these. */
+  symptoms: Symptom[];
+  /** Vague words (e.g. "blood") with the symptoms they could mean. */
+  suggestions: { phrase: string; options: Symptom[] }[];
+  duration: SymptomDuration | null;
+  /** Urgent-care warnings to show straight away. */
+  red_flags: string[];
+}
+
+/** backend: schemas/prediction.PredictResponse */
+export interface PredictionResult {
+  /** The normalised symptom ids that were used. */
+  symptoms: string[];
+  /** Most likely first (top 3). */
+  predictions: DiseasePrediction[];
+  urgency: RiskLevel;
+  /** Why the urgency is what it is, e.g. "Adults 65 and over are at higher risk." */
+  urgency_reasons: string[];
+  disclaimer: string;
+}

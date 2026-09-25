@@ -7,7 +7,7 @@ import { relationLabel, useFamilyStore } from '@/store/familyStore'
 import { MyClinicsCard } from './MyClinicsCard'
 
 const quickLinks = [
-  { to: '/', icon: Stethoscope, title: 'New Health Check', description: 'Get a risk report in minutes' },
+  { to: '/symptom-checker', icon: Stethoscope, title: 'Symptom checker', description: 'See what your symptoms may mean' },
   { to: '/appointments', icon: CalendarDays, title: 'Book appointment', description: 'Pick a doctor and time slot' },
   { to: '/telemedicine', icon: Video, title: 'Start video consult', description: 'Talk to a doctor now' },
   { to: '/family', icon: UsersRound, title: 'Family profiles', description: 'Manage everyone in one place' },

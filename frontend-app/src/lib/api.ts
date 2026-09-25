@@ -25,6 +25,10 @@ import type {
   FamilyMemberCreatePayload,
   FamilyMemberRecord,
   Gender,
+  ParsedSymptoms,
+  PatientDetails,
+  PredictionResult,
+  Symptom,
   UserCreatePayload,
   UserResponse,
   UserUpdatePayload,
@@ -75,6 +79,8 @@ async function request<T>(
 
   const requestHeaders: Record<string, string> = {
     Accept: 'application/json',
+    // Skips ngrok's free-tier browser warning page when tunnelling the API.
+    'ngrok-skip-browser-warning': 'true',
     ...(headers as Record<string, string> | undefined),
   };
   if (token) requestHeaders.Authorization = `Bearer ${token}`;
@@ -106,6 +112,12 @@ async function request<T>(
   const data = text ? safeJsonParse(text) : null;
 
   if (!response.ok) {
+    // Access tokens expire after 30 minutes and there's no refresh endpoint,
+    // so a rejected token ends the session; the route guards send to login.
+    if (response.status === 401 && token) {
+      useAuthStore.getState().logout();
+      throw new ApiError('Your session has expired. Please log in again.', 401);
+    }
     throw toApiError(data, response.status, text);
   }
 
@@ -304,7 +316,7 @@ export function ageToDateOfBirth(age: number): string {
   return new Date(`${year}-${month}-${day}T00:00:00Z`).toISOString().slice(0, 10);
 }
 
-function ageFromDateOfBirth(dateOfBirth: string): number {
+export function ageFromDateOfBirth(dateOfBirth: string): number {
   const dob = new Date(`${dateOfBirth.slice(0, 10)}T00:00:00Z`);
   const now = new Date();
   let age = now.getUTCFullYear() - dob.getUTCFullYear();
@@ -475,6 +487,87 @@ export async function assignDoctorToClinic(token: string, clinicId: string): Pro
   }
   return request<DoctorClinicLink>(`/doctor/clinics/${clinicId}/assign`, {
     method: 'POST',
+    token,
+  });
+}
+
+// ---------------------------------------------------------- symptom checker
+
+const demoSymptoms: Symptom[] = [
+  { id: 'chills', label: 'Chills', weight: 3 },
+  { id: 'fatigue', label: 'Fatigue', weight: 4 },
+  { id: 'headache', label: 'Headache', weight: 3 },
+  { id: 'high_fever', label: 'High fever', weight: 7 },
+  { id: 'nausea', label: 'Nausea', weight: 5 },
+];
+
+/** GET /api/v1/symptoms — every symptom the model knows, for the picker. */
+export async function fetchSymptoms(token: string | null | undefined): Promise<Symptom[]> {
+  if (isDemoMode) {
+    await delay();
+    return demoSymptoms;
+  }
+  if (!token) {
+    throw new ApiError('Your session has expired. Please log in again.', 401);
+  }
+  return request<Symptom[]>('/symptoms', { token });
+}
+
+/** POST /api/v1/symptoms/parse — "vomiting for two days and there's blood" → symptoms to confirm. */
+export async function parseSymptoms(
+  token: string | null | undefined,
+  text: string,
+): Promise<ParsedSymptoms> {
+  if (isDemoMode) {
+    await delay();
+    const lower = text.toLowerCase();
+    return {
+      symptoms: demoSymptoms.filter((s) => lower.includes(s.label.toLowerCase())),
+      suggestions: [],
+      duration: null,
+      red_flags: [],
+    };
+  }
+  if (!token) {
+    throw new ApiError('Your session has expired. Please log in again.', 401);
+  }
+  return request<ParsedSymptoms>('/symptoms/parse', { method: 'POST', body: { text }, token });
+}
+
+/**
+ * POST /api/v1/predict — top 3 likely conditions for the given symptom ids
+ * (from fetchSymptoms). Patient details only adjust the urgency flag.
+ * Not a diagnosis; show the disclaimer with the result.
+ */
+export async function predictDisease(
+  token: string | null | undefined,
+  symptoms: string[],
+  patient?: PatientDetails,
+): Promise<PredictionResult> {
+  if (isDemoMode) {
+    await delay(600);
+    return {
+      symptoms,
+      predictions: [
+        {
+          disease: 'malaria',
+          label: 'Malaria',
+          probability: 0.45,
+          description: 'Demo result (no EXPO_PUBLIC_API_URL configured).',
+          precautions: ['Consult nearest hospital', 'Keep mosquitos out'],
+        },
+      ],
+      urgency: 'medium',
+      urgency_reasons: ['Demo result.'],
+      disclaimer: 'This is not a medical diagnosis. Please consult a doctor.',
+    };
+  }
+  if (!token) {
+    throw new ApiError('Your session has expired. Please log in again.', 401);
+  }
+  return request<PredictionResult>('/predict', {
+    method: 'POST',
+    body: { symptoms, ...patient },
     token,
   });
 }

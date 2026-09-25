@@ -17,6 +17,7 @@ export interface FamilyMember {
   name: string
   relation: FamilyRelationship
   age: number
+  gender?: string
   lastCheck?: string
   avatarUrl?: string
 }
@@ -51,7 +52,7 @@ function ageToDateOfBirth(age: number): string {
   return new Date(`${year}-${month}-${day}T00:00:00Z`).toISOString().slice(0, 10)
 }
 
-function ageFromDateOfBirth(dateOfBirth: string): number {
+export function ageFromDateOfBirth(dateOfBirth: string): number {
   const dob = new Date(`${dateOfBirth.slice(0, 10)}T00:00:00Z`)
   const now = new Date()
   let age = now.getUTCFullYear() - dob.getUTCFullYear()
@@ -68,6 +69,7 @@ function toFamilyMember(record: FamilyMemberRecord, lastCheck = NO_CHECKS): Fami
     name: record.full_name,
     relation: record.relationship_to_owner ?? 'other',
     age: ageFromDateOfBirth(record.date_of_birth),
+    gender: record.gender ?? undefined,
     avatarUrl: record.profile ?? undefined,
     lastCheck,
   }

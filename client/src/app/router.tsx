@@ -20,6 +20,7 @@ import { PrivacyPolicyPage } from '@/pages/legal/PrivacyPolicyPage'
 import { TermsOfServicePage } from '@/pages/legal/TermsOfServicePage'
 import { ProfilePage } from '@/pages/profile/ProfilePage'
 import { SpecialtyPage } from '@/pages/specialties/SpecialtyPage'
+import { SymptomCheckerPage } from '@/pages/symptom-checker/SymptomCheckerPage'
 import { TelemedicinePage } from '@/pages/telemedicine/TelemedicinePage'
 
 export const router = createBrowserRouter([
@@ -47,6 +48,7 @@ export const router = createBrowserRouter([
           { path: '/dashboard', element: <DashboardPage /> },
           { path: '/profile', element: <ProfilePage /> },
           { path: '/apply-doctor', element: <ApplyDoctorPage /> },
+          { path: '/symptom-checker', element: <SymptomCheckerPage /> },
         ],
       },
       {
