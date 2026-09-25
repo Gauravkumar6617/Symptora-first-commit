@@ -70,7 +70,8 @@ export function HomePage() {
 
   function handleSearch(event: FormEvent) {
     event.preventDefault()
-    navigate('/signup')
+    const text = query.trim()
+    navigate(text ? `/symptom-checker?q=${encodeURIComponent(text)}` : '/symptom-checker')
   }
 
   function handlePhotoSelect(event: ChangeEvent<HTMLInputElement>) {
@@ -255,7 +256,7 @@ export function HomePage() {
               {symptomPhoto ? 'Replace photo' : 'Upload photo'}
             </button>
             <Link
-              to="/signup"
+              to="/symptom-checker"
               className="btn-raised whitespace-nowrap px-4 py-2.5"
             >
               Start Health Check

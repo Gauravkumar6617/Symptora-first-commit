@@ -1,6 +1,6 @@
 import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Info, Plus, Search, Sparkles, Stethoscope, UserRound, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   ApiError,
   GENDERS,
@@ -80,8 +80,9 @@ export function SymptomCheckerPage() {
   const [checking, setChecking] = useState(false)
   const [error, setError] = useState('')
 
-  // Free-text description -> symptoms (step 2).
-  const [description, setDescription] = useState('')
+  // Free-text description -> symptoms (step 2). Pre-filled from the home page search box.
+  const [searchParams] = useSearchParams()
+  const [description, setDescription] = useState(searchParams.get('q') ?? '')
   const [parsed, setParsed] = useState<ParsedSymptoms | null>(null)
   const [parsing, setParsing] = useState(false)
   const [durationNote, setDurationNote] = useState('')

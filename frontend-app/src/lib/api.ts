@@ -104,8 +104,11 @@ async function request<T>(
       headers: requestHeaders,
       body: payload,
     });
-  } catch {
-    throw new ApiError('Could not reach the server. Check your connection.', 0);
+  } catch (error) {
+    // In development, show the device's own reason (e.g. a bad file URI in a
+    // multipart upload fails here too, not only a real network problem).
+    const reason = __DEV__ && error instanceof Error ? ` (${error.message})` : '';
+    throw new ApiError(`Could not reach the server. Check your connection.${reason}`, 0);
   }
 
   const text = await response.text();

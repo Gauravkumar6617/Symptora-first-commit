@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { AuthSplitLayout } from '@/components/auth/AuthSplitLayout'
 import { FormField } from '@/components/auth/FormField'
 import { ApiError, getCurrentUser, loginUser, toAuthUser } from '@/lib/api'
@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/authStore'
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const from = (useLocation().state as { from?: string } | null)?.from
   const login = useAuthStore((state) => state.login)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -25,7 +26,7 @@ export function LoginPage() {
       const { access_token } = await loginUser(email, password)
       const user = await getCurrentUser(access_token)
       login(toAuthUser(user), access_token)
-      navigate(user.is_admin ? '/admin' : '/dashboard')
+      navigate(user.is_admin ? '/admin' : (from ?? '/dashboard'))
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : 'Something went wrong. Try again.',

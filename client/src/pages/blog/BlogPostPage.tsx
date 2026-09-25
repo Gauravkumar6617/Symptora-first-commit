@@ -55,7 +55,7 @@ export function BlogPostPage() {
             Run a Health Check and get a risk-based report in minutes.
           </p>
         </div>
-        <Link to="/signup" className="btn-raised whitespace-nowrap">
+        <Link to="/symptom-checker" className="btn-raised whitespace-nowrap">
           Start Health Check
         </Link>
       </div>

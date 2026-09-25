@@ -18,6 +18,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { ageFromDateOfBirth, ApiError } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { useFamilyStore } from '@/store/familyStore';
+import { useHealthCheckStore } from '@/store/healthCheckStore';
 import {
   GENDER_LABELS,
   GENDERS,
@@ -48,6 +49,7 @@ export default function SymptomCheckerScreen() {
   const predict = usePredictDisease();
   const user = useAuthStore((state) => state.user);
   const { members, loadMembers } = useFamilyStore();
+  const addCheck = useHealthCheckStore((state) => state.addCheck);
 
   // Step 1: who the check is for. Pre-filled from the profile / family member.
   const [patient, setPatient] = useState<PatientDetails | null>(null);
@@ -339,10 +341,24 @@ export default function SymptomCheckerScreen() {
         label={selected.length ? `Check ${selected.length} symptom${selected.length === 1 ? '' : 's'}` : 'Select at least one symptom'}
         icon="pulse"
         onPress={() =>
-          predict.mutate({
-            symptoms: selected,
-            patient: { ...patient, description: description.trim() || undefined },
-          })
+          predict.mutate(
+            {
+              symptoms: selected,
+              patient: { ...patient, description: description.trim() || undefined },
+            },
+            {
+              // Keep the result in Health Check history alongside questionnaire checks.
+              onSuccess: (found) =>
+                addCheck({
+                  id: `sc-${Date.now()}`,
+                  title: found.predictions[0] ? `Possible ${found.predictions[0].label}` : 'Symptom check',
+                  riskLevel: found.urgency,
+                  createdAt: new Date().toISOString(),
+                  summary: found.symptoms.map((id) => labels[id] ?? id).join(', '),
+                  forMember: forWhom === ME ? undefined : personName,
+                }),
+            },
+          )
         }
         loading={predict.isPending}
         disabled={selected.length === 0}

@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from app.core.security import hashed_pasword
 from app.models.userModel import UserModel
 from app.schemas.userSchema import UserCreate,UserUpdate
@@ -97,7 +97,8 @@ class UserRepository:
     # → The SQLAlchemy UserModel object that was saved.
 
     def get_user_by_email(self, email: str) -> UserModel | None:
-        return self.db.query(UserModel).filter(UserModel.email == email).first() 
+        # Case-insensitive: older accounts were stored with the email exactly as typed.
+        return self.db.query(UserModel).filter(func.lower(UserModel.email) == email.strip().lower()).first()
     ###to get user by email, we query the database for a UserModel object where the email matches the provided email. If found, it returns the UserModel object; otherwise, it returns None.
 
 
@@ -125,7 +126,7 @@ class UserRepository:
     
     def find_by_email_or_number(self, email: str, number: str) -> UserModel | None:
         return self.db.query(UserModel).filter(
-            or_(UserModel.email == email, UserModel.number == number)
+            or_(func.lower(UserModel.email) == email.strip().lower(), UserModel.number == number)
         ).first()
 
     def check_user_exists(self, email: str,number: str) -> bool:
