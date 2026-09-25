@@ -337,6 +337,30 @@ export function toAuthUser(user: UserResponse): AuthUser {
   }
 }
 
+// ---------------------------------------------------------- password reset
+
+/** POST /users/password/forgot — emails a 6-digit code (same reply for unknown emails). */
+export async function requestPasswordReset(email: string): Promise<{ detail: string }> {
+  return request('/users/password/forgot', { method: 'POST', body: { email } })
+}
+
+/** POST /users/password/verify — checks the code; the token authorises the reset. */
+export async function verifyPasswordReset(
+  email: string,
+  otp: string,
+): Promise<{ reset_token: string }> {
+  return request('/users/password/verify', { method: 'POST', body: { email, otp } })
+}
+
+/** POST /users/password/reset */
+export async function resetPassword(payload: {
+  email: string
+  reset_token: string
+  password: string
+}): Promise<{ detail: string }> {
+  return request('/users/password/reset', { method: 'POST', body: payload })
+}
+
 // ---------------------------------------------------------------- helpers
 
 /**
@@ -579,6 +603,83 @@ export async function acceptFamilyInvite(payload: {
 /** DELETE /family-members/{member_id} */
 export async function deleteFamilyMember(token: string, memberId: string): Promise<void> {
   await request(`/family-members/${memberId}`, { method: 'DELETE', token })
+}
+
+// -------------------------------------------------------------------- blog
+
+/** backend schemas/blog.BlogPostRead */
+export interface BlogPost {
+  id: string
+  slug: string
+  title: string
+  category: string
+  excerpt: string
+  /** Plain text; a blank line starts a new paragraph. */
+  content: string
+  paragraphs: string[]
+  author: string
+  /** R2 key or absolute url. */
+  cover_image: string | null
+  /** Presigned url for `cover_image`. */
+  cover_image_url: string | null
+  is_published: boolean
+  published_at: string | null
+  read_time: string
+  created_at: string
+  updated_at: string
+}
+
+/** POST /admin/blogs body. */
+export interface BlogPostPayload {
+  title: string
+  category: string
+  excerpt: string
+  content: string
+  author: string
+  cover_image?: string | null
+  is_published: boolean
+}
+
+/** GET /blogs — published posts, newest first. No login needed. */
+export async function listBlogPosts(): Promise<BlogPost[]> {
+  return request<BlogPost[]>('/blogs')
+}
+
+/** GET /blogs/{slug} */
+export async function getBlogPost(slug: string): Promise<BlogPost> {
+  return request<BlogPost>(`/blogs/${encodeURIComponent(slug)}`)
+}
+
+/** GET /admin/blogs — every post, drafts included. */
+export async function listAdminBlogPosts(token: string): Promise<BlogPost[]> {
+  return request<BlogPost[]>('/admin/blogs', { token })
+}
+
+export async function createBlogPost(token: string, payload: BlogPostPayload): Promise<BlogPost> {
+  return request<BlogPost>('/admin/blogs', { method: 'POST', body: payload, token })
+}
+
+/** PATCH /admin/blogs/{id} — only the fields sent change; cover_image "" removes it. */
+export async function updateBlogPost(
+  token: string,
+  postId: string,
+  payload: Partial<BlogPostPayload>,
+): Promise<BlogPost> {
+  return request<BlogPost>(`/admin/blogs/${postId}`, { method: 'PATCH', body: payload, token })
+}
+
+export async function deleteBlogPost(token: string, postId: string): Promise<void> {
+  await request(`/admin/blogs/${postId}`, { method: 'DELETE', token })
+}
+
+/** POST /admin/blogs/image — upload a cover; send `cover_image` on create/update. */
+export async function uploadBlogImage(
+  token: string,
+  file: File,
+): Promise<{ cover_image: string; cover_image_url: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request('/admin/blogs/image', { method: 'POST', formData, token })
 }
 
 // ---------------------------------------------------------- symptom checker

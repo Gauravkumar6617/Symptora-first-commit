@@ -181,6 +181,8 @@ export interface BlogPost {
   author: string;
   date: string;
   readTime: string;
+  /** Cover uploaded by an admin; the screens fall back to a gradient. */
+  coverImageUrl?: string | null;
 }
 
 export const blogPosts: BlogPost[] = [

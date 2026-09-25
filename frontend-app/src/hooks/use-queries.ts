@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
+  fetchBlogPost,
   fetchBlogPosts,
   fetchCatalogDoctors,
   fetchChecks,
@@ -45,6 +46,14 @@ export function useNotifications() {
 
 export function useBlogPosts() {
   return useQuery({ queryKey: ['blog-posts'], queryFn: fetchBlogPosts });
+}
+
+export function useBlogPost(slug: string | undefined) {
+  return useQuery({
+    queryKey: ['blog-posts', slug],
+    queryFn: () => fetchBlogPost(slug!),
+    enabled: Boolean(slug),
+  });
 }
 
 /** The symptom list rarely changes, so it's cached for the whole session. */

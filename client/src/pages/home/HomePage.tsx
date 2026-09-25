@@ -24,7 +24,7 @@ import { PoweredByStrip } from '@/components/marketing/PoweredByStrip'
 import { Testimonials } from '@/components/marketing/Testimonials'
 import { WhyChooseUs } from '@/components/marketing/WhyChooseUs'
 import { SpecialtyThumbnail } from '@/components/specialties/SpecialtyThumbnail'
-import { blogPosts } from '@/data/blogPosts'
+import { useBlogPosts } from '@/hooks/useBlogPosts'
 import { clinics } from '@/data/clinics'
 import { doctors } from '@/data/doctors'
 import { specialties } from '@/data/specialties'
@@ -64,6 +64,7 @@ const telemedicineFeatures = [
 
 export function HomePage() {
   const navigate = useNavigate()
+  const { data: blogPosts = [] } = useBlogPosts()
   const [query, setQuery] = useState('')
   const [symptomPhoto, setSymptomPhoto] = useState<string | null>(null)
   const photoInputRef = useRef<HTMLInputElement>(null)
@@ -452,11 +453,11 @@ export function HomePage() {
           <div className="mt-6 grid gap-6 sm:grid-cols-3">
             {blogPosts.slice(0, 3).map((post) => (
               <Link
-                key={post.slug}
+                key={post.id}
                 to={`/blog/${post.slug}`}
                 className="card-raised overflow-hidden"
               >
-                <BlogThumbnail category={post.category} className="h-32" />
+                <BlogThumbnail category={post.category} imageUrl={post.cover_image_url} className="h-32" />
                 <div className="p-5">
                   <span className="text-xs font-semibold uppercase tracking-wide text-secondary">
                     {post.category}

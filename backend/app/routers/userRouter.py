@@ -15,6 +15,10 @@ from app.schemas.userSchema import (
     FamilyInviteAccept,
     FamilyInviteRequest,
     OTPRequestResponse,
+    PasswordResetConfirm,
+    PasswordResetRequest,
+    PasswordResetVerify,
+    PasswordResetVerifyResponse,
     RegistrationOTPVerify,
     TokenResponse,
     UserCreate,
@@ -86,6 +90,32 @@ def accept_family_invite(
 ):
     """Code + new password -> the member's own account, logged in."""
     return UserController.accept_family_invite(data, service)
+
+
+@router.post("/password/forgot", response_model=OTPRequestResponse, status_code=status.HTTP_202_ACCEPTED)
+def request_password_reset(
+    data: PasswordResetRequest,
+    service: UserService = Depends(get_user_service),
+):
+    """Email a 6-digit reset code. Same answer whether or not the email is registered."""
+    return UserController.request_password_reset(data.email, service)
+
+
+@router.post("/password/verify", response_model=PasswordResetVerifyResponse)
+def verify_password_reset(
+    data: PasswordResetVerify,
+    service: UserService = Depends(get_user_service),
+):
+    """Check the emailed code; returns a short-lived token for /password/reset."""
+    return UserController.verify_password_reset(data.email, data.otp, service)
+
+
+@router.post("/password/reset", response_model=OTPRequestResponse)
+def reset_password(
+    data: PasswordResetConfirm,
+    service: UserService = Depends(get_user_service),
+):
+    return UserController.reset_password(data, service)
 
 
 @router.get("/me", response_model=CurrentUserResponse)

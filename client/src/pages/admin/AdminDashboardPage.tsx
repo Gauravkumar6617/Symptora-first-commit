@@ -12,42 +12,50 @@ import {
   type AdminDoctor,
   type AdminStats,
   ApiError,
+  type BlogPost,
   approveDoctorApplication,
   type DoctorApplication,
   fetchAdminDoctors,
   fetchAdminPatients,
   fetchAdminStats,
+  listAdminBlogPosts,
   listAdminClinics,
   listPendingDoctorApplications,
   rejectDoctorApplication,
   type UserResponse,
 } from '@/lib/api'
+import { queryClient } from '@/lib/queryClient'
 import { useAuthStore } from '@/store/authStore'
+import { BlogsSection } from './BlogsSection'
 import { ClinicsSection } from './ClinicsSection'
 
 export function AdminDashboardPage() {
   const token = useAuthStore((state) => state.token)
+  const adminName = useAuthStore((state) => state.user?.name ?? '')
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [pending, setPending] = useState<DoctorApplication[]>([])
   const [doctors, setDoctors] = useState<AdminDoctor[]>([])
   const [patients, setPatients] = useState<UserResponse[]>([])
   const [clinics, setClinics] = useState<AdminClinic[]>([])
+  const [blogPosts, setBlogPosts] = useState<BlogPost[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   async function loadAll(authToken: string) {
-    const [statsRes, pendingRes, doctorsRes, patientsRes, clinicsRes] = await Promise.all([
+    const [statsRes, pendingRes, doctorsRes, patientsRes, clinicsRes, blogRes] = await Promise.all([
       fetchAdminStats(authToken),
       listPendingDoctorApplications(authToken),
       fetchAdminDoctors(authToken),
       fetchAdminPatients(authToken),
       listAdminClinics(authToken),
+      listAdminBlogPosts(authToken),
     ])
     setStats(statsRes)
     setPending(pendingRes)
     setDoctors(doctorsRes)
     setPatients(patientsRes)
     setClinics(clinicsRes)
+    setBlogPosts(blogRes)
   }
 
   useEffect(() => {
@@ -103,7 +111,7 @@ export function AdminDashboardPage() {
     <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
       <h1 className="text-2xl font-bold text-ink">Admin dashboard</h1>
       <p className="mt-2 text-sm text-ink/60">
-        Clinics, doctors, and patients across Symptora.
+        Clinics, doctors, patients, and blog posts across Symptora.
       </p>
 
       {error && <p className="mt-4 text-sm text-danger">{error}</p>}
@@ -131,6 +139,18 @@ export function AdminDashboardPage() {
           const [clinicsRes, statsRes] = await Promise.all([listAdminClinics(token), fetchAdminStats(token)])
           setClinics(clinicsRes)
           setStats(statsRes)
+        }}
+      />
+
+      <BlogsSection
+        posts={blogPosts}
+        token={token}
+        authorName={adminName}
+        onChanged={async () => {
+          if (!token) return
+          setBlogPosts(await listAdminBlogPosts(token))
+          // The public blog pages read through react-query.
+          await queryClient.invalidateQueries({ queryKey: ['blog-posts'] })
         }}
       />
 

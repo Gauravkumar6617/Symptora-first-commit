@@ -1,5 +1,6 @@
 import json
 import logging
+import secrets
 
 from app.core.config import settings
 from app.core.security import hashed_pasword
@@ -15,7 +16,7 @@ from app.schemas.userSchema import (
 from app.utils.integration.cloudflarR2.index import delete_key, upload_avatar
 from app.utils.integration.medplum.index import MedplumIntegration
 from app.utils.otp.index import discard_otp , generate_store_otp, verify_otp
-from app.utils.otp.send_otp import send_otp_email
+from app.utils.otp.send_otp import send_otp_email, send_password_reset_email
 from app.core.security import verify_password,create_access_token,decode_token 
 
 
@@ -235,6 +236,60 @@ class UserService:
         # ``sub`` is the user id because that is what deps/auth.py looks up.
         token = create_access_token({"sub": str(user.id)})
         return {"access_token": token, "token_type": "bearer"}
+
+    # ------------------------------------------------------------ password reset
+
+    @staticmethod
+    def _reset_otp_id(email: str) -> str:
+        # Its own OTP slot, so a reset never collides with a registration code.
+        return f"password-reset:{email.strip().lower()}"
+
+    @staticmethod
+    def _reset_token_key(email: str) -> str:
+        return f"password-reset:token:{email.strip().lower()}"
+
+    def request_password_reset(self, email: str) -> None:
+        """Email a reset code to an active account.
+
+        Silent for unknown or unverified emails, so the endpoint can't be
+        used to find out who has a Symptora account.
+        """
+        user = self.user_repository.get_user_by_email(email)
+        if not user or not user.is_active:
+            return
+
+        otp, error = generate_store_otp(self._reset_otp_id(email))
+        if error:
+            raise ValueError(error)
+        try:
+            send_password_reset_email(user.email, otp)
+        except Exception:
+            discard_otp(self._reset_otp_id(email))
+            raise OTPDeliveryError("Unable to send the reset email. Please try again later.")
+
+    def verify_password_reset(self, email: str, otp: str) -> str:
+        """Check the emailed code; returns a single-use token for the new password."""
+        valid, message = verify_otp(self._reset_otp_id(email), otp)
+        if not valid:
+            raise ValueError(message)
+        reset_token = secrets.token_urlsafe(32)
+        self.redis_user.setex(self._reset_token_key(email), settings.OTP_EXPIRY_SECONDS, reset_token)
+        return reset_token
+
+    def reset_password(self, email: str, reset_token: str, password: str) -> None:
+        key = self._reset_token_key(email)
+        stored = self.redis_user.get(key)
+        if not stored or not secrets.compare_digest(stored, reset_token):
+            raise ValueError("This reset session has expired. Please request a new code.")
+
+        user = self.user_repository.get_user_by_email(email)
+        if not user or not user.is_active:
+            raise ValueError("This reset session has expired. Please request a new code.")
+
+        user.hashed_password = hashed_pasword(password)
+        self.user_repository.db.commit()
+        self.redis_user.delete(key)
+        self.redis_user.delete(f"user:{user.id}")
 
     # ------------------------------------------------------------ family invites
 

@@ -1,12 +1,27 @@
+import { useState } from 'react'
 import { getCategoryTheme } from '@/lib/blogTheme'
 
 interface BlogThumbnailProps {
   category: string
+  /** Uploaded cover; falls back to the category artwork. */
+  imageUrl?: string | null
   className?: string
 }
 
-export function BlogThumbnail({ category, className = 'h-36' }: BlogThumbnailProps) {
+export function BlogThumbnail({ category, imageUrl, className = 'h-36' }: BlogThumbnailProps) {
   const { icon: Icon, gradient } = getCategoryTheme(category)
+  const [broken, setBroken] = useState(false)
+
+  if (imageUrl && !broken) {
+    return (
+      <img
+        src={imageUrl}
+        alt=""
+        onError={() => setBroken(true)}
+        className={`w-full object-cover ${className}`}
+      />
+    )
+  }
 
   return (
     <div
