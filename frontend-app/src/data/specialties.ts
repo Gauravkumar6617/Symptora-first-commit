@@ -1,0 +1,106 @@
+import type { Ionicons } from '@expo/vector-icons';
+
+/**
+ * Real, static reference content — not mock data. This is the specialty
+ * catalog the app actually ships with (icons, copy, the slug used in
+ * routes); nothing here stands in for a backend response, so it stays
+ * outside `src/data/mock/`. Ported from client/src/data/*.ts (web app) so
+ * both apps tell the same story — keep them in sync when copy changes.
+ */
+
+export interface Specialty {
+  slug: string;
+  label: string;
+  doctorSpecialty: string;
+  shortDescription: string;
+  longDescription: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  commonFor: string[];
+}
+
+export const specialties: Specialty[] = [
+  {
+    slug: 'health-check',
+    label: 'Health Check',
+    doctorSpecialty: 'General Physician',
+    shortDescription: 'Start here for any new symptom',
+    longDescription:
+      'Not sure who to see? Run a guided Health Check first — answer a few questions about your symptoms and vitals and get a Low, Medium, or High risk report, with a recommendation on what to do next.',
+    icon: 'medkit',
+    commonFor: ['New or unclear symptoms', 'Fever', 'General wellness check'],
+  },
+  {
+    slug: 'general-physician',
+    label: 'General Physician',
+    doctorSpecialty: 'General Physician',
+    shortDescription: 'Everyday illness & checkups',
+    longDescription:
+      'General physicians handle the everyday stuff — colds, infections, fatigue, routine checkups, and referrals to specialists when something needs a closer look.',
+    icon: 'person',
+    commonFor: ['Cold & flu', 'Fatigue', 'Routine checkups', 'Referrals'],
+  },
+  {
+    slug: 'pediatrician',
+    label: 'Pediatrician',
+    doctorSpecialty: 'Pediatrician',
+    shortDescription: 'Care for infants, kids & teens',
+    longDescription:
+      'Pediatricians specialize in children from birth through adolescence — growth tracking, vaccinations, and the illnesses that are common in kids specifically.',
+    icon: 'happy',
+    commonFor: ['Vaccinations', 'Growth concerns', "Kids' fevers & infections"],
+  },
+  {
+    slug: 'dermatologist',
+    label: 'Dermatologist',
+    doctorSpecialty: 'Dermatologist',
+    shortDescription: 'Skin, hair & nail concerns',
+    longDescription:
+      'From rashes and acne to hair loss and nail changes, dermatologists diagnose and treat skin conditions — you can even upload a photo of the affected area before your consult.',
+    icon: 'sparkles',
+    commonFor: ['Rashes & acne', 'Hair loss', 'Allergic reactions'],
+  },
+  {
+    slug: 'gynecologist',
+    label: 'Gynecologist',
+    doctorSpecialty: 'Gynecologist',
+    shortDescription: "Women's reproductive health",
+    longDescription:
+      "Gynecologists cover reproductive health at every stage — menstrual concerns, pregnancy care, contraception guidance, and routine women's health checkups.",
+    icon: 'heart',
+    commonFor: ['Menstrual concerns', 'Pregnancy care', 'Routine checkups'],
+  },
+  {
+    slug: 'ent',
+    label: 'Ear, Nose, Throat',
+    doctorSpecialty: 'ENT Specialist',
+    shortDescription: 'Ear, nose & throat specialists',
+    longDescription:
+      'ENT specialists treat everything from persistent sinus issues and ear infections to voice and throat concerns that a general physician would refer onward.',
+    icon: 'ear',
+    commonFor: ['Sinus issues', 'Ear infections', 'Sore throat'],
+  },
+  {
+    slug: 'dentist',
+    label: 'Dentist',
+    doctorSpecialty: 'Dentist',
+    shortDescription: 'Oral & dental health',
+    longDescription:
+      'Dentists handle everything from routine cleanings to toothaches — book a video consult for quick guidance, or find a partner clinic near you for in-person care.',
+    icon: 'happy-outline',
+    commonFor: ['Toothache', 'Routine cleaning', 'Gum concerns'],
+  },
+  {
+    slug: 'psychiatrist',
+    label: 'Psychiatrist',
+    doctorSpecialty: 'Psychiatrist',
+    shortDescription: 'Mental health & wellbeing',
+    longDescription:
+      'Psychiatrists support anxiety, low mood, sleep issues, and other mental health concerns in a private, judgment-free video consult you can book from home.',
+    icon: 'flower',
+    commonFor: ['Anxiety & stress', 'Low mood', 'Sleep issues'],
+  },
+];
+
+export function getSpecialtyBySlug(slug: string) {
+  return specialties.find((item) => item.slug === slug);
+}

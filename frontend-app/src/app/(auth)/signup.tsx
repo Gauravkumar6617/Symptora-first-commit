@@ -15,7 +15,7 @@ import { ProgressSteps } from '@/components/ui/progress-steps';
 import { SelectField } from '@/components/ui/select-field';
 import { TextField } from '@/components/ui/text-field';
 import { Gradient, MaxFormWidth, Radius, Spacing, Typography } from '@/constants/theme';
-import { ApiError, requestRegistrationOtp, verifyRegistrationOtp } from '@/lib/api';
+import { ApiError, loginUser, requestRegistrationOtp, verifyRegistrationOtp } from '@/lib/api';
 import { errorFeedback, successFeedback } from '@/lib/haptics';
 import {
   emptyDateParts,
@@ -121,10 +121,13 @@ export default function SignupScreen() {
     setLoading(true);
     setFormError('');
     try {
-      const user = await verifyRegistrationOtp(form.email, otp);
+      await verifyRegistrationOtp(form.email, otp);
+      // Verifying only creates the account; logging in gets the token every
+      // protected call needs, and the user straight from /users/me.
+      const session = await loginUser(form.email.trim().toLowerCase(), form.password);
       successFeedback();
-      setSession({ user });
-      router.replace(user.role === 'doctor' ? '/(doctor)/(tabs)' : '/(patient)/(tabs)');
+      setSession(session);
+      router.replace(session.user.role === 'doctor' ? '/(doctor)/(tabs)' : '/(patient)/(tabs)');
     } catch (error) {
       errorFeedback();
       setFormError(error instanceof ApiError ? error.message : 'Could not verify your email. Please try again.');

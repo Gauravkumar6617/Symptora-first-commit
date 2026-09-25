@@ -59,7 +59,7 @@ export function TelemedicinePage() {
                 video consult directly with a specialist.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
-                <Link to="/signup" className="btn-raised">
+                <Link to="/symptom-checker" className="btn-raised">
                   Start a Health Check
                 </Link>
                 <Link

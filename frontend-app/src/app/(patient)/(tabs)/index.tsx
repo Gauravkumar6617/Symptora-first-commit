@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,12 +17,12 @@ import { SectionHeaderRow } from '@/components/ui/section-link';
 import { SkeletonList } from '@/components/ui/skeleton';
 import { SpecialtyChip } from '@/components/ui/specialty-chip';
 import { Gradient, Radius, RiskTone, Spacing, Typography, tint } from '@/constants/theme';
-import { formatDate, firstName, relativeTime } from '@/lib/format';
+import { formatDate, firstName, relationshipLabel, relativeTime } from '@/lib/format';
 import { useBlogPosts, useCatalogDoctors, usePatientAppointments, useSpecialties } from '@/hooks/use-queries';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuthStore } from '@/store/authStore';
 import { useFamilyStore } from '@/store/familyStore';
-import { useHealthCheckStore } from '@/store/healthCheckStore';
+import { useHealthHistory } from '@/hooks/use-health-history';
 
 export default function PatientHomeScreen() {
   const theme = useTheme();
@@ -29,11 +30,18 @@ export default function PatientHomeScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const members = useFamilyStore((state) => state.members);
-  const checks = useHealthCheckStore((state) => state.checks);
+  const loadMembers = useFamilyStore((state) => state.loadMembers);
+  const { checks } = useHealthHistory();
   const { data: specialties } = useSpecialties();
   const { data: doctors, isLoading: doctorsLoading } = useCatalogDoctors();
   const { data: posts } = useBlogPosts();
   const { data: appointments } = usePatientAppointments();
+
+  useEffect(() => {
+    loadMembers().catch(() => {
+      // Offline: the persisted list stays on screen.
+    });
+  }, [loadMembers]);
 
   const latestCheck = checks[0];
   const nextAppointment = appointments?.find((item) => item.status === 'scheduled');
@@ -50,7 +58,7 @@ export default function PatientHomeScreen() {
           style={[styles.header, { paddingTop: insets.top + Spacing.three }]}>
           <View style={styles.headerRow}>
             <PressScale onPress={() => router.push('/(patient)/(tabs)/profile')}>
-              <Avatar uri={user?.avatar} name={user ? `${user.first_name} ${user.last_name}` : undefined} size={44} />
+              <Avatar uri={user?.avatar_url} name={user ? `${user.first_name} ${user.last_name}` : undefined} size={44} />
             </PressScale>
             <View style={{ flex: 1 }}>
               <Text style={styles.welcome}>Welcome back</Text>
@@ -165,6 +173,13 @@ export default function PatientHomeScreen() {
             onPress={() => router.push('/(patient)/health-check')}
           />
           <QuickLinkCard
+            icon="medkit"
+            title="Symptom checker"
+            description="See what your symptoms may mean"
+            tone="danger"
+            onPress={() => router.push('/(patient)/symptom-checker')}
+          />
+          <QuickLinkCard
             icon="videocam"
             title="Video consult"
             description="Talk to a doctor now"
@@ -250,10 +265,12 @@ export default function PatientHomeScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.doctorName, { color: theme.text }]}>{member.name}</Text>
                 <Text style={[styles.doctorMeta, { color: theme.textSecondary }]}>
-                  {member.relation} · {member.age} yrs
+                  {relationshipLabel(member.relation)} · {member.age} yrs
                 </Text>
               </View>
-              <Text style={[styles.doctorMeta, { color: theme.textMuted }]}>{member.lastCheck}</Text>
+              <Text style={[styles.doctorMeta, { color: theme.textMuted }]}>
+                {member.hasAccount ? 'Own login' : 'Managed by you'}
+              </Text>
             </Card>
           ))}
         </View>

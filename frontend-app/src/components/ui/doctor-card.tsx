@@ -5,7 +5,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Spacing, Typography } from '@/constants/theme';
-import type { CatalogDoctor } from '@/data/catalog';
+import type { CatalogDoctor } from '@/data/mock/directory';
 import { useTheme } from '@/hooks/use-theme';
 
 export function DoctorCard({

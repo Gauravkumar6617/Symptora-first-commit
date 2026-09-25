@@ -6,6 +6,8 @@
  * Leaving it unset keeps requests same-origin (useful behind a proxy).
  */
 
+import { type AuthUser, useAuthStore } from '@/store/authStore'
+
 /** Base URL of the API server, without a trailing slash. */
 export const API_BASE_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, '') ?? ''
 export const API_PREFIX = '/api/v1'
@@ -65,6 +67,12 @@ async function request<T>(
   const data = text ? safeJsonParse(text) : null
 
   if (!response.ok) {
+    // Access tokens expire after 30 minutes and there's no refresh endpoint,
+    // so a rejected token ends the session; ProtectedRoute then sends to /login.
+    if (response.status === 401 && token) {
+      useAuthStore.getState().logout()
+      throw new ApiError('Your session has expired. Please log in again.', 401)
+    }
     throw toApiError(data, response.status, text)
   }
 
@@ -133,17 +141,130 @@ export interface UserResponse {
   number: string
   address: string | null
   avatar: string | null
+  avatar_url?: string | null
   date_of_birth: string
   gender: string | null
-  medplum_patient_id: string
+  medplum_patient_id: string | null
   is_active: boolean
   id_doctor: boolean
+  is_admin: boolean
 }
 
 /** backend TokenResponse. */
 export interface TokenResponse {
   access_token: string
   token_type: string
+}
+
+// -------------------------------------------------------------- doctors
+
+export type DoctorApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+
+/** backend DoctorProfileCreate. */
+export interface DoctorApplicationPayload {
+  specialization: string
+  license_number: string
+  clinic_id?: string | null
+}
+
+/** backend DoctorProfileRead. */
+export interface DoctorApplication {
+  id: string
+  user_id: string
+  specialization: string
+  license_number: string
+  clinic_id: string | null
+  medplum_practitioner_id: string | null
+  status: DoctorApplicationStatus
+  created_at: string
+  updated_at: string
+}
+
+// ---------------------------------------------------------------- clinics
+
+/** backend ClinicRead. */
+export interface Clinic {
+  id: string
+  name: string
+  picture: string
+  description: string | null
+  address: string | null
+  phone: string | null
+  medplum_organisation_id: string
+  /** Presigned url for `picture` (an R2 key or absolute url). */
+  picture_url: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** A doctor listed under a clinic (approved doctors only). */
+export interface ClinicDoctor {
+  id: string
+  name: string
+  specialization: string
+}
+
+/** backend AdminClinicRead — a clinic plus its linked doctors. */
+export interface AdminClinic extends Clinic {
+  doctors: ClinicDoctor[]
+}
+
+/** backend PublicClinicRead — GET /clinics/directory, no login needed. */
+export interface PublicClinic {
+  id: string
+  name: string
+  picture_url: string | null
+  description: string | null
+  address: string | null
+  phone: string | null
+  doctors: ClinicDoctor[]
+}
+
+/** backend DoctorClinicRead — a doctor's link to one clinic. */
+export interface DoctorClinic {
+  id: string
+  doctor_profile_id: string
+  clinic_id: string
+  medplum_practitioner_role_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** POST /admin/clinics request body — the admin-typed fields; the backend
+ * derives medplum_organisation_id itself by creating the Organization. */
+export interface ClinicCreatePayload {
+  name: string
+  picture: string
+  description?: string
+  address?: string
+  phone?: string
+}
+
+// ----------------------------------------------------------------- admin
+
+/** backend GET /admin/stats. */
+export interface AdminStats {
+  patients: number
+  doctors: number
+  clinics: number
+  pending_applications: number
+}
+
+/** backend AdminDoctorRead — an approved doctor plus their user info and clinics. */
+export interface AdminDoctor {
+  id: string
+  user_id: string
+  specialization: string
+  license_number: string
+  clinic_id: string | null
+  medplum_practitioner_id: string | null
+  status: DoctorApplicationStatus
+  first_name: string
+  last_name: string
+  email: string
+  clinics: Clinic[]
+  created_at: string
+  updated_at: string
 }
 
 // ---------------------------------------------------------------- auth
@@ -185,6 +306,7 @@ export async function verifyRegistrationOtp(
 
 /** POST /users/login — returns a bearer token. */
 export async function loginUser(
+  /** Email or phone number. */
   email: string,
   password: string,
 ): Promise<TokenResponse> {
@@ -194,7 +316,404 @@ export async function loginUser(
   })
 }
 
+/** GET /users/me — the caller's own account, identified by the bearer token. */
+export async function getCurrentUser(token: string): Promise<UserResponse> {
+  return request<UserResponse>('/users/me', { token })
+}
+
+/** backend UserResponse → the store's AuthUser shape. */
+export function toAuthUser(user: UserResponse): AuthUser {
+  return {
+    id: user.id,
+    name: `${user.first_name} ${user.last_name}`.trim(),
+    email: user.email,
+    phone: user.number,
+    address: user.address ?? undefined,
+    avatarUrl: user.avatar_url ?? undefined,
+    dateOfBirth: user.date_of_birth,
+    gender: user.gender ?? undefined,
+    isDoctor: user.id_doctor,
+    isAdmin: user.is_admin,
+  }
+}
+
 // ---------------------------------------------------------------- helpers
+
+/**
+ * POST /doctor/promote — submits a doctor application. It stays pending
+ * until an admin approves it; nothing about the account changes yet.
+ */
+export async function applyToBecomeDoctor(
+  token: string,
+  payload: DoctorApplicationPayload,
+): Promise<DoctorApplication> {
+  return request<DoctorApplication>('/doctor/promote', {
+    method: 'POST',
+    body: payload,
+    token,
+  })
+}
+
+/** GET /doctor/me — the caller's own application, or null if they never applied. */
+export async function getMyDoctorApplication(
+  token: string,
+): Promise<DoctorApplication | null> {
+  return request<DoctorApplication | null>('/doctor/me', { token })
+}
+
+/** GET /doctor/pending — every application awaiting admin review. */
+export async function listPendingDoctorApplications(
+  token: string,
+): Promise<DoctorApplication[]> {
+  return request<DoctorApplication[]>('/doctor/pending', { token })
+}
+
+/** PATCH /doctor/{id}/approve — creates the Medplum Practitioner and makes the user a doctor. */
+export async function approveDoctorApplication(
+  token: string,
+  doctorId: string,
+): Promise<DoctorApplication> {
+  return request<DoctorApplication>(`/doctor/${doctorId}/approve`, {
+    method: 'PATCH',
+    token,
+  })
+}
+
+/** PATCH /doctor/{id}/reject */
+export async function rejectDoctorApplication(
+  token: string,
+  doctorId: string,
+): Promise<DoctorApplication> {
+  return request<DoctorApplication>(`/doctor/${doctorId}/reject`, {
+    method: 'PATCH',
+    token,
+  })
+}
+
+/** GET /clinics — every clinic, e.g. for a doctor picking one to join. */
+export async function listClinics(token: string): Promise<Clinic[]> {
+  return request<Clinic[]>('/clinics', { token })
+}
+
+/** GET /doctor/my-clinics — clinics the calling doctor is currently assigned to. */
+export async function getMyClinics(token: string): Promise<DoctorClinic[]> {
+  return request<DoctorClinic[]>('/doctor/my-clinics', { token })
+}
+
+/**
+ * POST /doctor/clinics/{clinic_id}/assign — links the calling (approved)
+ * doctor to a clinic, creating a PractitionerRole in Medplum.
+ */
+export async function assignDoctorToClinic(
+  token: string,
+  clinicId: string,
+): Promise<DoctorClinic> {
+  return request<DoctorClinic>(`/doctor/clinics/${clinicId}/assign`, {
+    method: 'POST',
+    token,
+  })
+}
+
+/** GET /admin/stats — counts for the dashboard header. */
+export async function fetchAdminStats(token: string): Promise<AdminStats> {
+  return request<AdminStats>('/admin/stats', { token })
+}
+
+/** GET /admin/patients — every non-doctor account. */
+export async function fetchAdminPatients(token: string): Promise<UserResponse[]> {
+  return request<UserResponse[]>('/admin/patients', { token })
+}
+
+/** GET /admin/doctors — every approved doctor, with their clinic links. */
+export async function fetchAdminDoctors(token: string): Promise<AdminDoctor[]> {
+  return request<AdminDoctor[]>('/admin/doctors', { token })
+}
+
+/**
+ * POST /admin/clinics — creates the clinic's Organization in Medplum, then
+ * the local row; `medplum_organisation_id` is derived server-side.
+ */
+/** GET /admin/clinics — every clinic with its linked doctors. */
+export async function listAdminClinics(token: string): Promise<AdminClinic[]> {
+  return request<AdminClinic[]>('/admin/clinics', { token })
+}
+
+/** GET /clinics/directory — public partner-clinic list for "Find a clinic". */
+export async function listClinicDirectory(): Promise<PublicClinic[]> {
+  return request<PublicClinic[]>('/clinics/directory')
+}
+
+/** POST /admin/clinics/picture — upload a photo; send `picture` on create/update. */
+export async function uploadClinicPicture(
+  token: string,
+  file: File,
+): Promise<{ picture: string; picture_url: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request('/admin/clinics/picture', { method: 'POST', formData, token })
+}
+
+/** PATCH /admin/clinics/{id} — only the fields sent change; "" clears optional ones. */
+export async function updateClinic(
+  token: string,
+  clinicId: string,
+  payload: Partial<ClinicCreatePayload>,
+): Promise<Clinic> {
+  return request<Clinic>(`/admin/clinics/${clinicId}`, { method: 'PATCH', body: payload, token })
+}
+
+/** DELETE /admin/clinics/{id} — also unlinks its doctors. */
+export async function deleteClinic(token: string, clinicId: string): Promise<void> {
+  await request(`/admin/clinics/${clinicId}`, { method: 'DELETE', token })
+}
+
+export async function createClinic(
+  token: string,
+  payload: ClinicCreatePayload,
+): Promise<Clinic> {
+  return request<Clinic>('/admin/clinics', {
+    method: 'POST',
+    body: payload,
+    token,
+  })
+}
+
+// ---------------------------------------------------------- family members
+
+/** backend enumModel.FamilyRelationship */
+export const FAMILY_RELATIONSHIPS = [
+  'mother',
+  'father',
+  'son',
+  'daughter',
+  'brother',
+  'sister',
+  'husband',
+  'wife',
+  'grandmother',
+  'grandfather',
+  'grandson',
+  'granddaughter',
+  'uncle',
+  'aunt',
+  'nephew',
+  'niece',
+  'cousin',
+  'other',
+] as const
+export type FamilyRelationship = (typeof FAMILY_RELATIONSHIPS)[number]
+
+/** backend FamilyMemberRead. */
+export interface FamilyMemberRecord {
+  id: string
+  account_owner_id: string
+  full_name: string
+  email: string | null
+  /** Phone the member can log in with once they activate their account. */
+  number: string | null
+  medplum_patient_id: string | null
+  linked_user_id: string | null
+  /** True once the member activated their own login from the invite. */
+  has_account: boolean
+  /** Photo as a data URL. */
+  profile: string | null
+  relationship_to_owner: FamilyRelationship | null
+  date_of_birth: string
+  gender: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** backend FamilyMemberCreate. */
+export interface FamilyMemberCreatePayload {
+  full_name: string
+  relationship_to_owner: FamilyRelationship
+  /** YYYY-MM-DD */
+  date_of_birth: string
+  gender?: string | null
+  profile?: string | null
+  email?: string | null
+  number?: string | null
+}
+
+/** GET /family-members — the caller's family profiles. */
+export async function listFamilyMembers(token: string): Promise<FamilyMemberRecord[]> {
+  return request<FamilyMemberRecord[]>('/family-members', { token })
+}
+
+/** POST /family-members */
+export async function createFamilyMember(
+  token: string,
+  payload: FamilyMemberCreatePayload,
+): Promise<FamilyMemberRecord> {
+  return request<FamilyMemberRecord>('/family-members', {
+    method: 'POST',
+    body: payload,
+    token,
+  })
+}
+
+/** POST /family-members/{member_id}/invite — emails the member an activation code. */
+export async function inviteFamilyMember(
+  token: string,
+  memberId: string,
+): Promise<{ detail: string; has_account: boolean }> {
+  return request(`/family-members/${memberId}/invite`, { method: 'POST', token })
+}
+
+/** POST /users/family-invite/request — the member asks for a (new) activation code. */
+export async function requestFamilyInvite(email: string): Promise<{ detail: string }> {
+  return request('/users/family-invite/request', { method: 'POST', body: { email } })
+}
+
+/** POST /users/family-invite/accept — code + password creates the member's login. */
+export async function acceptFamilyInvite(payload: {
+  email: string
+  otp: string
+  password: string
+  number?: string
+}): Promise<TokenResponse> {
+  return request<TokenResponse>('/users/family-invite/accept', { method: 'POST', body: payload })
+}
+
+/** DELETE /family-members/{member_id} */
+export async function deleteFamilyMember(token: string, memberId: string): Promise<void> {
+  await request(`/family-members/${memberId}`, { method: 'DELETE', token })
+}
+
+// ---------------------------------------------------------- symptom checker
+
+/** backend schemas/prediction.SymptomRead */
+export interface Symptom {
+  /** Send this back in predictDisease(), e.g. "high_fever". */
+  id: string
+  /** Human-readable, e.g. "High fever". */
+  label: string
+  /** Severity 1 (mild) .. 7 (serious). */
+  weight: number
+}
+
+/** backend schemas/prediction.DiseasePrediction */
+export interface DiseasePrediction {
+  disease: string
+  label: string
+  /** 0..1 — relative likelihood among the 41 known conditions. */
+  probability: number
+  description: string
+  precautions: string[]
+}
+
+/** backend schemas/prediction.Gender */
+export const GENDERS = [
+  { value: 'male', label: 'Male' },
+  { value: 'female', label: 'Female' },
+  { value: 'other', label: 'Other' },
+  { value: 'prefer_not_to_say', label: 'Prefer not to say' },
+] as const
+export type Gender = (typeof GENDERS)[number]['value']
+
+/** backend schemas/prediction.Duration — how long the symptoms have lasted. */
+export const SYMPTOM_DURATIONS = [
+  { value: 'today', label: 'Today' },
+  { value: 'few_days', label: '1–6 days' },
+  { value: 'week', label: '1–4 weeks' },
+  { value: 'longer', label: 'Over a month' },
+] as const
+export type SymptomDuration = (typeof SYMPTOM_DURATIONS)[number]['value']
+
+/** Who the check is for. Feeds the urgency safety rules, not the model. */
+export interface PatientDetails {
+  age: number
+  gender: Gender
+  duration: SymptomDuration
+  /** Free text the symptoms were parsed from; red flags in it raise urgency. */
+  description?: string
+}
+
+/** backend schemas/prediction.ParseResponse */
+export interface ParsedSymptoms {
+  /** Confidently matched; pre-select these. */
+  symptoms: Symptom[]
+  /** Vague words (e.g. "blood") with the symptoms they could mean. */
+  suggestions: { phrase: string; options: Symptom[] }[]
+  duration: SymptomDuration | null
+  /** Urgent-care warnings to show straight away. */
+  red_flags: string[]
+}
+
+/** POST /symptoms/parse — "vomiting for two days and there's blood" → symptoms to confirm. */
+export async function parseSymptoms(token: string, text: string): Promise<ParsedSymptoms> {
+  return request<ParsedSymptoms>('/symptoms/parse', { method: 'POST', body: { text }, token })
+}
+
+/** backend schemas/prediction.PredictResponse */
+export interface PredictionResult {
+  /** The normalised symptom ids that were used. */
+  symptoms: string[]
+  /** Most likely first (top 3). */
+  predictions: DiseasePrediction[]
+  urgency: 'low' | 'medium' | 'high'
+  /** Why the urgency is what it is, e.g. "Adults 65 and over are at higher risk." */
+  urgency_reasons: string[]
+  disclaimer: string
+  /** Id of the saved history entry. */
+  check_id: string | null
+}
+
+/** backend schemas/prediction.SymptomCheckRead — one saved check. */
+export interface SymptomCheck {
+  id: string
+  created_at: string
+  /** Who the check was about. */
+  subject_name: string
+  family_member_id: string | null
+  run_by_name: string
+  /** The viewer ran it. */
+  is_mine: boolean
+  /** The viewer is the patient. */
+  about_me: boolean
+  age: number | null
+  gender: string | null
+  duration: SymptomDuration | null
+  symptoms: Symptom[]
+  predictions: { disease: string; label: string; probability: number }[]
+  urgency: 'low' | 'medium' | 'high'
+  urgency_reasons: string[]
+  synced_to_medplum: boolean
+}
+
+/**
+ * GET /checks — your checks, the ones you ran for family, and the ones
+ * family ran about you. Pass memberId for one family member's history.
+ */
+export async function listChecks(token: string, memberId?: string): Promise<SymptomCheck[]> {
+  const query = memberId ? `?member_id=${encodeURIComponent(memberId)}` : ''
+  return request<SymptomCheck[]>(`/checks${query}`, { token })
+}
+
+/** GET /symptoms — every symptom the model knows, for the picker. */
+export async function listSymptoms(token: string): Promise<Symptom[]> {
+  return request<Symptom[]>('/symptoms', { token })
+}
+
+/**
+ * POST /predict — top 3 likely conditions for the given symptom ids
+ * (from listSymptoms). Patient details only adjust the urgency flag.
+ * Not a diagnosis; show the disclaimer with the result.
+ */
+export async function predictDisease(
+  token: string,
+  symptoms: string[],
+  patient?: PatientDetails,
+  familyMemberId?: string,
+): Promise<PredictionResult> {
+  return request<PredictionResult>('/predict', {
+    method: 'POST',
+    // Saved to history; family_member_id files it under that member.
+    body: { symptoms, ...patient, family_member_id: familyMemberId },
+    token,
+  })
+}
 
 /** Turns the AvatarUpload data URL into a File for the multipart request. */
 export async function dataUrlToFile(

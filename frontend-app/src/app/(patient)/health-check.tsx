@@ -19,7 +19,7 @@ import {
   type HealthCheckAnswers,
   type HealthCheckResult,
 } from '@/data/health-check';
-import { ageFromDob, fullName } from '@/lib/format';
+import { ageFromDob, fullName, relationshipLabel } from '@/lib/format';
 import { selectionFeedback, successFeedback, warningFeedback } from '@/lib/haptics';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuthStore } from '@/store/authStore';
@@ -152,7 +152,7 @@ export default function HealthCheckScreen() {
               <SubjectRow
                 key={member.id}
                 name={member.name}
-                detail={`${member.relation} · ${member.age} yrs`}
+                detail={`${relationshipLabel(member.relation)} · ${member.age} yrs`}
                 selected={subjectId === member.id}
                 onPress={() => setSubjectId(member.id)}
               />

@@ -27,7 +27,11 @@ logger = logging.getLogger(__name__)
 
 
 def upload_avatar(file: UploadFile) -> str:
-    #Validate an uploaded image and store it in R2. Returns the object key.
+    return upload_image(file, "avatars")
+
+
+def upload_image(file: UploadFile, folder: str) -> str:
+    #Validate an uploaded image and store it in R2 under ``folder``. Returns the object key.
 
     #Synchronous on purpose: the service layer is sync, so the bytes are read
   #  straight off the SpooledTemporaryFile instead of awaiting UploadFile.read().
@@ -51,7 +55,7 @@ def upload_avatar(file: UploadFile) -> str:
     except Exception:
         raise HTTPException(400, "Invalid image")
 
-    key = f"avatars/{uuid.uuid4()}.{EXT[file.content_type]}"
+    key = f"{folder}/{uuid.uuid4()}.{EXT[file.content_type]}"
     try:
         s3.put_object(
             Bucket=BUCKET, Key=key, Body=data, ContentType=file.content_type
@@ -60,7 +64,7 @@ def upload_avatar(file: UploadFile) -> str:
         # A storage misconfiguration is ours, not the caller's, and must not be
         # reported as some unrelated failure further up the stack.
         logger.exception("R2 upload failed for bucket %s", BUCKET)
-        raise HTTPException(502, f"Avatar upload failed: {exc}") from exc
+        raise HTTPException(502, f"Image upload failed: {exc}") from exc
     return key
 
 

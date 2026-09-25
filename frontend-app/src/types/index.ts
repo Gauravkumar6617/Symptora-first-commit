@@ -88,21 +88,69 @@ export interface UserResponse extends UserBase {
   updated_at: string;
   is_active: boolean;
   id_doctor: boolean;
+  is_admin?: boolean;
+  /** Presigned, short-lived url for `avatar` (which is only a storage key). */
+  avatar_url?: string | null;
+}
+
+/** backend: enumModel.Status — a doctor application's review state. */
+export type DoctorApplicationStatus = 'pending' | 'approved' | 'rejected';
+
+/** backend: CurrentUserResponse — GET/PATCH /api/v1/users/me. */
+export interface CurrentUserResponse extends UserResponse {
+  doctor_status?: DoctorApplicationStatus | null;
+  specialization?: string | null;
 }
 
 /**
- * The signed-in user as the app holds it: the API shape plus the UI-only
- * bits (role derived from `id_doctor`, doctor specialization).
+ * The signed-in user as the app holds it: the /users/me shape plus the
+ * UI-only role, derived from `id_doctor` exactly as the website does.
  */
 export interface AuthUser extends UserResponse {
   role: UserRole;
   specialization?: string;
+  doctor_status?: DoctorApplicationStatus | null;
 }
 
 export interface AuthSession {
   user: AuthUser;
   accessToken?: string;
   refreshToken?: string;
+}
+
+/** backend: ClinicRead — GET /api/v1/clinics. */
+export interface ClinicRecord {
+  id: string;
+  name: string;
+  picture: string;
+  description?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  medplum_organisation_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** backend: schemas/clinic.PublicClinicRead — GET /clinics/directory. */
+export interface PublicClinic {
+  id: string;
+  name: string;
+  picture_url: string | null;
+  description: string | null;
+  address: string | null;
+  phone: string | null;
+  /** Approved doctors working there. */
+  doctors: { id: string; name: string; specialization: string }[];
+}
+
+/** backend: DoctorClinicRead — the calling doctor's link to one clinic. */
+export interface DoctorClinicLink {
+  id: string;
+  doctor_profile_id: string;
+  clinic_id: string;
+  medplum_practitioner_role_id?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 /** Field-level errors keyed by the payload field name. */
@@ -114,7 +162,40 @@ export interface FamilyMember {
   relation: FamilyRelationship;
   age: number;
   gender?: Gender;
-  lastCheck: string;
+  email?: string;
+  /** Phone they log in with once they activate their account. */
+  number?: string;
+  /** They activated their own login and see their checks too. */
+  hasAccount: boolean;
+}
+
+/** backend: schemas/family_member.FamilyMemberRead */
+export interface FamilyMemberRecord {
+  id: string;
+  account_owner_id: string;
+  full_name: string;
+  email: string | null;
+  number: string | null;
+  medplum_patient_id: string | null;
+  linked_user_id: string | null;
+  has_account: boolean;
+  profile: string | null;
+  relationship_to_owner: FamilyRelationship | null;
+  date_of_birth: string;
+  gender: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** backend: schemas/family_member.FamilyMemberCreate */
+export interface FamilyMemberCreatePayload {
+  full_name: string;
+  relationship_to_owner: FamilyRelationship;
+  /** YYYY-MM-DD */
+  date_of_birth: string;
+  gender?: Gender | null;
+  email?: string | null;
+  number?: string | null;
 }
 
 export interface Appointment {
@@ -130,14 +211,6 @@ export interface Appointment {
   reason?: string;
 }
 
-export interface Doctor {
-  id: string;
-  name: string;
-  specialization: string;
-  clinic: string;
-  rating: number;
-  avatarUrl?: string;
-}
 
 export interface RiskCheck {
   id: string;
@@ -157,4 +230,94 @@ export interface AppNotification {
   createdAt: string;
   kind: 'appointment' | 'result' | 'reminder' | 'system';
   read: boolean;
+}
+
+// ---------------------------------------------------------- symptom checker
+
+/** backend: schemas/prediction.SymptomRead */
+export interface Symptom {
+  /** Send this back in predictDisease(), e.g. "high_fever". */
+  id: string;
+  /** Human-readable, e.g. "High fever". */
+  label: string;
+  /** Severity 1 (mild) .. 7 (serious). */
+  weight: number;
+}
+
+/** backend: schemas/prediction.DiseasePrediction */
+export interface DiseasePrediction {
+  disease: string;
+  label: string;
+  /** 0..1 — relative likelihood among the 41 known conditions. */
+  probability: number;
+  description: string;
+  precautions: string[];
+}
+
+/** backend: schemas/prediction.Duration — how long the symptoms have lasted. */
+export const SYMPTOM_DURATIONS = ['today', 'few_days', 'week', 'longer'] as const;
+export type SymptomDuration = (typeof SYMPTOM_DURATIONS)[number];
+
+export const SYMPTOM_DURATION_LABELS: Record<SymptomDuration, string> = {
+  today: 'Today',
+  few_days: '1–6 days',
+  week: '1–4 weeks',
+  longer: 'Over a month',
+};
+
+/** Who the check is for. Feeds the urgency safety rules, not the model. */
+export interface PatientDetails {
+  age: number;
+  gender: Gender;
+  duration: SymptomDuration;
+  /** Free text the symptoms were parsed from; red flags in it raise urgency. */
+  description?: string;
+}
+
+/** backend: schemas/prediction.ParseResponse */
+export interface ParsedSymptoms {
+  /** Confidently matched; pre-select these. */
+  symptoms: Symptom[];
+  /** Vague words (e.g. "blood") with the symptoms they could mean. */
+  suggestions: { phrase: string; options: Symptom[] }[];
+  duration: SymptomDuration | null;
+  /** Urgent-care warnings to show straight away. */
+  red_flags: string[];
+}
+
+/** backend: schemas/prediction.PredictResponse */
+export interface PredictionResult {
+  /** The normalised symptom ids that were used. */
+  symptoms: string[];
+  /** Most likely first (top 3). */
+  predictions: DiseasePrediction[];
+  urgency: RiskLevel;
+  /** Why the urgency is what it is, e.g. "Adults 65 and over are at higher risk." */
+  urgency_reasons: string[];
+  disclaimer: string;
+  /** Id of the saved history entry. */
+  check_id?: string | null;
+}
+
+/** backend: schemas/prediction.SymptomCheckRead — one saved check. */
+export interface SymptomCheck {
+  id: string;
+  created_at: string;
+  /** Who the check was about. */
+  subject_name: string;
+  /** The viewer's family profile it's about, if any. */
+  family_member_id: string | null;
+  run_by_name: string;
+  /** The viewer ran it. */
+  is_mine: boolean;
+  /** The viewer is the patient. */
+  about_me: boolean;
+  age: number | null;
+  gender: string | null;
+  duration: SymptomDuration | null;
+  symptoms: Symptom[];
+  predictions: { disease: string; label: string; probability: number }[];
+  urgency: RiskLevel;
+  urgency_reasons: string[];
+  synced_to_medplum: boolean;
 }

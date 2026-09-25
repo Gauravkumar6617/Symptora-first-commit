@@ -1,6 +1,11 @@
 import enum
 
 
+class Status(str,enum.Enum):
+    PENDING="pending"
+    APPROVED="approved"
+    REJECTED="rejected"
+
 class RiskLevel(str, enum.Enum):
     LOW = "low"
     MEDIUM = "medium"

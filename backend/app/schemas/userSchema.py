@@ -2,8 +2,10 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import Form
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from fastapi.exceptions import RequestValidationError
+from pydantic import BaseModel, EmailStr, Field, ValidationError, model_validator
 
+from app.models.enumModel import Status
 from app.schemas.common import ORMReadBase
 from app.utils.integration.cloudflarR2.index import file_url
 
@@ -69,11 +71,45 @@ class UserUpdate(BaseModel):
     avatar: Optional[str] = None
     gender: Optional[str] = None
 
+    @classmethod
+    def as_form(
+        cls,
+        first_name: Optional[str] = Form(None),
+        last_name: Optional[str] = Form(None),
+        number: Optional[str] = Form(None),
+        address: Optional[str] = Form(None),
+        gender: Optional[str] = Form(None),
+    ) -> "UserUpdate":
+        """Parse a profile edit from multipart/form-data.
+
+        Only the fields actually sent are set, so ``exclude_unset`` leaves the
+        rest alone. An empty ``address``/``gender`` clears it. ``avatar`` is
+        set from the uploaded file, never from a client-supplied key.
+        """
+        values = {
+            "first_name": first_name,
+            "last_name": last_name,
+            "number": number,
+            "address": address,
+            "gender": gender,
+        }
+        sent = {key: value for key, value in values.items() if value is not None}
+        for clearable in ("address", "gender"):
+            if sent.get(clearable) == "":
+                sent[clearable] = None
+        try:
+            return cls(**sent)
+        except ValidationError as e:
+            # Report bad fields as a 422 instead of an unhandled 500.
+            raise RequestValidationError(e.errors())
+
 
 class UserResponse(UserBase, ORMReadBase):
-    medplum_patient_id: str
+    # Nullable in the DB — not every account has a Medplum Patient yet.
+    medplum_patient_id: Optional[str] = None
     is_active: bool
     id_doctor: bool
+    is_admin: bool
     # Presigned, short-lived download url derived from ``avatar``.
     avatar_url: Optional[str] = None
 
@@ -83,9 +119,31 @@ class UserResponse(UserBase, ORMReadBase):
             self.avatar_url = file_url(self.avatar)
         return self
 
+class CurrentUserResponse(UserResponse):
+    """GET/PATCH /users/me — the account plus its doctor application, so
+    every client derives the same role from one response."""
+
+    # None when the user never applied to become a doctor.
+    doctor_status: Optional[Status] = None
+    specialization: Optional[str] = None
+
+
 class UserLogin(BaseModel):
-    email:EmailStr
-    password:str
+    # Email or phone number; family members often only know their number.
+    email: str = Field(min_length=3, max_length=255)
+    password: str
+
+
+class FamilyInviteRequest(BaseModel):
+    email: EmailStr
+
+
+class FamilyInviteAccept(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+    password: str = Field(min_length=8, max_length=72)
+    # Only needed when the owner didn't add a number for them.
+    number: Optional[str] = Field(default=None, max_length=15)
 
 
 class TokenResponse(BaseModel):

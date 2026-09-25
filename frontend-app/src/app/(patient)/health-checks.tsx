@@ -13,7 +13,7 @@ import { StackHeader } from '@/components/ui/stack-header';
 import { Radius, RiskTone, Spacing, Typography, tint } from '@/constants/theme';
 import { relativeTime } from '@/lib/format';
 import { useTheme } from '@/hooks/use-theme';
-import { useHealthCheckStore } from '@/store/healthCheckStore';
+import { useHealthHistory } from '@/hooks/use-health-history';
 import type { RiskLevel } from '@/types';
 
 const filters: { value: RiskLevel | 'all'; label: string }[] = [
@@ -26,7 +26,7 @@ const filters: { value: RiskLevel | 'all'; label: string }[] = [
 export default function HealthCheckHistoryScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const checks = useHealthCheckStore((state) => state.checks);
+  const { checks } = useHealthHistory();
   const [filter, setFilter] = useState<RiskLevel | 'all'>('all');
 
   const visible = useMemo(
@@ -110,7 +110,8 @@ export default function HealthCheckHistoryScreen() {
       <Card variant="muted" style={styles.note}>
         <Ionicons name="shield-checkmark-outline" size={16} color={theme.primary} />
         <Text style={[styles.noteText, { color: theme.textSecondary }]}>
-          History is stored on this device and synced to your Symptora record.
+          Symptom checks are saved to your Symptora record and shared with family who have their own login.
+          Questionnaire Health Checks stay on this device.
         </Text>
       </Card>
     </Screen>

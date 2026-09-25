@@ -11,7 +11,7 @@ import { SelectField } from '@/components/ui/select-field';
 import { StackHeader } from '@/components/ui/stack-header';
 import { TextField } from '@/components/ui/text-field';
 import { MaxFormWidth, Spacing, Typography } from '@/constants/theme';
-import { ApiError, updateUser } from '@/lib/api';
+import { ApiError, updateMyProfile } from '@/lib/api';
 import { formatDate, fullName } from '@/lib/format';
 import { successFeedback } from '@/lib/haptics';
 import {
@@ -36,7 +36,7 @@ export default function EditProfileScreen() {
     last_name: user?.last_name ?? '',
     number: user?.number ?? '',
     address: user?.address ?? '',
-    avatar: user?.avatar ?? null,
+    avatar: user?.avatar_url ?? null,
     gender: (user?.gender as Gender | null) ?? null,
   });
   const [errors, setErrors] = useState<Partial<Record<keyof ProfileForm, string>>>({});
@@ -56,9 +56,9 @@ export default function EditProfileScreen() {
 
     setLoading(true);
     try {
-      // PATCH /api/v1/users/{id} — backend UserUpdate fields only.
+      // PATCH /api/v1/users/me — the same endpoint the website saves to.
       const payload = profileFormToPayload(form);
-      const updated = await updateUser(user?.id ?? '', payload, accessToken ?? undefined);
+      const updated = await updateMyProfile(payload, accessToken);
       updateProfile(updated);
       successFeedback();
       router.back();

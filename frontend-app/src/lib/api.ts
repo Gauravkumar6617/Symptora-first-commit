@@ -2,30 +2,35 @@
  * API layer.
  *
  * Auth calls hit the real FastAPI backend when EXPO_PUBLIC_API_URL is set
- * (see backend/app/routers/userRouter.py). Catalog/appointment data is still
- * served from src/data/* mocks — each fetch* below is a one-line swap to a
- * request once those routes exist.
+ * (see backend/app/routers/userRouter.py). The signed-in user always comes
+ * from GET /users/me — the same source the website uses. Catalog/appointment data is still
+ * served from src/data/mock/* — each fetch* below is a one-line swap to a
+ * request once those routes exist. `src/data/specialties.ts` is NOT mock;
+ * it's real static content this app ships with.
  */
 
-import { blogPosts, catalogDoctors, clinics, specialties } from '@/data/catalog';
-import {
-  mockAppointments,
-  mockDoctor,
-  mockDoctorAppointments,
-  mockDoctors,
-  mockFamilyMembers,
-  mockNotifications,
-  mockPatient,
-  mockRiskChecks,
-} from '@/data/mockData';
+import { blogPosts, catalogDoctors, partnerClinics } from '@/data/mock/directory';
+import { mockNotifications, mockPatient } from '@/data/mock/people';
+import { useAuthStore } from '@/store/authStore';
+import { specialties } from '@/data/specialties';
 import type {
   Appointment,
   AppNotification,
   AuthSession,
   AuthUser,
-  Doctor,
+  ClinicRecord,
+  CurrentUserResponse,
+  DoctorClinicLink,
   FamilyMember,
-  RiskCheck,
+  FamilyMemberCreatePayload,
+  FamilyMemberRecord,
+  Gender,
+  ParsedSymptoms,
+  PatientDetails,
+  PredictionResult,
+  PublicClinic,
+  Symptom,
+  SymptomCheck,
   UserCreatePayload,
   UserResponse,
   UserUpdatePayload,
@@ -50,6 +55,11 @@ export class ApiError extends Error {
   }
 }
 
+/** Demo mode only: the signed-in user, to merge a local-only edit into. */
+function currentUserSnapshot(): AuthUser {
+  return useAuthStore.getState().user ?? mockPatient;
+}
+
 const delay = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
 
 interface RequestOptions extends Omit<RequestInit, 'body'> {
@@ -71,6 +81,8 @@ async function request<T>(
 
   const requestHeaders: Record<string, string> = {
     Accept: 'application/json',
+    // Skips ngrok's free-tier browser warning page when tunnelling the API.
+    'ngrok-skip-browser-warning': 'true',
     ...(headers as Record<string, string> | undefined),
   };
   if (token) requestHeaders.Authorization = `Bearer ${token}`;
@@ -94,14 +106,23 @@ async function request<T>(
       headers: requestHeaders,
       body: payload,
     });
-  } catch {
-    throw new ApiError('Could not reach the server. Check your connection.', 0);
+  } catch (error) {
+    // In development, show the device's own reason (e.g. a bad file URI in a
+    // multipart upload fails here too, not only a real network problem).
+    const reason = __DEV__ && error instanceof Error ? ` (${error.message})` : '';
+    throw new ApiError(`Could not reach the server. Check your connection.${reason}`, 0);
   }
 
   const text = await response.text();
   const data = text ? safeJsonParse(text) : null;
 
   if (!response.ok) {
+    // Access tokens expire after 30 minutes and there's no refresh endpoint,
+    // so a rejected token ends the session; the route guards send to login.
+    if (response.status === 401 && token) {
+      useAuthStore.getState().logout();
+      throw new ApiError('Your session has expired. Please log in again.', 401);
+    }
     throw toApiError(data, response.status, text);
   }
 
@@ -139,12 +160,17 @@ function toApiError(data: unknown, status: number, fallback: string): ApiError {
   return new ApiError(status ? `Request failed (${status}).` : fallback || 'Request failed.', status);
 }
 
-/** UserResponse → AuthUser (adds the UI-only role field). */
-export function toAuthUser(user: UserResponse, specialization?: string): AuthUser {
+/**
+ * /users/me → AuthUser. Role comes from the server's `id_doctor` flag only —
+ * the same rule the website uses — so both clients always agree.
+ */
+export function toAuthUser(user: UserResponse | CurrentUserResponse): AuthUser {
+  const me = user as CurrentUserResponse;
   return {
     ...user,
     role: user.id_doctor ? 'doctor' : 'patient',
-    specialization,
+    specialization: me.specialization ?? undefined,
+    doctor_status: me.doctor_status ?? null,
   };
 }
 
@@ -215,60 +241,59 @@ export async function verifyRegistrationOtp(email: string, otp: string): Promise
   return toAuthUser(user);
 }
 
+/** GET /api/v1/users/me — the account the bearer token belongs to. */
+export async function fetchCurrentUser(token: string): Promise<AuthUser> {
+  const user = await request<CurrentUserResponse>('/users/me', { token });
+  return toAuthUser(user);
+}
+
 /**
- * POST /api/v1/users/login — see backend/app/routers/userRouter.py. Returns a
- * bearer token; there is no /users/me yet, so the session user is built from
- * what was typed until that route lands.
+ * POST /api/v1/users/login, then GET /users/me. The role is whatever the
+ * server says the account is — never picked on the login screen.
  */
-export async function loginUser(email: string, password: string, asDoctor = false): Promise<AuthSession> {
+/** `email` may also be the phone number (family members often only know that). */
+export async function loginUser(email: string, password: string): Promise<AuthSession> {
   if (isDemoMode) {
     await delay(450);
     if (password.length < 8) {
       throw new ApiError('Incorrect email or password.', 401);
     }
-    const base = asDoctor ? mockDoctor : mockPatient;
-    return { user: { ...base, email } };
+    return { user: { ...mockPatient, email } };
   }
 
   const tokens = await request<{ access_token: string; token_type: string }>('/users/login', {
     method: 'POST',
     body: { email, password },
   });
-
-  const now = new Date().toISOString();
-  const user = toAuthUser({
-    id: email,
-    created_at: now,
-    updated_at: now,
-    is_active: true,
-    id_doctor: asDoctor,
-    first_name: email.split('@')[0],
-    last_name: '',
-    email,
-    number: '',
-    address: null,
-    avatar: null,
-    date_of_birth: now,
-    gender: null,
-  });
-
+  const user = await fetchCurrentUser(tokens.access_token);
   return { user, accessToken: tokens.access_token };
 }
 
-/** PATCH /api/v1/users/{id} — backend UserUpdate. */
-export async function updateUser(
-  userId: string,
-  payload: UserUpdatePayload,
-  token?: string,
-): Promise<Partial<AuthUser>> {
-  if (isDemoMode) {
+/**
+ * PATCH /api/v1/users/me — multipart, like registration, so a newly picked
+ * avatar (a local file URI) is uploaded as a file part. An avatar that is
+ * already a remote url is the unchanged current one and is not re-sent.
+ */
+export async function updateMyProfile(payload: UserUpdatePayload, token?: string | null): Promise<AuthUser> {
+  if (isDemoMode || !token) {
     await delay(400);
-    return payload as Partial<AuthUser>;
+    const current = currentUserSnapshot();
+    return { ...current, ...payload, avatar_url: payload.avatar ?? null } as AuthUser;
   }
 
-  const user = await request<UserResponse>(`/users/${userId}`, {
+  const formData = new FormData();
+  if (payload.first_name !== undefined) formData.append('first_name', payload.first_name);
+  if (payload.last_name !== undefined) formData.append('last_name', payload.last_name);
+  if (payload.number !== undefined) formData.append('number', payload.number);
+  if (payload.address !== undefined) formData.append('address', payload.address ?? '');
+  if (payload.gender !== undefined) formData.append('gender', payload.gender ?? '');
+  if (payload.avatar && !/^https?:\/\//.test(payload.avatar)) {
+    formData.append('avatar', uriToFilePart(payload.avatar));
+  }
+
+  const user = await request<CurrentUserResponse>('/users/me', {
     method: 'PATCH',
-    body: payload,
+    formData,
     token,
   });
   return toAuthUser(user);
@@ -282,31 +307,115 @@ export async function requestPasswordReset(email: string): Promise<void> {
   await request('/auth/forgot-password', { method: 'POST', body: { email } });
 }
 
+// ---------------------------------------------------------- family members
+//
+// Screens read family members from useFamilyStore, which calls these and
+// falls back to on-device storage in demo mode (no EXPO_PUBLIC_API_URL).
+
+/** The backend stores a date of birth; the app only asks for an age. */
+export function ageToDateOfBirth(age: number): string {
+  const today = new Date();
+  const year = today.getUTCFullYear() - age;
+  const month = String(today.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(today.getUTCDate()).padStart(2, '0');
+  // 29 Feb in a non-leap year rolls to 1 Mar, which is still the right age.
+  return new Date(`${year}-${month}-${day}T00:00:00Z`).toISOString().slice(0, 10);
+}
+
+export function ageFromDateOfBirth(dateOfBirth: string): number {
+  const dob = new Date(`${dateOfBirth.slice(0, 10)}T00:00:00Z`);
+  const now = new Date();
+  let age = now.getUTCFullYear() - dob.getUTCFullYear();
+  const beforeBirthday =
+    now.getUTCMonth() < dob.getUTCMonth() ||
+    (now.getUTCMonth() === dob.getUTCMonth() && now.getUTCDate() < dob.getUTCDate());
+  if (beforeBirthday) age -= 1;
+  return Math.max(age, 0);
+}
+
+export function toFamilyMember(record: FamilyMemberRecord): FamilyMember {
+  return {
+    id: record.id,
+    name: record.full_name,
+    relation: record.relationship_to_owner ?? 'other',
+    age: ageFromDateOfBirth(record.date_of_birth),
+    gender: (record.gender as Gender | null) ?? undefined,
+    email: record.email ?? undefined,
+    number: record.number ?? undefined,
+    hasAccount: record.has_account,
+  };
+}
+
+/** GET /api/v1/family-members — the caller's family profiles. */
+export async function fetchFamilyMembers(token: string): Promise<FamilyMemberRecord[]> {
+  return request<FamilyMemberRecord[]>('/family-members', { token });
+}
+
+/** POST /api/v1/family-members */
+export async function createFamilyMember(
+  token: string,
+  payload: FamilyMemberCreatePayload,
+): Promise<FamilyMemberRecord> {
+  return request<FamilyMemberRecord>('/family-members', { method: 'POST', body: payload, token });
+}
+
+/** POST /api/v1/family-members/{member_id}/invite — emails the member an activation code. */
+export async function inviteFamilyMember(
+  token: string,
+  memberId: string,
+): Promise<{ detail: string; has_account: boolean }> {
+  return request(`/family-members/${memberId}/invite`, { method: 'POST', token });
+}
+
+/** POST /api/v1/users/family-invite/request — the member asks for a (new) activation code. */
+export async function requestFamilyInvite(email: string): Promise<string> {
+  const { detail } = await request<{ detail: string }>('/users/family-invite/request', {
+    method: 'POST',
+    body: { email },
+  });
+  return detail;
+}
+
+/** POST /api/v1/users/family-invite/accept — code + password creates the member's login. */
+export async function acceptFamilyInvite(payload: {
+  email: string;
+  otp: string;
+  password: string;
+  number?: string;
+}): Promise<AuthSession> {
+  const tokens = await request<{ access_token: string; token_type: string }>(
+    '/users/family-invite/accept',
+    { method: 'POST', body: payload },
+  );
+  const user = await fetchCurrentUser(tokens.access_token);
+  return { user, accessToken: tokens.access_token };
+}
+
+/** DELETE /api/v1/family-members/{member_id} */
+export async function deleteFamilyMember(token: string, memberId: string): Promise<void> {
+  await request(`/family-members/${memberId}`, { method: 'DELETE', token });
+}
+
 // ------------------------------------------------------- mocked resources
-
-export async function fetchFamilyMembers(): Promise<FamilyMember[]> {
-  await delay();
-  return mockFamilyMembers;
-}
-
-export async function fetchDoctors(): Promise<Doctor[]> {
-  await delay();
-  return mockDoctors;
-}
+//
+// Health Check history is NOT fetched from here — the app reads/writes it
+// from useHealthCheckStore (backed by on-device AsyncStorage), which starts
+// empty for a new user. There is no fetchRiskChecks; don't add screens that
+// call one.
+//
+// Appointments start empty too — there is no booking flow or backend route
+// yet, so there is nothing real to seed a new user with. `mockAppointments`/
+// `mockDoctorAppointments` in src/data/mock/people.ts are kept only as
+// sample shapes for whoever wires up the real appointments endpoint.
 
 export async function fetchPatientAppointments(): Promise<Appointment[]> {
   await delay();
-  return mockAppointments;
+  return [];
 }
 
 export async function fetchDoctorAppointments(): Promise<Appointment[]> {
   await delay();
-  return mockDoctorAppointments;
-}
-
-export async function fetchRiskChecks(): Promise<RiskCheck[]> {
-  await delay();
-  return mockRiskChecks;
+  return [];
 }
 
 export async function fetchNotifications(): Promise<AppNotification[]> {
@@ -319,9 +428,24 @@ export async function fetchSpecialties() {
   return specialties;
 }
 
-export async function fetchClinics() {
-  await delay();
-  return clinics;
+/**
+ * GET /api/v1/clinics/directory — public partner-clinic list (the clinics
+ * admins add). Demo mode maps the sample clinics onto the same shape.
+ */
+export async function fetchClinics(): Promise<PublicClinic[]> {
+  if (isDemoMode) {
+    await delay();
+    return partnerClinics.map((clinic) => ({
+      id: clinic.id,
+      name: clinic.name,
+      picture_url: null,
+      description: `${clinic.openHours} · ${clinic.services.join(', ')}`,
+      address: `${clinic.address}, ${clinic.city}`,
+      phone: null,
+      doctors: [],
+    }));
+  }
+  return request<PublicClinic[]>('/clinics/directory');
 }
 
 export async function fetchCatalogDoctors() {
@@ -347,19 +471,173 @@ export async function sendContactMessage(payload: {
   await request('/support/contact', { method: 'POST', body: payload });
 }
 
-export async function submitDoctorApplication(payload: {
-  first_name: string;
-  last_name: string;
-  email: string;
-  number: string;
-  specialization: string;
-  license_number: string;
-  experience_years: string;
-  about: string;
-}): Promise<void> {
+/**
+ * POST /api/v1/doctor/promote — the same endpoint the website uses. The
+ * account stays a patient until an admin approves it.
+ */
+export async function submitDoctorApplication(
+  token: string | null | undefined,
+  payload: { specialization: string; license_number: string },
+): Promise<void> {
   if (isDemoMode) {
     await delay(700);
     return;
   }
-  await request('/doctors/applications', { method: 'POST', body: payload });
+  if (!token) {
+    throw new ApiError('Your session has expired. Please log in again.', 401);
+  }
+  await request('/doctor/promote', { method: 'POST', body: payload, token });
+}
+
+// ---------------------------------------------------------- doctor clinics
+
+const demoClinicOptions: ClinicRecord[] = [
+  {
+    id: 'demo-clinic-1',
+    name: 'Symptora City Clinic',
+    picture: '',
+    description: 'Demo clinic (no EXPO_PUBLIC_API_URL configured).',
+    address: null,
+    phone: null,
+    medplum_organisation_id: 'demo-org-1',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
+/** GET /api/v1/clinics — every clinic, e.g. for a doctor picking one to join. */
+export async function fetchClinicOptions(token: string): Promise<ClinicRecord[]> {
+  if (isDemoMode) {
+    await delay();
+    return demoClinicOptions;
+  }
+  return request<ClinicRecord[]>('/clinics', { token });
+}
+
+/** GET /api/v1/doctor/my-clinics — clinics the calling doctor is assigned to. */
+export async function fetchMyClinicLinks(token: string): Promise<DoctorClinicLink[]> {
+  if (isDemoMode) {
+    await delay();
+    return [];
+  }
+  return request<DoctorClinicLink[]>('/doctor/my-clinics', { token });
+}
+
+/**
+ * POST /api/v1/doctor/clinics/{clinic_id}/assign — links the calling
+ * (approved) doctor to a clinic, creating a PractitionerRole in Medplum.
+ */
+export async function assignDoctorToClinic(token: string, clinicId: string): Promise<DoctorClinicLink> {
+  if (isDemoMode) {
+    await delay(500);
+    const now = new Date().toISOString();
+    return {
+      id: `demo-link-${clinicId}`,
+      doctor_profile_id: 'demo-doctor',
+      clinic_id: clinicId,
+      medplum_practitioner_role_id: 'demo-role',
+      created_at: now,
+      updated_at: now,
+    };
+  }
+  return request<DoctorClinicLink>(`/doctor/clinics/${clinicId}/assign`, {
+    method: 'POST',
+    token,
+  });
+}
+
+// ---------------------------------------------------------- symptom checker
+
+const demoSymptoms: Symptom[] = [
+  { id: 'chills', label: 'Chills', weight: 3 },
+  { id: 'fatigue', label: 'Fatigue', weight: 4 },
+  { id: 'headache', label: 'Headache', weight: 3 },
+  { id: 'high_fever', label: 'High fever', weight: 7 },
+  { id: 'nausea', label: 'Nausea', weight: 5 },
+];
+
+/** GET /api/v1/symptoms — every symptom the model knows, for the picker. */
+export async function fetchSymptoms(token: string | null | undefined): Promise<Symptom[]> {
+  if (isDemoMode) {
+    await delay();
+    return demoSymptoms;
+  }
+  if (!token) {
+    throw new ApiError('Your session has expired. Please log in again.', 401);
+  }
+  return request<Symptom[]>('/symptoms', { token });
+}
+
+/** POST /api/v1/symptoms/parse — "vomiting for two days and there's blood" → symptoms to confirm. */
+export async function parseSymptoms(
+  token: string | null | undefined,
+  text: string,
+): Promise<ParsedSymptoms> {
+  if (isDemoMode) {
+    await delay();
+    const lower = text.toLowerCase();
+    return {
+      symptoms: demoSymptoms.filter((s) => lower.includes(s.label.toLowerCase())),
+      suggestions: [],
+      duration: null,
+      red_flags: [],
+    };
+  }
+  if (!token) {
+    throw new ApiError('Your session has expired. Please log in again.', 401);
+  }
+  return request<ParsedSymptoms>('/symptoms/parse', { method: 'POST', body: { text }, token });
+}
+
+/**
+ * POST /api/v1/predict — top 3 likely conditions for the given symptom ids
+ * (from fetchSymptoms). Patient details only adjust the urgency flag.
+ * Not a diagnosis; show the disclaimer with the result.
+ */
+export async function predictDisease(
+  token: string | null | undefined,
+  symptoms: string[],
+  patient?: PatientDetails,
+  familyMemberId?: string,
+): Promise<PredictionResult> {
+  if (isDemoMode) {
+    await delay(600);
+    return {
+      symptoms,
+      predictions: [
+        {
+          disease: 'malaria',
+          label: 'Malaria',
+          probability: 0.45,
+          description: 'Demo result (no EXPO_PUBLIC_API_URL configured).',
+          precautions: ['Consult nearest hospital', 'Keep mosquitos out'],
+        },
+      ],
+      urgency: 'medium',
+      urgency_reasons: ['Demo result.'],
+      disclaimer: 'This is not a medical diagnosis. Please consult a doctor.',
+    };
+  }
+  if (!token) {
+    throw new ApiError('Your session has expired. Please log in again.', 401);
+  }
+  return request<PredictionResult>('/predict', {
+    method: 'POST',
+    // Saved to history; family_member_id files it under that member.
+    body: { symptoms, ...patient, family_member_id: familyMemberId },
+    token,
+  });
+}
+
+/**
+ * GET /api/v1/checks — your checks, the ones you ran for family, and the
+ * ones family ran about you. Pass memberId for one family member's history.
+ */
+export async function fetchChecks(
+  token: string | null | undefined,
+  memberId?: string,
+): Promise<SymptomCheck[]> {
+  if (isDemoMode || !token) return [];
+  const query = memberId ? `?member_id=${encodeURIComponent(memberId)}` : '';
+  return request<SymptomCheck[]>(`/checks${query}`, { token });
 }

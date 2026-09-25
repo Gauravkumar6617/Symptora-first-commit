@@ -121,7 +121,7 @@ export function SpecialtyPage() {
                 specialist based on your symptoms.
               </p>
               <Link
-                to="/signup"
+                to="/symptom-checker"
                 className="mt-4 inline-block rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-primary-700 hover:bg-white/90"
               >
                 Start Health Check

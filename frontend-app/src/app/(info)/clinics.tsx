@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { useMemo, useState } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
 
@@ -9,39 +10,32 @@ import { Screen } from '@/components/ui/screen';
 import { SkeletonList } from '@/components/ui/skeleton';
 import { StackHeader } from '@/components/ui/stack-header';
 import { TextField } from '@/components/ui/text-field';
-import { Radius, Spacing, Typography, tint } from '@/constants/theme';
-import { clinicCities } from '@/data/catalog';
+import { Spacing, Typography, tint } from '@/constants/theme';
 import { useClinics } from '@/hooks/use-queries';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function ClinicsScreen() {
   const theme = useTheme();
-  const { data: clinics, isLoading } = useClinics();
+  const { data: clinics, isLoading, isError, refetch } = useClinics();
   const [query, setQuery] = useState('');
-  const [city, setCity] = useState<string | null>(null);
-
-  const cities = useMemo(() => clinicCities(), []);
 
   const filtered = useMemo(() => {
     if (!clinics) return [];
     const needle = query.trim().toLowerCase();
-    return clinics.filter((clinic) => {
-      const matchesCity = !city || clinic.city === city;
-      const matchesQuery =
-        !needle ||
-        clinic.name.toLowerCase().includes(needle) ||
-        clinic.area.toLowerCase().includes(needle) ||
-        clinic.services.some((service) => service.toLowerCase().includes(needle));
-      return matchesCity && matchesQuery;
-    });
-  }, [clinics, city, query]);
+    if (!needle) return clinics;
+    return clinics.filter((clinic) =>
+      [clinic.name, clinic.address, clinic.description, ...clinic.doctors.flatMap((d) => [d.name, d.specialization])]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase().includes(needle)),
+    );
+  }, [clinics, query]);
 
   return (
     <Screen
       header={
         <StackHeader
           title="Partner clinics"
-          subtitle={clinics ? `${clinics.length} clinics near you` : undefined}
+          subtitle={clinics ? `${clinics.length} partner clinic${clinics.length === 1 ? '' : 's'}` : undefined}
           fallbackHref="/"
         />
       }>
@@ -49,86 +43,98 @@ export default function ClinicsScreen() {
         icon="search-outline"
         value={query}
         onChangeText={setQuery}
-        placeholder="Search by name, area or service"
+        placeholder="Search by clinic, area, doctor or specialty"
         autoCorrect={false}
       />
 
-      <View style={styles.filters}>
-        <Chip label="All cities" selected={!city} onPress={() => setCity(null)} />
-        {cities.map((item) => (
-          <Chip
-            key={item}
-            label={item}
-            selected={city === item}
-            onPress={() => setCity(city === item ? null : item)}
+      <View style={{ marginTop: Spacing.three }}>
+        {isLoading ? (
+          <SkeletonList count={3} lines={3} />
+        ) : isError ? (
+          <EmptyState
+            icon="cloud-offline-outline"
+            title="Couldn't load clinics"
+            description="Check your connection and try again."
+            actionLabel="Retry"
+            onAction={() => refetch()}
           />
-        ))}
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            icon="business-outline"
+            title={clinics?.length ? 'No clinics match that' : 'No partner clinics yet'}
+            description={clinics?.length ? 'Try a different name, area or specialty.' : 'Check back soon.'}
+            actionLabel={clinics?.length ? 'Clear search' : undefined}
+            onAction={clinics?.length ? () => setQuery('') : undefined}
+          />
+        ) : (
+          <View style={{ gap: Spacing.three }}>
+            {filtered.map((clinic) => {
+              const specialties = [...new Set(clinic.doctors.map((d) => d.specialization))];
+              return (
+                <Card key={clinic.id} style={[styles.card, { padding: 0, overflow: 'hidden' }]}>
+                  {clinic.picture_url ? (
+                    <Image source={{ uri: clinic.picture_url }} style={styles.picture} contentFit="cover" />
+                  ) : (
+                    <View style={[styles.picture, styles.placeholder, { backgroundColor: tint(theme.primary, 0.12) }]}>
+                      <Ionicons name="business" size={32} color={theme.primary} />
+                    </View>
+                  )}
+
+                  <View style={styles.body}>
+                    <Text style={[styles.name, { color: theme.text }]}>{clinic.name}</Text>
+                    {clinic.description ? (
+                      <Text style={[styles.address, { color: theme.textSecondary }]}>{clinic.description}</Text>
+                    ) : null}
+                    {clinic.address ? (
+                      <View style={styles.metaRow}>
+                        <Ionicons name="location-outline" size={13} color={theme.textSecondary} />
+                        <Text style={[styles.meta, { color: theme.textSecondary, flex: 1 }]}>{clinic.address}</Text>
+                      </View>
+                    ) : null}
+                    {clinic.doctors.length > 0 ? (
+                      <View style={styles.metaRow}>
+                        <Ionicons name="medkit-outline" size={13} color={theme.textSecondary} />
+                        <Text style={[styles.meta, { color: theme.textSecondary, flex: 1 }]}>
+                          {clinic.doctors.map((d) => d.name).join(', ')}
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    {specialties.length > 0 ? (
+                      <View style={styles.services}>
+                        {specialties.map((specialty) => (
+                          <Chip key={specialty} label={specialty} />
+                        ))}
+                      </View>
+                    ) : null}
+
+                    <View style={styles.actions}>
+                      {clinic.address ? (
+                        <ClinicAction
+                          icon="navigate"
+                          label="Directions"
+                          onPress={() =>
+                            Linking.openURL(
+                              `https://maps.google.com/?q=${encodeURIComponent(`${clinic.name} ${clinic.address}`)}`,
+                            )
+                          }
+                        />
+                      ) : null}
+                      {clinic.phone ? (
+                        <ClinicAction
+                          icon="call"
+                          label="Call clinic"
+                          onPress={() => Linking.openURL(`tel:${clinic.phone!.replace(/\s/g, '')}`)}
+                        />
+                      ) : null}
+                    </View>
+                  </View>
+                </Card>
+              );
+            })}
+          </View>
+        )}
       </View>
-
-      {isLoading ? (
-        <SkeletonList count={3} lines={3} />
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon="business-outline"
-          title="No clinics match that"
-          description="Try a different area, service, or clear the filters."
-          actionLabel="Clear filters"
-          onAction={() => {
-            setQuery('');
-            setCity(null);
-          }}
-        />
-      ) : (
-        <View style={{ gap: Spacing.three }}>
-          {filtered.map((clinic) => (
-            <Card key={clinic.id} style={styles.card}>
-              <View style={styles.titleRow}>
-                <Text style={[styles.name, { color: theme.text }]}>{clinic.name}</Text>
-                <View style={[styles.rating, { backgroundColor: tint(theme.warning, 0.12) }]}>
-                  <Ionicons name="star" size={12} color={theme.warning} />
-                  <Text style={[styles.ratingText, { color: theme.warning }]}>{clinic.rating}</Text>
-                </View>
-              </View>
-
-              <Text style={[styles.address, { color: theme.textSecondary }]}>{clinic.address}</Text>
-
-              <View style={styles.metaRow}>
-                <Ionicons name="navigate-outline" size={13} color={theme.textSecondary} />
-                <Text style={[styles.meta, { color: theme.textSecondary }]}>
-                  {clinic.distanceKm} km · {clinic.area}, {clinic.city}
-                </Text>
-              </View>
-              <View style={styles.metaRow}>
-                <Ionicons name="time-outline" size={13} color={theme.textSecondary} />
-                <Text style={[styles.meta, { color: theme.textSecondary }]}>{clinic.openHours}</Text>
-              </View>
-
-              <View style={styles.services}>
-                {clinic.services.map((service) => (
-                  <Chip key={service} label={service} />
-                ))}
-              </View>
-
-              <View style={styles.actions}>
-                <ClinicAction
-                  icon="navigate"
-                  label="Directions"
-                  onPress={() =>
-                    Linking.openURL(
-                      `https://maps.google.com/?q=${encodeURIComponent(`${clinic.name} ${clinic.address}`)}`,
-                    )
-                  }
-                />
-                <ClinicAction
-                  icon="call"
-                  label="Call clinic"
-                  onPress={() => Linking.openURL('tel:+918045678900')}
-                />
-              </View>
-            </Card>
-          ))}
-        </View>
-      )}
     </Screen>
   );
 }
@@ -155,35 +161,24 @@ function ClinicAction({
 }
 
 const styles = StyleSheet.create({
-  filters: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.two - 2,
-    marginVertical: Spacing.three,
-  },
   card: {
     gap: 6,
   },
-  titleRow: {
-    flexDirection: 'row',
+  picture: {
+    width: '100%',
+    height: 130,
+  },
+  placeholder: {
     alignItems: 'center',
-    gap: Spacing.two,
+    justifyContent: 'center',
+  },
+  body: {
+    gap: 6,
+    padding: Spacing.three,
   },
   name: {
     ...Typography.smallStrong,
     flex: 1,
-  },
-  rating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: Spacing.two,
-    paddingVertical: 3,
-    borderRadius: Radius.full,
-  },
-  ratingText: {
-    ...Typography.caption,
-    fontWeight: '700',
   },
   address: {
     ...Typography.caption,

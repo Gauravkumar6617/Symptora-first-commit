@@ -5,6 +5,7 @@ import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { MyClinicsCard } from '@/components/my-clinics-card';
 import { AppointmentCard } from '@/components/ui/appointment-card';
 import { Avatar } from '@/components/ui/avatar';
 import { Card } from '@/components/ui/card';
@@ -50,7 +51,7 @@ export default function DoctorHomeScreen() {
           end={{ x: 1, y: 1 }}
           style={[styles.header, { paddingTop: insets.top + Spacing.three }]}>
           <View style={styles.headerRow}>
-            <Avatar uri={user?.avatar} name={fullName(user)} size={44} />
+            <Avatar uri={user?.avatar_url} name={fullName(user)} size={44} />
             <View style={{ flex: 1 }}>
               <Text style={styles.welcome}>Good to see you</Text>
               <Text style={styles.greeting}>Dr. {user?.last_name ?? ''}</Text>
@@ -133,6 +134,8 @@ export default function DoctorHomeScreen() {
             onPress={() => router.push('/(info)/blog')}
           />
         </View>
+
+        <MyClinicsCard />
 
         <Card variant="muted" style={styles.note}>
           <Ionicons name="flash" size={17} color={theme.warning} />

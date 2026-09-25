@@ -17,7 +17,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AlertBanner } from '@/components/ui/alert-banner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { SegmentedControl } from '@/components/ui/segmented-control';
 import { TextField } from '@/components/ui/text-field';
 import { Gradient, MaxFormWidth, Radius, Spacing, Typography } from '@/constants/theme';
 import { APP_TAGLINE } from '@/data/content';
@@ -26,7 +25,6 @@ import { errorFeedback, successFeedback } from '@/lib/haptics';
 import { validateLogin } from '@/lib/validation';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuthStore } from '@/store/authStore';
-import type { UserRole } from '@/types';
 
 export default function LoginScreen() {
   const theme = useTheme();
@@ -34,7 +32,6 @@ export default function LoginScreen() {
   const router = useRouter();
   const setSession = useAuthStore((state) => state.setSession);
 
-  const [role, setRole] = useState<UserRole>('patient');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
@@ -49,7 +46,12 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      const session = await loginUser(email.trim().toLowerCase(), password, role === 'doctor');
+      // The server decides whether this account is a patient or a doctor.
+      const identifier = email.trim();
+      const session = await loginUser(
+        identifier.includes('@') ? identifier.toLowerCase() : identifier.replace(/[\s-]/g, ''),
+        password,
+      );
       successFeedback();
       setSession(session);
       router.replace(session.user.role === 'doctor' ? '/(doctor)/(tabs)' : '/(patient)/(tabs)');
@@ -94,19 +96,10 @@ export default function LoginScreen() {
               Log in to pick up where you left off.
             </Text>
 
-            <SegmentedControl
-              options={[
-                { value: 'patient', label: 'Patient' },
-                { value: 'doctor', label: 'Doctor' },
-              ]}
-              value={role}
-              onChange={setRole}
-            />
-
             {formError ? <AlertBanner tone="error" message={formError} /> : null}
 
             <TextField
-              label="Email"
+              label="Email or phone"
               icon="mail-outline"
               value={email}
               onChangeText={setEmail}
@@ -114,8 +107,8 @@ export default function LoginScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
-              autoComplete="email"
-              placeholder="you@example.com"
+              autoComplete="username"
+              placeholder="you@example.com or 9876543210"
               returnKeyType="next"
             />
 
@@ -151,6 +144,14 @@ export default function LoginScreen() {
               </Text>
               <Link href="/(auth)/signup" style={[styles.footerLink, { color: theme.primary }]}>
                 Sign up
+              </Link>
+            </View>
+            <View style={styles.footerRow}>
+              <Text style={[styles.footerText, { color: theme.textSecondary }]}>
+                Added by family?{' '}
+              </Text>
+              <Link href="/(auth)/activate-family" style={[styles.footerLink, { color: theme.primary }]}>
+                Activate your account
               </Link>
             </View>
           </Card>

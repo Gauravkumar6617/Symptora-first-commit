@@ -8,7 +8,11 @@ export interface AuthUser {
   phone?: string
   address?: string
   avatarUrl?: string
+  /** ISO date, e.g. "1990-05-01". Pre-fills the symptom checker's age. */
+  dateOfBirth?: string
+  gender?: string
   isDoctor?: boolean
+  isAdmin?: boolean
 }
 
 interface AuthState {

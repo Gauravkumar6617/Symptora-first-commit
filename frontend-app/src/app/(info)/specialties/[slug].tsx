@@ -12,7 +12,7 @@ import { Screen } from '@/components/ui/screen';
 import { SectionHeaderRow } from '@/components/ui/section-link';
 import { SkeletonList } from '@/components/ui/skeleton';
 import { Radius, Spacing, Typography } from '@/constants/theme';
-import { getSpecialtyBySlug } from '@/data/catalog';
+import { getSpecialtyBySlug } from '@/data/specialties';
 import { useCatalogDoctors } from '@/hooks/use-queries';
 import { useTheme } from '@/hooks/use-theme';
 

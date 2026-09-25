@@ -39,6 +39,10 @@ class Settting(BaseSettings):
     SMTP_PASSWORD                 : str = ""
     FROM_EMAIL                    : str = ""
     SMTP_USE_TLS                  : bool = True
+    # Family invites: sender (falls back to FROM_EMAIL) and an optional
+    # website linked in the email footer.
+    INVITE_FROM_EMAIL             : str = ""
+    INVITE_PROMO_URL              : str = ""
 
     # cloudflare R2
     R2_ACCOUNT_ID: str
@@ -52,6 +56,10 @@ class Settting(BaseSettings):
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str
     GOOGLE_REFRESH_TOKEN: str
+
+    # keep-alive scheduler (Render sets RENDER_EXTERNAL_URL automatically; empty = disabled)
+    RENDER_EXTERNAL_URL: str = ""
+    KEEP_ALIVE_INTERVAL_SECONDS: int = 600  # must stay under Render's 15 min idle timeout
 
 @lru_cache      # to add cache for env as after reloading it shoudl load from env 
 def get_Setting() -> Settting:

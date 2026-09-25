@@ -12,13 +12,16 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
 
 const navItems = [
   { to: '/', label: 'Home', end: true },
+  { to: '/symptom-checker', label: 'Symptom checker' },
   { to: '/telemedicine', label: 'Telemedicine' },
   { to: '/appointments', label: 'Appointments' },
   { to: '/family', label: 'Family' },
   { to: '/clinics', label: 'Clinics' },
-  { to: '/blog', label: 'Blog' },
-  { to: '/about', label: 'About' },
-  { to: '/contact', label: 'Contact' },
+  // Secondary links: mobile menu only; on desktop they live in the footer
+  // (the header row is capped at max-w-7xl, so they never fit next to the account links).
+  { to: '/blog', label: 'Blog', secondary: true },
+  { to: '/about', label: 'About', secondary: true },
+  { to: '/contact', label: 'Contact', secondary: true },
 ]
 
 export function Header() {
@@ -33,7 +36,7 @@ export function Header() {
         </Link>
 
         <nav className="hidden min-w-0 flex-1 items-center justify-center gap-5 xl:flex 2xl:gap-7">
-          {navItems.map((item) => (
+          {navItems.filter((item) => !('secondary' in item)).map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -48,6 +51,14 @@ export function Header() {
         <div className="ml-auto hidden shrink-0 items-center gap-2 xl:flex 2xl:gap-3">
           {isAuthenticated ? (
             <>
+              {user?.isAdmin && (
+                <Link
+                  to="/admin"
+                  className="shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium text-ink hover:bg-ink/5"
+                >
+                  Admin
+                </Link>
+              )}
               <Link
                 to="/profile"
                 className="flex max-w-[12rem] items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-ink hover:bg-ink/5"
@@ -119,6 +130,15 @@ export function Header() {
           <div className="mt-4 flex items-center gap-3 border-t border-ink/10 pt-4">
             {isAuthenticated ? (
               <>
+                {user?.isAdmin && (
+                  <Link
+                    to="/admin"
+                    onClick={() => setMenuOpen(false)}
+                    className="rounded-lg px-3 py-1.5 text-sm font-medium text-ink"
+                  >
+                    Admin
+                  </Link>
+                )}
                 <Link
                   to="/profile"
                   onClick={() => setMenuOpen(false)}

@@ -1,10 +1,13 @@
-import { CalendarDays, Stethoscope, UsersRound, Video } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Clock, Stethoscope, UsersRound, Video } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { type DoctorApplication, getMyDoctorApplication, listChecks, type SymptomCheck } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
-import { useFamilyStore } from '@/store/familyStore'
+import { relationLabel, useFamilyStore } from '@/store/familyStore'
+import { MyClinicsCard } from './MyClinicsCard'
 
 const quickLinks = [
-  { to: '/', icon: Stethoscope, title: 'New Health Check', description: 'Get a risk report in minutes' },
+  { to: '/symptom-checker', icon: Stethoscope, title: 'Symptom checker', description: 'See what your symptoms may mean' },
   { to: '/appointments', icon: CalendarDays, title: 'Book appointment', description: 'Pick a doctor and time slot' },
   { to: '/telemedicine', icon: Video, title: 'Start video consult', description: 'Talk to a doctor now' },
   { to: '/family', icon: UsersRound, title: 'Family profiles', description: 'Manage everyone in one place' },
@@ -12,7 +15,40 @@ const quickLinks = [
 
 export function DashboardPage() {
   const user = useAuthStore((state) => state.user)
+  const token = useAuthStore((state) => state.token)
   const members = useFamilyStore((state) => state.members)
+  const loadMembers = useFamilyStore((state) => state.loadMembers)
+  const [application, setApplication] = useState<DoctorApplication | null | undefined>(undefined)
+  const [checks, setChecks] = useState<SymptomCheck[] | null>(null)
+
+  useEffect(() => {
+    if (!token) return
+    listChecks(token)
+      .then(setChecks)
+      .catch(() => setChecks([]))
+  }, [token])
+
+  useEffect(() => {
+    // Offline: the persisted list stays on screen.
+    loadMembers().catch(() => {})
+  }, [loadMembers])
+
+  // Drives the "apply as a doctor" card below: undefined = still loading,
+  // null = never applied, otherwise their pending/approved/rejected status.
+  useEffect(() => {
+    if (!token) return
+    let cancelled = false
+    getMyDoctorApplication(token)
+      .then((result) => {
+        if (!cancelled) setApplication(result)
+      })
+      .catch(() => {
+        if (!cancelled) setApplication(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [token])
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
@@ -38,6 +74,11 @@ export function DashboardPage() {
         ))}
       </div>
 
+      {application !== undefined && <DoctorApplicationCard application={application} />}
+      {application?.status === 'APPROVED' && <MyClinicsCard />}
+
+      <RecentChecks checks={checks} />
+
       <div className="mt-10">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-ink">Family</h2>
@@ -50,13 +91,120 @@ export function DashboardPage() {
             <div key={member.id} className="card-raised p-4">
               <p className="text-sm font-semibold text-ink">{member.name}</p>
               <p className="text-xs text-ink/50">
-                {member.relation} · {member.age} yrs
+                {relationLabel(member.relation)} · {member.age} yrs
               </p>
-              <p className="mt-2 text-xs text-ink/60">{member.lastCheck}</p>
+              <p className="mt-2 text-xs text-ink/60">
+                {member.hasAccount ? 'Has their own login' : 'Managed by you'}
+              </p>
             </div>
           ))}
         </div>
       </div>
     </div>
   )
+}
+
+const urgencyBadge: Record<SymptomCheck['urgency'], string> = {
+  low: 'bg-success/10 text-success',
+  medium: 'bg-warning/10 text-warning',
+  high: 'bg-danger/10 text-danger',
+}
+
+/** Latest checks you ran, ran for family, or family ran about you (shared both ways). */
+function RecentChecks({ checks }: { checks: SymptomCheck[] | null }) {
+  if (checks === null) return null
+  return (
+    <div className="mt-10">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold text-ink">Recent health checks</h2>
+        <Link to="/symptom-checker" className="text-sm font-semibold text-primary">
+          New check →
+        </Link>
+      </div>
+      {checks.length === 0 ? (
+        <p className="mt-4 text-sm text-ink/60">
+          No checks yet. Run the symptom checker for yourself or a family member and it will show up here.
+        </p>
+      ) : (
+        <ul className="card-raised mt-4 divide-y divide-ink/10">
+          {checks.slice(0, 6).map((check) => (
+            <li key={check.id} className="flex flex-wrap items-center gap-3 px-5 py-3.5">
+              <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${urgencyBadge[check.urgency]}`}>
+                {check.urgency}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-ink">
+                  {check.predictions[0]?.label ?? 'Symptom check'}
+                  <span className="font-normal text-ink/50">
+                    {' '}· for {check.about_me ? 'you' : check.subject_name}
+                  </span>
+                </p>
+                <p className="truncate text-xs text-ink/50">
+                  {check.symptoms.map((s) => s.label).join(', ')}
+                  {!check.is_mine && ` · run by ${check.run_by_name}`}
+                </p>
+              </div>
+              <span className="text-xs text-ink/40">{new Date(check.created_at).toLocaleDateString()}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function DoctorApplicationCard({ application }: { application: DoctorApplication | null }) {
+  if (!application) {
+    return (
+      <Link
+        to="/apply-doctor"
+        className="card-raised mt-10 flex items-center gap-4 p-5 transition-colors hover:border-primary/40"
+      >
+        <span className="icon-badge">
+          <Stethoscope className="h-6 w-6 text-primary-600" />
+        </span>
+        <div>
+          <h3 className="text-sm font-semibold text-ink">Are you a doctor?</h3>
+          <p className="mt-1 text-xs text-ink/60">
+            Apply to join the Symptora network and offer telemedicine consultations.
+          </p>
+        </div>
+      </Link>
+    )
+  }
+
+  if (application.status === 'PENDING') {
+    return (
+      <div className="card-raised mt-10 flex items-center gap-4 p-5">
+        <span className="icon-badge">
+          <Clock className="h-6 w-6 text-primary-600" />
+        </span>
+        <div>
+          <h3 className="text-sm font-semibold text-ink">Doctor application under review</h3>
+          <p className="mt-1 text-xs text-ink/60">
+            Our credentialing team is verifying your {application.specialization} license.
+            We'll email you within 2–3 business days.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (application.status === 'APPROVED') {
+    return (
+      <div className="card-raised mt-10 flex items-center gap-4 p-5">
+        <span className="icon-badge">
+          <CheckCircle2 className="h-6 w-6 text-success" />
+        </span>
+        <div>
+          <h3 className="text-sm font-semibold text-ink">You're a verified doctor</h3>
+          <p className="mt-1 text-xs text-ink/60">
+            Your {application.specialization} profile is live on Symptora.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return null
 }

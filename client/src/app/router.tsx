@@ -1,9 +1,12 @@
 import { createBrowserRouter } from 'react-router-dom'
+import { AdminRoute } from '@/components/auth/AdminRoute'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { RootLayout } from '@/components/layout/RootLayout'
 import { AboutPage } from '@/pages/about/AboutPage'
+import { AdminDashboardPage } from '@/pages/admin/AdminDashboardPage'
 import { ApplyDoctorPage } from '@/pages/apply-doctor/ApplyDoctorPage'
 import { AppointmentsPage } from '@/pages/appointments/AppointmentsPage'
+import { ActivateFamilyPage } from '@/pages/auth/ActivateFamilyPage'
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage'
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { SignupPage } from '@/pages/auth/SignupPage'
@@ -18,6 +21,7 @@ import { PrivacyPolicyPage } from '@/pages/legal/PrivacyPolicyPage'
 import { TermsOfServicePage } from '@/pages/legal/TermsOfServicePage'
 import { ProfilePage } from '@/pages/profile/ProfilePage'
 import { SpecialtyPage } from '@/pages/specialties/SpecialtyPage'
+import { SymptomCheckerPage } from '@/pages/symptom-checker/SymptomCheckerPage'
 import { TelemedicinePage } from '@/pages/telemedicine/TelemedicinePage'
 
 export const router = createBrowserRouter([
@@ -28,6 +32,7 @@ export const router = createBrowserRouter([
       { path: '/login', element: <LoginPage /> },
       { path: '/signup', element: <SignupPage /> },
       { path: '/forgot-password', element: <ForgotPasswordPage /> },
+      { path: '/activate-family', element: <ActivateFamilyPage /> },
       { path: '/telemedicine', element: <TelemedicinePage /> },
       { path: '/specialties/:slug', element: <SpecialtyPage /> },
       { path: '/clinics', element: <ClinicsPage /> },
@@ -39,13 +44,18 @@ export const router = createBrowserRouter([
       { path: '/contact', element: <ContactPage /> },
       { path: '/privacy', element: <PrivacyPolicyPage /> },
       { path: '/terms', element: <TermsOfServicePage /> },
-      { path: '/apply-doctor', element: <ApplyDoctorPage /> },
       {
         element: <ProtectedRoute />,
         children: [
           { path: '/dashboard', element: <DashboardPage /> },
           { path: '/profile', element: <ProfilePage /> },
+          { path: '/apply-doctor', element: <ApplyDoctorPage /> },
+          { path: '/symptom-checker', element: <SymptomCheckerPage /> },
         ],
+      },
+      {
+        element: <AdminRoute />,
+        children: [{ path: '/admin', element: <AdminDashboardPage /> }],
       },
     ],
   },

@@ -7,6 +7,7 @@ import {
   ApiError,
   dataUrlToFile,
   requestRegistrationOtp,
+  toAuthUser,
   verifyRegistrationOtp,
 } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
@@ -83,15 +84,11 @@ export function SignupPage() {
     setSubmitting(true)
     try {
       const user = await verifyRegistrationOtp(email, otp)
-      login({
-        id: user.id,
-        name: `${user.first_name} ${user.last_name}`.trim(),
-        email: user.email,
-        phone: user.number,
-        address: user.address ?? undefined,
-        avatarUrl: user.avatar ?? undefined,
-        isDoctor: user.id_doctor,
-      })
+      // No token here — POST /users/register/verify only creates the
+      // account, it doesn't log it in. The dashboard still renders (it
+      // tolerates a null token), but anything requiring a bearer token
+      // will 401 until the user explicitly logs in.
+      login(toAuthUser(user))
       navigate('/dashboard')
     } catch (err) {
       setError(

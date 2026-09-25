@@ -2,11 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import { mockRiskChecks } from '@/data/mockData';
 import type { RiskCheck } from '@/types';
 
 interface HealthCheckState {
-  /** Newest first. Seeded with sample history so the UI is never empty. */
+  /** Newest first. */
   checks: RiskCheck[];
   addCheck: (check: RiskCheck) => void;
   clearChecks: () => void;
@@ -15,12 +14,15 @@ interface HealthCheckState {
 export const useHealthCheckStore = create<HealthCheckState>()(
   persist(
     (set) => ({
-      checks: mockRiskChecks,
+      checks: [],
       addCheck: (check) => set((state) => ({ checks: [check, ...state.checks] })),
       clearChecks: () => set({ checks: [] }),
     }),
     {
-      name: 'symptora-health-checks',
+      // Renamed from `symptora-health-checks` so a device that already
+      // persisted the old seeded sample checks starts fresh instead of
+      // reloading them from storage.
+      name: 'symptora-health-checks-v2',
       storage: createJSONStorage(() => AsyncStorage),
     },
   ),

@@ -19,9 +19,13 @@ dependencies = [
     "boto3>=1.43.98",
     "pillow>=12.3.0",
     "python-dotenv>=1.2.3",
+    "pandas>=3.0.6",
+    "scikit-learn>=1.9.1",
+    "joblib>=1.6.0",
 ]
 
 [dependency-groups]
 dev = [
+    "jupyter>=1.1.1",
     "pytest>=9.1.1",
 ]

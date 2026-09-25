@@ -25,8 +25,10 @@ class UserModel(BaseModel):
     gender = Column(String, nullable=True)
     id_doctor=Column(Boolean,default=False,nullable=False)
     medplum_patient_id=Column(String,nullable=True,index=True)
+    medplum_practitoner_id=Column(String,nullable=True,index=True)
+    is_admin=Column(Boolean,default=False)
 
-    family_members=relationship("FamilyMemberModel",back_populates="account_owner")
+    family_members=relationship("FamilyMemberModel",back_populates="account_owner",foreign_keys="FamilyMemberModel.account_owner_id")
     doctor_profile=relationship("DoctorProfile",back_populates="user",uselist=False,cascade="all ,delete-orphan")
 
 

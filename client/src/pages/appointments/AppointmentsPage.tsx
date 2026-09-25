@@ -12,7 +12,7 @@ import { useMemo, useState } from 'react'
 import { clinics } from '@/data/clinics'
 import { type Doctor, doctors, timeSlots } from '@/data/doctors'
 import { APP_NAME } from '@/lib/constants'
-import { useFamilyStore } from '@/store/familyStore'
+import { relationLabel, useFamilyStore } from '@/store/familyStore'
 
 const specialties = Array.from(new Set(doctors.map((d) => d.specialty)))
 
@@ -285,7 +285,7 @@ export function AppointmentsPage() {
                 <option value="self">Myself</option>
                 {members.map((member) => (
                   <option key={member.id} value={member.id}>
-                    {member.name} ({member.relation})
+                    {member.name} ({relationLabel(member.relation)})
                   </option>
                 ))}
               </select>

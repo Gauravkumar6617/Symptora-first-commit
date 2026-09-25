@@ -1,12 +1,13 @@
 import { type FormEvent, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { AuthSplitLayout } from '@/components/auth/AuthSplitLayout'
 import { FormField } from '@/components/auth/FormField'
-import { ApiError, loginUser } from '@/lib/api'
+import { ApiError, getCurrentUser, loginUser, toAuthUser } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const from = (useLocation().state as { from?: string } | null)?.from
   const login = useAuthStore((state) => state.login)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -16,17 +17,16 @@ export function LoginPage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (!email || !password) {
-      setError('Enter your email and password.')
+      setError('Enter your email or phone and your password.')
       return
     }
     setError('')
     setSubmitting(true)
     try {
       const { access_token } = await loginUser(email, password)
-      // The backend has no /users/me yet, so the token is what identifies the
-      // session; the display name comes from the email until it does.
-      login({ id: email, name: email.split('@')[0], email }, access_token)
-      navigate('/dashboard')
+      const user = await getCurrentUser(access_token)
+      login(toAuthUser(user), access_token)
+      navigate(user.is_admin ? '/admin' : (from ?? '/dashboard'))
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : 'Something went wrong. Try again.',
@@ -41,9 +41,9 @@ export function LoginPage() {
       <form className="space-y-4" onSubmit={handleSubmit}>
         <FormField
           id="email"
-          label="Email"
-          type="email"
-          autoComplete="email"
+          label="Email or phone"
+          type="text"
+          autoComplete="username"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
@@ -76,6 +76,12 @@ export function LoginPage() {
         Don't have an account?{' '}
         <Link to="/signup" className="font-medium text-primary">
           Sign up
+        </Link>
+      </p>
+      <p className="mt-2 text-center text-sm text-ink/60">
+        Added by a family member?{' '}
+        <Link to="/activate-family" className="font-medium text-primary">
+          Activate family account
         </Link>
       </p>
     </AuthSplitLayout>
