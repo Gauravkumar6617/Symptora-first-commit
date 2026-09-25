@@ -64,6 +64,10 @@ export function SymptomCheckerPage() {
   const members = useFamilyStore((state) => state.members)
   const loadMembers = useFamilyStore((state) => state.loadMembers)
 
+  // ?q= from the home search box, ?member= from a family card.
+  const [searchParams] = useSearchParams()
+  const memberParam = searchParams.get('member')
+
   // Step 1: who the check is for. Pre-filled from the profile / family member.
   const [patient, setPatient] = useState<PatientDetails | null>(null)
   const [forWhom, setForWhom] = useState(ME)
@@ -81,7 +85,6 @@ export function SymptomCheckerPage() {
   const [error, setError] = useState('')
 
   // Free-text description -> symptoms (step 2). Pre-filled from the home page search box.
-  const [searchParams] = useSearchParams()
   const [description, setDescription] = useState(searchParams.get('q') ?? '')
   const [parsed, setParsed] = useState<ParsedSymptoms | null>(null)
   const [parsing, setParsing] = useState(false)
@@ -109,12 +112,21 @@ export function SymptomCheckerPage() {
     loadMembers().catch(() => {}) // offline: the persisted list is used
   }, [loadMembers])
 
+
   function pickPerson(id: string) {
     setForWhom(id)
     const member = members.find((m) => m.id === id)
     const dob = id === ME ? user?.dateOfBirth : undefined
     setAge(member ? String(member.age) : dob ? String(ageFromDateOfBirth(dob)) : '')
     setGender(toGender(member ? member.gender : user?.gender))
+  }
+
+  // Opened from a family card: select that member once their profile has loaded
+  // (adjusting state during render, so there is no extra effect pass).
+  const [memberApplied, setMemberApplied] = useState(false)
+  if (!memberApplied && memberParam && members.some((m) => m.id === memberParam)) {
+    setMemberApplied(true)
+    pickPerson(memberParam)
   }
 
   const parsedAge = Number(age)
@@ -188,6 +200,7 @@ export function SymptomCheckerPage() {
           token,
           selected,
           patient ? { ...patient, description: description.trim() || undefined } : undefined,
+          forWhom === ME ? undefined : forWhom,
         ),
       )
     } catch (err) {
@@ -537,6 +550,15 @@ export function SymptomCheckerPage() {
             <Info className="mt-px h-4 w-4 shrink-0 text-primary" />
             {result.disclaimer}
           </p>
+          {result.check_id && (
+            <p className="mt-3 text-xs text-ink/50">
+              Saved to {forWhom === ME ? 'your' : `${personName}'s`} health history
+              {forWhom !== ME && ' — they see it too once they have their own login'}.{' '}
+              <Link to="/dashboard" className="font-semibold text-primary">
+                View history
+              </Link>
+            </p>
+          )}
         </section>
       )}
       </>

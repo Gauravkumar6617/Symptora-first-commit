@@ -47,7 +47,11 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       // The server decides whether this account is a patient or a doctor.
-      const session = await loginUser(email.trim().toLowerCase(), password);
+      const identifier = email.trim();
+      const session = await loginUser(
+        identifier.includes('@') ? identifier.toLowerCase() : identifier.replace(/[\s-]/g, ''),
+        password,
+      );
       successFeedback();
       setSession(session);
       router.replace(session.user.role === 'doctor' ? '/(doctor)/(tabs)' : '/(patient)/(tabs)');
@@ -95,7 +99,7 @@ export default function LoginScreen() {
             {formError ? <AlertBanner tone="error" message={formError} /> : null}
 
             <TextField
-              label="Email"
+              label="Email or phone"
               icon="mail-outline"
               value={email}
               onChangeText={setEmail}
@@ -103,8 +107,8 @@ export default function LoginScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
-              autoComplete="email"
-              placeholder="you@example.com"
+              autoComplete="username"
+              placeholder="you@example.com or 9876543210"
               returnKeyType="next"
             />
 
@@ -140,6 +144,14 @@ export default function LoginScreen() {
               </Text>
               <Link href="/(auth)/signup" style={[styles.footerLink, { color: theme.primary }]}>
                 Sign up
+              </Link>
+            </View>
+            <View style={styles.footerRow}>
+              <Text style={[styles.footerText, { color: theme.textSecondary }]}>
+                Added by family?{' '}
+              </Text>
+              <Link href="/(auth)/activate-family" style={[styles.footerLink, { color: theme.primary }]}>
+                Activate your account
               </Link>
             </View>
           </Card>

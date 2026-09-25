@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -39,6 +40,8 @@ class PredictRequest(BaseModel):
     # The free text the symptoms were parsed from, if any: red flags in it
     # (e.g. blood with vomiting) raise the urgency to high.
     description: Optional[str] = Field(None, max_length=1000)
+    # Who the check is for; omitted means the caller. Saved to their history.
+    family_member_id: Optional[str] = None
 
 
 class DiseasePrediction(BaseModel):
@@ -55,3 +58,28 @@ class PredictResponse(BaseModel):
     urgency: Literal["low", "medium", "high"]
     urgency_reasons: List[str]  # why the urgency is what it is, for the UI
     disclaimer: str
+    check_id: Optional[str] = None  # the saved history entry
+
+
+class CheckPrediction(BaseModel):
+    disease: str
+    label: str
+    probability: float
+
+
+class SymptomCheckRead(BaseModel):
+    id: str
+    created_at: datetime
+    subject_name: str  # who the check was about
+    family_member_id: Optional[str] = None  # the viewer's family profile it's about, if any
+    run_by_name: str  # who ran it
+    is_mine: bool  # the viewer ran it
+    about_me: bool  # the viewer is the patient
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    duration: Optional[str] = None
+    symptoms: List[SymptomRead]
+    predictions: List[CheckPrediction]
+    urgency: Literal["low", "medium", "high"]
+    urgency_reasons: List[str]
+    synced_to_medplum: bool

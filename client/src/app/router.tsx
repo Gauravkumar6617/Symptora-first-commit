@@ -6,6 +6,7 @@ import { AboutPage } from '@/pages/about/AboutPage'
 import { AdminDashboardPage } from '@/pages/admin/AdminDashboardPage'
 import { ApplyDoctorPage } from '@/pages/apply-doctor/ApplyDoctorPage'
 import { AppointmentsPage } from '@/pages/appointments/AppointmentsPage'
+import { ActivateFamilyPage } from '@/pages/auth/ActivateFamilyPage'
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage'
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { SignupPage } from '@/pages/auth/SignupPage'
@@ -31,6 +32,7 @@ export const router = createBrowserRouter([
       { path: '/login', element: <LoginPage /> },
       { path: '/signup', element: <SignupPage /> },
       { path: '/forgot-password', element: <ForgotPasswordPage /> },
+      { path: '/activate-family', element: <ActivateFamilyPage /> },
       { path: '/telemedicine', element: <TelemedicinePage /> },
       { path: '/specialties/:slug', element: <SpecialtyPage /> },
       { path: '/clinics', element: <ClinicsPage /> },

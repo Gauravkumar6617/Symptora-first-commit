@@ -191,8 +191,33 @@ export interface Clinic {
   address: string | null
   phone: string | null
   medplum_organisation_id: string
+  /** Presigned url for `picture` (an R2 key or absolute url). */
+  picture_url: string | null
   created_at: string
   updated_at: string
+}
+
+/** A doctor listed under a clinic (approved doctors only). */
+export interface ClinicDoctor {
+  id: string
+  name: string
+  specialization: string
+}
+
+/** backend AdminClinicRead — a clinic plus its linked doctors. */
+export interface AdminClinic extends Clinic {
+  doctors: ClinicDoctor[]
+}
+
+/** backend PublicClinicRead — GET /clinics/directory, no login needed. */
+export interface PublicClinic {
+  id: string
+  name: string
+  picture_url: string | null
+  description: string | null
+  address: string | null
+  phone: string | null
+  doctors: ClinicDoctor[]
 }
 
 /** backend DoctorClinicRead — a doctor's link to one clinic. */
@@ -281,6 +306,7 @@ export async function verifyRegistrationOtp(
 
 /** POST /users/login — returns a bearer token. */
 export async function loginUser(
+  /** Email or phone number. */
   email: string,
   password: string,
 ): Promise<TokenResponse> {
@@ -407,6 +433,40 @@ export async function fetchAdminDoctors(token: string): Promise<AdminDoctor[]> {
  * POST /admin/clinics — creates the clinic's Organization in Medplum, then
  * the local row; `medplum_organisation_id` is derived server-side.
  */
+/** GET /admin/clinics — every clinic with its linked doctors. */
+export async function listAdminClinics(token: string): Promise<AdminClinic[]> {
+  return request<AdminClinic[]>('/admin/clinics', { token })
+}
+
+/** GET /clinics/directory — public partner-clinic list for "Find a clinic". */
+export async function listClinicDirectory(): Promise<PublicClinic[]> {
+  return request<PublicClinic[]>('/clinics/directory')
+}
+
+/** POST /admin/clinics/picture — upload a photo; send `picture` on create/update. */
+export async function uploadClinicPicture(
+  token: string,
+  file: File,
+): Promise<{ picture: string; picture_url: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request('/admin/clinics/picture', { method: 'POST', formData, token })
+}
+
+/** PATCH /admin/clinics/{id} — only the fields sent change; "" clears optional ones. */
+export async function updateClinic(
+  token: string,
+  clinicId: string,
+  payload: Partial<ClinicCreatePayload>,
+): Promise<Clinic> {
+  return request<Clinic>(`/admin/clinics/${clinicId}`, { method: 'PATCH', body: payload, token })
+}
+
+/** DELETE /admin/clinics/{id} — also unlinks its doctors. */
+export async function deleteClinic(token: string, clinicId: string): Promise<void> {
+  await request(`/admin/clinics/${clinicId}`, { method: 'DELETE', token })
+}
+
 export async function createClinic(
   token: string,
   payload: ClinicCreatePayload,
@@ -449,6 +509,12 @@ export interface FamilyMemberRecord {
   account_owner_id: string
   full_name: string
   email: string | null
+  /** Phone the member can log in with once they activate their account. */
+  number: string | null
+  medplum_patient_id: string | null
+  linked_user_id: string | null
+  /** True once the member activated their own login from the invite. */
+  has_account: boolean
   /** Photo as a data URL. */
   profile: string | null
   relationship_to_owner: FamilyRelationship | null
@@ -466,6 +532,8 @@ export interface FamilyMemberCreatePayload {
   date_of_birth: string
   gender?: string | null
   profile?: string | null
+  email?: string | null
+  number?: string | null
 }
 
 /** GET /family-members — the caller's family profiles. */
@@ -483,6 +551,29 @@ export async function createFamilyMember(
     body: payload,
     token,
   })
+}
+
+/** POST /family-members/{member_id}/invite — emails the member an activation code. */
+export async function inviteFamilyMember(
+  token: string,
+  memberId: string,
+): Promise<{ detail: string; has_account: boolean }> {
+  return request(`/family-members/${memberId}/invite`, { method: 'POST', token })
+}
+
+/** POST /users/family-invite/request — the member asks for a (new) activation code. */
+export async function requestFamilyInvite(email: string): Promise<{ detail: string }> {
+  return request('/users/family-invite/request', { method: 'POST', body: { email } })
+}
+
+/** POST /users/family-invite/accept — code + password creates the member's login. */
+export async function acceptFamilyInvite(payload: {
+  email: string
+  otp: string
+  password: string
+  number?: string
+}): Promise<TokenResponse> {
+  return request<TokenResponse>('/users/family-invite/accept', { method: 'POST', body: payload })
 }
 
 /** DELETE /family-members/{member_id} */
@@ -565,6 +656,39 @@ export interface PredictionResult {
   /** Why the urgency is what it is, e.g. "Adults 65 and over are at higher risk." */
   urgency_reasons: string[]
   disclaimer: string
+  /** Id of the saved history entry. */
+  check_id: string | null
+}
+
+/** backend schemas/prediction.SymptomCheckRead — one saved check. */
+export interface SymptomCheck {
+  id: string
+  created_at: string
+  /** Who the check was about. */
+  subject_name: string
+  family_member_id: string | null
+  run_by_name: string
+  /** The viewer ran it. */
+  is_mine: boolean
+  /** The viewer is the patient. */
+  about_me: boolean
+  age: number | null
+  gender: string | null
+  duration: SymptomDuration | null
+  symptoms: Symptom[]
+  predictions: { disease: string; label: string; probability: number }[]
+  urgency: 'low' | 'medium' | 'high'
+  urgency_reasons: string[]
+  synced_to_medplum: boolean
+}
+
+/**
+ * GET /checks — your checks, the ones you ran for family, and the ones
+ * family ran about you. Pass memberId for one family member's history.
+ */
+export async function listChecks(token: string, memberId?: string): Promise<SymptomCheck[]> {
+  const query = memberId ? `?member_id=${encodeURIComponent(memberId)}` : ''
+  return request<SymptomCheck[]>(`/checks${query}`, { token })
 }
 
 /** GET /symptoms — every symptom the model knows, for the picker. */
@@ -581,10 +705,12 @@ export async function predictDisease(
   token: string,
   symptoms: string[],
   patient?: PatientDetails,
+  familyMemberId?: string,
 ): Promise<PredictionResult> {
   return request<PredictionResult>('/predict', {
     method: 'POST',
-    body: { symptoms, ...patient },
+    // Saved to history; family_member_id files it under that member.
+    body: { symptoms, ...patient, family_member_id: familyMemberId },
     token,
   })
 }

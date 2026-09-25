@@ -1,7 +1,9 @@
 from fastapi import HTTPException, status
 
-from app.schemas.clinic import ClinicBase
-from app.services.adminService import AdminService
+from app.schemas.clinic import ClinicBase, ClinicUpdate
+from app.services.adminService import AdminService, ClinicNotFoundError
+
+CLINIC_NOT_FOUND = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Clinic not found.")
 
 
 class AdminController:
@@ -60,3 +62,24 @@ class AdminController:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Creating clinic failed: {e}",
             )
+
+    @staticmethod
+    def upload_clinic_picture(file, service: AdminService):
+        # Upload errors (size, type, bad image, storage) keep their status.
+        return service.upload_clinic_picture(file)
+
+    @staticmethod
+    def update_clinic(clinic_id: str, data: ClinicUpdate, service: AdminService):
+        try:
+            return service.update_clinic(clinic_id, data)
+        except ClinicNotFoundError:
+            raise CLINIC_NOT_FOUND
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    @staticmethod
+    def delete_clinic(clinic_id: str, service: AdminService):
+        try:
+            service.delete_clinic(clinic_id)
+        except ClinicNotFoundError:
+            raise CLINIC_NOT_FOUND

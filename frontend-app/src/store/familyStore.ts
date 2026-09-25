@@ -7,13 +7,12 @@ import {
   createFamilyMember,
   deleteFamilyMember,
   fetchFamilyMembers,
+  inviteFamilyMember,
   isDemoMode,
   toFamilyMember,
 } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import type { FamilyMember } from '@/types';
-
-const NO_CHECKS = 'No checks yet';
 
 /** The API is used whenever it's configured and someone is signed in. */
 function apiToken(): string | null {
@@ -26,14 +25,16 @@ interface FamilyState {
   isLoading: boolean;
   /** Pulls the signed-in account's members from the API (no-op in demo mode). */
   loadMembers: () => Promise<void>;
-  addMember: (member: Omit<FamilyMember, 'id' | 'lastCheck'>) => Promise<FamilyMember>;
+  addMember: (member: Omit<FamilyMember, 'id' | 'hasAccount'>) => Promise<FamilyMember>;
   removeMember: (id: string) => Promise<void>;
+  /** Emails the member an activation code; returns the message to show. */
+  inviteMember: (id: string) => Promise<string>;
   clear: () => void;
 }
 
 export const useFamilyStore = create<FamilyState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       members: [],
       isLoading: false,
       loadMembers: async () => {
@@ -42,14 +43,7 @@ export const useFamilyStore = create<FamilyState>()(
         set({ isLoading: true });
         try {
           const records = await fetchFamilyMembers(token);
-          // lastCheck isn't stored server-side; keep what this device knows.
-          const known = new Map(get().members.map((m) => [m.id, m.lastCheck]));
-          set({
-            members: records.map((record) => ({
-              ...toFamilyMember(record),
-              lastCheck: known.get(record.id) ?? NO_CHECKS,
-            })),
-          });
+          set({ members: records.map(toFamilyMember) });
         } finally {
           set({ isLoading: false });
         }
@@ -57,18 +51,17 @@ export const useFamilyStore = create<FamilyState>()(
       addMember: async (member) => {
         const token = apiToken();
         const created: FamilyMember = token
-          ? {
-              ...toFamilyMember(
-                await createFamilyMember(token, {
-                  full_name: member.name,
-                  relationship_to_owner: member.relation,
-                  date_of_birth: ageToDateOfBirth(member.age),
-                  gender: member.gender ?? null,
-                }),
-              ),
-              lastCheck: NO_CHECKS,
-            }
-          : { ...member, id: `fm-${Date.now()}`, lastCheck: NO_CHECKS };
+          ? toFamilyMember(
+              await createFamilyMember(token, {
+                full_name: member.name,
+                relationship_to_owner: member.relation,
+                date_of_birth: ageToDateOfBirth(member.age),
+                gender: member.gender ?? null,
+                email: member.email || null,
+                number: member.number || null,
+              }),
+            )
+          : { ...member, id: `fm-${Date.now()}`, hasAccount: false };
         set((state) => ({ members: [...state.members, created] }));
         return created;
       },
@@ -76,6 +69,17 @@ export const useFamilyStore = create<FamilyState>()(
         const token = apiToken();
         if (token) await deleteFamilyMember(token, id);
         set((state) => ({ members: state.members.filter((m) => m.id !== id) }));
+      },
+      inviteMember: async (id) => {
+        const token = apiToken();
+        if (!token) return 'Invites need the Symptora server (demo mode).';
+        const { detail, has_account } = await inviteFamilyMember(token, id);
+        if (has_account) {
+          set((state) => ({
+            members: state.members.map((m) => (m.id === id ? { ...m, hasAccount: true } : m)),
+          }));
+        }
+        return detail;
       },
       clear: () => set({ members: [] }),
     }),

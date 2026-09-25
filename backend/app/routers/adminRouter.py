@@ -1,13 +1,19 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, File, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.controllers.adminController import AdminController
 from app.core.database import get_db
 from app.deps.auth import get_current_admin
 from app.models.userModel import UserModel
-from app.schemas.clinic import ClinicBase, ClinicRead
+from app.schemas.clinic import (
+    AdminClinicRead,
+    ClinicBase,
+    ClinicPictureUpload,
+    ClinicRead,
+    ClinicUpdate,
+)
 from app.schemas.doctor import AdminDoctorRead
 from app.schemas.userSchema import UserResponse
 from app.services.adminService import AdminService
@@ -46,13 +52,12 @@ def list_doctors(
     return AdminController.list_doctors(service)
 
 
-@router.get("/clinics", response_model=List[ClinicRead])
+@router.get("/clinics", response_model=List[AdminClinicRead])
 def list_clinics(
     current_admin: UserModel = Depends(get_current_admin),
     service: AdminService = Depends(get_admin_service),
 ):
-    """Same data as GET /clinics, kept under /admin for a single base URL
-    on the dashboard."""
+    """Every clinic with its picture url and linked (approved) doctors."""
     return AdminController.list_clinics(service)
 
 
@@ -64,3 +69,35 @@ def create_clinic(
 ):
     """Creates the clinic's Organization in Medplum, then the local row."""
     return AdminController.create_clinic(clinic_data, service)
+
+
+@router.post("/clinics/picture", response_model=ClinicPictureUpload, status_code=status.HTTP_201_CREATED)
+def upload_clinic_picture(
+    file: UploadFile = File(...),
+    current_admin: UserModel = Depends(get_current_admin),
+    service: AdminService = Depends(get_admin_service),
+):
+    """Store a clinic photo (png/jpeg/webp); send the returned key as ``picture``."""
+    return AdminController.upload_clinic_picture(file, service)
+
+
+@router.patch("/clinics/{clinic_id}", response_model=ClinicRead)
+def update_clinic(
+    clinic_id: str,
+    data: ClinicUpdate,
+    current_admin: UserModel = Depends(get_current_admin),
+    service: AdminService = Depends(get_admin_service),
+):
+    """Edit a clinic; its Medplum Organization is updated first."""
+    return AdminController.update_clinic(clinic_id, data, service)
+
+
+@router.delete("/clinics/{clinic_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_clinic(
+    clinic_id: str,
+    current_admin: UserModel = Depends(get_current_admin),
+    service: AdminService = Depends(get_admin_service),
+):
+    """Remove a clinic and unlink its doctors (also removed from Medplum)."""
+    AdminController.delete_clinic(clinic_id, service)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -102,6 +102,13 @@ class UserRepository:
     ###to get user by email, we query the database for a UserModel object where the email matches the provided email. If found, it returns the UserModel object; otherwise, it returns None.
 
 
+    def get_active_user_by_number(self, number: str) -> UserModel | None:
+        return (
+            self.db.query(UserModel)
+            .filter(UserModel.number == number.strip(), UserModel.is_active.is_(True))
+            .first()
+        )
+
     def get_user_by_id(self, user_id: str) -> UserModel | None:
         ###to get user by ID, we query the database for a UserModel object where the ID matches the provided ID. If found, it returns the UserModel object; otherwise, it returns None.
         return self.db.query(UserModel).filter(UserModel.id == user_id).first()

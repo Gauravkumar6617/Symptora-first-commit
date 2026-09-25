@@ -17,7 +17,7 @@ export function LoginPage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (!email || !password) {
-      setError('Enter your email and password.')
+      setError('Enter your email or phone and your password.')
       return
     }
     setError('')
@@ -41,9 +41,9 @@ export function LoginPage() {
       <form className="space-y-4" onSubmit={handleSubmit}>
         <FormField
           id="email"
-          label="Email"
-          type="email"
-          autoComplete="email"
+          label="Email or phone"
+          type="text"
+          autoComplete="username"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
@@ -76,6 +76,12 @@ export function LoginPage() {
         Don't have an account?{' '}
         <Link to="/signup" className="font-medium text-primary">
           Sign up
+        </Link>
+      </p>
+      <p className="mt-2 text-center text-sm text-ink/60">
+        Added by a family member?{' '}
+        <Link to="/activate-family" className="font-medium text-primary">
+          Activate family account
         </Link>
       </p>
     </AuthSplitLayout>

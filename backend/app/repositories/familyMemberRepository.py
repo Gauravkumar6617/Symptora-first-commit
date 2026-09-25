@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.familyMemeberModel import FamilyMemberModel
@@ -13,7 +14,8 @@ class FamilyMemberRepository:
         member = FamilyMemberModel(
             account_owner_id=owner_id,
             full_name=data.full_name,
-            email=data.email,
+            email=data.email.lower() if data.email else None,
+            number=data.number,
             profile=data.profile,
             relationship_to_owner=(
                 data.relationship_to_owner.value if data.relationship_to_owner else None
@@ -44,11 +46,30 @@ class FamilyMemberRepository:
             .first()
         )
 
-    def email_taken(self, email: str, exclude_id: str | None = None) -> bool:
-        query = self.db.query(FamilyMemberModel).filter(FamilyMemberModel.email == email)
+    def email_taken(self, owner_id: str, email: str, exclude_id: str | None = None) -> bool:
+        query = self.db.query(FamilyMemberModel).filter(
+            FamilyMemberModel.account_owner_id == owner_id,
+            func.lower(FamilyMemberModel.email) == email.strip().lower(),
+        )
         if exclude_id:
             query = query.filter(FamilyMemberModel.id != exclude_id)
         return query.first() is not None
+
+    def unlinked_by_email(self, email: str) -> list[FamilyMemberModel]:
+        """Member rows (in any family) waiting for this person to activate."""
+        return (
+            self.db.query(FamilyMemberModel)
+            .filter(
+                func.lower(FamilyMemberModel.email) == email.strip().lower(),
+                FamilyMemberModel.linked_user_id.is_(None),
+            )
+            .order_by(FamilyMemberModel.created_at)
+            .all()
+        )
+
+    def linked_to_user(self, user_id: str) -> list[FamilyMemberModel]:
+        """Rows in other people's families that are this user."""
+        return self.db.query(FamilyMemberModel).filter(FamilyMemberModel.linked_user_id == user_id).all()
 
     def update(self, member: FamilyMemberModel, changes: dict) -> FamilyMemberModel:
         for field, value in changes.items():

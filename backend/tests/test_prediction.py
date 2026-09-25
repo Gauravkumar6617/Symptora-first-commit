@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.deps.auth import get_current_user
-from app.routers.predictionRouter import router
+from app.routers.predictionRouter import get_check_service, router
 from app.services.predictionService import (
     PredictionService,
     UnknownSymptomError,
@@ -29,11 +29,30 @@ def service() -> PredictionService:
     return get_prediction_service()
 
 
+class FakeChecks:
+    """Stands in for the DB-backed history: records saves instead."""
+
+    medplum = None
+    saved: list = []
+
+    def member_for(self, user, member_id):
+        from app.services.familyMemberService import FamilyMemberNotFoundError
+
+        if member_id:
+            raise FamilyMemberNotFoundError()
+        return None
+
+    def save(self, user, member, request, result):
+        FakeChecks.saved.append(result)
+        return type("Check", (), {"id": "check-1"})()
+
+
 @pytest.fixture(scope="module")
 def client() -> TestClient:
     app = FastAPI()
     app.include_router(router, prefix="/api/v1")
     app.dependency_overrides[get_current_user] = lambda: object()  # skip real login/DB
+    app.dependency_overrides[get_check_service] = lambda: FakeChecks()
     return TestClient(app)
 
 
@@ -189,3 +208,18 @@ def test_api_requires_login():
     app.include_router(router, prefix="/api/v1")
     res = TestClient(app).post("/api/v1/predict", json={"symptoms": ["headache"]})
     assert res.status_code == 401
+
+
+def test_predict_saves_the_check(client):
+    FakeChecks.saved.clear()
+    response = client.post("/api/v1/predict", json={"symptoms": ["itching", "skin_rash"]})
+    assert response.status_code == 200
+    assert response.json()["check_id"] == "check-1"
+    assert len(FakeChecks.saved) == 1
+
+
+def test_predict_for_unknown_family_member_is_404(client):
+    response = client.post(
+        "/api/v1/predict", json={"symptoms": ["itching"], "family_member_id": "not-mine"}
+    )
+    assert response.status_code == 404

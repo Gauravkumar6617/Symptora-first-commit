@@ -1,5 +1,6 @@
 from app.models.clinicModel import CliniModel
 from app.schemas.clinic import ClinicCreate
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 class ClinicRepository:
 
@@ -29,11 +30,23 @@ class ClinicRepository:
         )
 
     def get_by_name(self, name: str) -> CliniModel | None:
+        # Case-insensitive, so "City Care" and "city care" can't both exist.
         return (
             self.db.query(CliniModel)
-            .filter(CliniModel.name == name)
+            .filter(func.lower(CliniModel.name) == name.strip().lower())
             .first()
         )
 
     def list_all(self) -> list[CliniModel]:
-        return self.db.query(CliniModel).all()
+        return self.db.query(CliniModel).order_by(CliniModel.name).all()
+
+    def update(self, clinic: CliniModel, changes: dict) -> CliniModel:
+        for field, value in changes.items():
+            setattr(clinic, field, value)
+        self.db.commit()
+        self.db.refresh(clinic)
+        return clinic
+
+    def delete(self, clinic: CliniModel) -> None:
+        self.db.delete(clinic)
+        self.db.commit()

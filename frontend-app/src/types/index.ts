@@ -131,6 +131,18 @@ export interface ClinicRecord {
   updated_at: string;
 }
 
+/** backend: schemas/clinic.PublicClinicRead — GET /clinics/directory. */
+export interface PublicClinic {
+  id: string;
+  name: string;
+  picture_url: string | null;
+  description: string | null;
+  address: string | null;
+  phone: string | null;
+  /** Approved doctors working there. */
+  doctors: { id: string; name: string; specialization: string }[];
+}
+
 /** backend: DoctorClinicRead — the calling doctor's link to one clinic. */
 export interface DoctorClinicLink {
   id: string;
@@ -150,7 +162,11 @@ export interface FamilyMember {
   relation: FamilyRelationship;
   age: number;
   gender?: Gender;
-  lastCheck: string;
+  email?: string;
+  /** Phone they log in with once they activate their account. */
+  number?: string;
+  /** They activated their own login and see their checks too. */
+  hasAccount: boolean;
 }
 
 /** backend: schemas/family_member.FamilyMemberRead */
@@ -159,6 +175,10 @@ export interface FamilyMemberRecord {
   account_owner_id: string;
   full_name: string;
   email: string | null;
+  number: string | null;
+  medplum_patient_id: string | null;
+  linked_user_id: string | null;
+  has_account: boolean;
   profile: string | null;
   relationship_to_owner: FamilyRelationship | null;
   date_of_birth: string;
@@ -175,6 +195,7 @@ export interface FamilyMemberCreatePayload {
   date_of_birth: string;
   gender?: Gender | null;
   email?: string | null;
+  number?: string | null;
 }
 
 export interface Appointment {
@@ -274,4 +295,29 @@ export interface PredictionResult {
   /** Why the urgency is what it is, e.g. "Adults 65 and over are at higher risk." */
   urgency_reasons: string[];
   disclaimer: string;
+  /** Id of the saved history entry. */
+  check_id?: string | null;
+}
+
+/** backend: schemas/prediction.SymptomCheckRead — one saved check. */
+export interface SymptomCheck {
+  id: string;
+  created_at: string;
+  /** Who the check was about. */
+  subject_name: string;
+  /** The viewer's family profile it's about, if any. */
+  family_member_id: string | null;
+  run_by_name: string;
+  /** The viewer ran it. */
+  is_mine: boolean;
+  /** The viewer is the patient. */
+  about_me: boolean;
+  age: number | null;
+  gender: string | null;
+  duration: SymptomDuration | null;
+  symptoms: Symptom[];
+  predictions: { disease: string; label: string; probability: number }[];
+  urgency: RiskLevel;
+  urgency_reasons: string[];
+  synced_to_medplum: boolean;
 }

@@ -2,29 +2,28 @@ import {
   Building2,
   CheckCircle2,
   Clock,
-  PlusCircle,
   Stethoscope,
   UsersRound,
   XCircle,
 } from 'lucide-react'
-import { type FormEvent, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
+  type AdminClinic,
   type AdminDoctor,
   type AdminStats,
   ApiError,
   approveDoctorApplication,
-  type Clinic,
-  createClinic,
   type DoctorApplication,
   fetchAdminDoctors,
   fetchAdminPatients,
   fetchAdminStats,
-  listClinics,
+  listAdminClinics,
   listPendingDoctorApplications,
   rejectDoctorApplication,
   type UserResponse,
 } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
+import { ClinicsSection } from './ClinicsSection'
 
 export function AdminDashboardPage() {
   const token = useAuthStore((state) => state.token)
@@ -32,7 +31,7 @@ export function AdminDashboardPage() {
   const [pending, setPending] = useState<DoctorApplication[]>([])
   const [doctors, setDoctors] = useState<AdminDoctor[]>([])
   const [patients, setPatients] = useState<UserResponse[]>([])
-  const [clinics, setClinics] = useState<Clinic[]>([])
+  const [clinics, setClinics] = useState<AdminClinic[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -42,7 +41,7 @@ export function AdminDashboardPage() {
       listPendingDoctorApplications(authToken),
       fetchAdminDoctors(authToken),
       fetchAdminPatients(authToken),
-      listClinics(authToken),
+      listAdminClinics(authToken),
     ])
     setStats(statsRes)
     setPending(pendingRes)
@@ -127,7 +126,12 @@ export function AdminDashboardPage() {
       <ClinicsSection
         clinics={clinics}
         token={token}
-        onCreated={(clinic) => setClinics((prev) => [...prev, clinic])}
+        onChanged={async () => {
+          if (!token) return
+          const [clinicsRes, statsRes] = await Promise.all([listAdminClinics(token), fetchAdminStats(token)])
+          setClinics(clinicsRes)
+          setStats(statsRes)
+        }}
       />
 
       <DoctorsSection doctors={doctors} />
@@ -216,130 +220,6 @@ function PendingApplicationsSection({
                   Reject
                 </button>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </>
-  )
-}
-
-function ClinicsSection({
-  clinics,
-  token,
-  onCreated,
-}: {
-  clinics: Clinic[]
-  token: string | null
-  onCreated: (clinic: Clinic) => void
-}) {
-  const [formOpen, setFormOpen] = useState(false)
-  const [name, setName] = useState('')
-  const [picture, setPicture] = useState('')
-  const [address, setAddress] = useState('')
-  const [phone, setPhone] = useState('')
-  const [description, setDescription] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [formError, setFormError] = useState('')
-
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault()
-    if (!token || !name.trim() || !picture.trim()) {
-      setFormError('Name and picture URL are required.')
-      return
-    }
-    setFormError('')
-    setSubmitting(true)
-    try {
-      const clinic = await createClinic(token, {
-        name: name.trim(),
-        picture: picture.trim(),
-        address: address.trim() || undefined,
-        phone: phone.trim() || undefined,
-        description: description.trim() || undefined,
-      })
-      onCreated(clinic)
-      setName('')
-      setPicture('')
-      setAddress('')
-      setPhone('')
-      setDescription('')
-      setFormOpen(false)
-    } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : 'Could not create that clinic.')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <>
-      <div className="mt-10 flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-ink">Clinics</h2>
-          <p className="mt-0.5 text-xs text-ink/60">{clinics.length} total</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setFormOpen((open) => !open)}
-          className="flex items-center gap-1.5 rounded-lg border border-ink/15 px-3 py-1.5 text-sm font-medium text-ink hover:bg-ink/5"
-        >
-          <PlusCircle className="h-4 w-4" />
-          {formOpen ? 'Cancel' : 'Add clinic'}
-        </button>
-      </div>
-
-      {formOpen && (
-        <form onSubmit={handleSubmit} className="card-raised mt-4 space-y-3 p-5">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Clinic name"
-              className="rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-primary"
-            />
-            <input
-              value={picture}
-              onChange={(e) => setPicture(e.target.value)}
-              placeholder="Picture URL"
-              className="rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-primary"
-            />
-            <input
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="Address (optional)"
-              className="rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-primary"
-            />
-            <input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="Phone (optional)"
-              className="rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-primary"
-            />
-          </div>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Description (optional)"
-            rows={2}
-            className="w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-primary"
-          />
-          {formError && <p className="text-sm text-danger">{formError}</p>}
-          <button type="submit" className="btn-raised px-4 py-2 text-sm" disabled={submitting}>
-            {submitting ? 'Creating…' : 'Create clinic'}
-          </button>
-        </form>
-      )}
-
-      {clinics.length === 0 ? (
-        <p className="mt-4 text-sm text-ink/50">No clinics yet.</p>
-      ) : (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {clinics.map((clinic) => (
-            <div key={clinic.id} className="card-raised p-4">
-              <p className="text-sm font-semibold text-ink">{clinic.name}</p>
-              {clinic.address && <p className="mt-1 text-xs text-ink/60">{clinic.address}</p>}
-              {clinic.phone && <p className="mt-0.5 text-xs text-ink/50">{clinic.phone}</p>}
             </div>
           ))}
         </div>

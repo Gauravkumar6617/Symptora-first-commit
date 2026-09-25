@@ -28,7 +28,9 @@ import type {
   ParsedSymptoms,
   PatientDetails,
   PredictionResult,
+  PublicClinic,
   Symptom,
+  SymptomCheck,
   UserCreatePayload,
   UserResponse,
   UserUpdatePayload,
@@ -249,6 +251,7 @@ export async function fetchCurrentUser(token: string): Promise<AuthUser> {
  * POST /api/v1/users/login, then GET /users/me. The role is whatever the
  * server says the account is — never picked on the login screen.
  */
+/** `email` may also be the phone number (family members often only know that). */
 export async function loginUser(email: string, password: string): Promise<AuthSession> {
   if (isDemoMode) {
     await delay(450);
@@ -330,13 +333,16 @@ export function ageFromDateOfBirth(dateOfBirth: string): number {
   return Math.max(age, 0);
 }
 
-export function toFamilyMember(record: FamilyMemberRecord): Omit<FamilyMember, 'lastCheck'> {
+export function toFamilyMember(record: FamilyMemberRecord): FamilyMember {
   return {
     id: record.id,
     name: record.full_name,
     relation: record.relationship_to_owner ?? 'other',
     age: ageFromDateOfBirth(record.date_of_birth),
     gender: (record.gender as Gender | null) ?? undefined,
+    email: record.email ?? undefined,
+    number: record.number ?? undefined,
+    hasAccount: record.has_account,
   };
 }
 
@@ -351,6 +357,38 @@ export async function createFamilyMember(
   payload: FamilyMemberCreatePayload,
 ): Promise<FamilyMemberRecord> {
   return request<FamilyMemberRecord>('/family-members', { method: 'POST', body: payload, token });
+}
+
+/** POST /api/v1/family-members/{member_id}/invite — emails the member an activation code. */
+export async function inviteFamilyMember(
+  token: string,
+  memberId: string,
+): Promise<{ detail: string; has_account: boolean }> {
+  return request(`/family-members/${memberId}/invite`, { method: 'POST', token });
+}
+
+/** POST /api/v1/users/family-invite/request — the member asks for a (new) activation code. */
+export async function requestFamilyInvite(email: string): Promise<string> {
+  const { detail } = await request<{ detail: string }>('/users/family-invite/request', {
+    method: 'POST',
+    body: { email },
+  });
+  return detail;
+}
+
+/** POST /api/v1/users/family-invite/accept — code + password creates the member's login. */
+export async function acceptFamilyInvite(payload: {
+  email: string;
+  otp: string;
+  password: string;
+  number?: string;
+}): Promise<AuthSession> {
+  const tokens = await request<{ access_token: string; token_type: string }>(
+    '/users/family-invite/accept',
+    { method: 'POST', body: payload },
+  );
+  const user = await fetchCurrentUser(tokens.access_token);
+  return { user, accessToken: tokens.access_token };
 }
 
 /** DELETE /api/v1/family-members/{member_id} */
@@ -390,10 +428,24 @@ export async function fetchSpecialties() {
   return specialties;
 }
 
-/** Mock "find a partner clinic" directory — unrelated to fetchClinicOptions below. */
-export async function fetchClinics() {
-  await delay();
-  return partnerClinics;
+/**
+ * GET /api/v1/clinics/directory — public partner-clinic list (the clinics
+ * admins add). Demo mode maps the sample clinics onto the same shape.
+ */
+export async function fetchClinics(): Promise<PublicClinic[]> {
+  if (isDemoMode) {
+    await delay();
+    return partnerClinics.map((clinic) => ({
+      id: clinic.id,
+      name: clinic.name,
+      picture_url: null,
+      description: `${clinic.openHours} · ${clinic.services.join(', ')}`,
+      address: `${clinic.address}, ${clinic.city}`,
+      phone: null,
+      doctors: [],
+    }));
+  }
+  return request<PublicClinic[]>('/clinics/directory');
 }
 
 export async function fetchCatalogDoctors() {
@@ -546,6 +598,7 @@ export async function predictDisease(
   token: string | null | undefined,
   symptoms: string[],
   patient?: PatientDetails,
+  familyMemberId?: string,
 ): Promise<PredictionResult> {
   if (isDemoMode) {
     await delay(600);
@@ -570,7 +623,21 @@ export async function predictDisease(
   }
   return request<PredictionResult>('/predict', {
     method: 'POST',
-    body: { symptoms, ...patient },
+    // Saved to history; family_member_id files it under that member.
+    body: { symptoms, ...patient, family_member_id: familyMemberId },
     token,
   });
+}
+
+/**
+ * GET /api/v1/checks — your checks, the ones you ran for family, and the
+ * ones family ran about you. Pass memberId for one family member's history.
+ */
+export async function fetchChecks(
+  token: string | null | undefined,
+  memberId?: string,
+): Promise<SymptomCheck[]> {
+  if (isDemoMode || !token) return [];
+  const query = memberId ? `?member_id=${encodeURIComponent(memberId)}` : '';
+  return request<SymptomCheck[]>(`/checks${query}`, { token });
 }

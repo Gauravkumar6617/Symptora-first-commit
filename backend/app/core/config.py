@@ -39,6 +39,10 @@ class Settting(BaseSettings):
     SMTP_PASSWORD                 : str = ""
     FROM_EMAIL                    : str = ""
     SMTP_USE_TLS                  : bool = True
+    # Family invites: sender (falls back to FROM_EMAIL) and an optional
+    # website linked in the email footer.
+    INVITE_FROM_EMAIL             : str = ""
+    INVITE_PROMO_URL              : str = ""
 
     # cloudflare R2
     R2_ACCOUNT_ID: str

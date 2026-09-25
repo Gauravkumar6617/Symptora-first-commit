@@ -129,8 +129,21 @@ class CurrentUserResponse(UserResponse):
 
 
 class UserLogin(BaseModel):
-    email:EmailStr
-    password:str
+    # Email or phone number; family members often only know their number.
+    email: str = Field(min_length=3, max_length=255)
+    password: str
+
+
+class FamilyInviteRequest(BaseModel):
+    email: EmailStr
+
+
+class FamilyInviteAccept(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+    password: str = Field(min_length=8, max_length=72)
+    # Only needed when the owner didn't add a number for them.
+    number: Optional[str] = Field(default=None, max_length=15)
 
 
 class TokenResponse(BaseModel):

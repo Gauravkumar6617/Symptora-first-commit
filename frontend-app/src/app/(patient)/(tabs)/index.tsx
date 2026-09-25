@@ -22,7 +22,7 @@ import { useBlogPosts, useCatalogDoctors, usePatientAppointments, useSpecialties
 import { useTheme } from '@/hooks/use-theme';
 import { useAuthStore } from '@/store/authStore';
 import { useFamilyStore } from '@/store/familyStore';
-import { useHealthCheckStore } from '@/store/healthCheckStore';
+import { useHealthHistory } from '@/hooks/use-health-history';
 
 export default function PatientHomeScreen() {
   const theme = useTheme();
@@ -31,7 +31,7 @@ export default function PatientHomeScreen() {
   const user = useAuthStore((state) => state.user);
   const members = useFamilyStore((state) => state.members);
   const loadMembers = useFamilyStore((state) => state.loadMembers);
-  const checks = useHealthCheckStore((state) => state.checks);
+  const { checks } = useHealthHistory();
   const { data: specialties } = useSpecialties();
   const { data: doctors, isLoading: doctorsLoading } = useCatalogDoctors();
   const { data: posts } = useBlogPosts();
@@ -268,7 +268,9 @@ export default function PatientHomeScreen() {
                   {relationshipLabel(member.relation)} · {member.age} yrs
                 </Text>
               </View>
-              <Text style={[styles.doctorMeta, { color: theme.textMuted }]}>{member.lastCheck}</Text>
+              <Text style={[styles.doctorMeta, { color: theme.textMuted }]}>
+                {member.hasAccount ? 'Own login' : 'Managed by you'}
+              </Text>
             </Card>
           ))}
         </View>

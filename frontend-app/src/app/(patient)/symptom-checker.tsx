@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -18,7 +18,6 @@ import { useTheme } from '@/hooks/use-theme';
 import { ageFromDateOfBirth, ApiError } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { useFamilyStore } from '@/store/familyStore';
-import { useHealthCheckStore } from '@/store/healthCheckStore';
 import {
   GENDER_LABELS,
   GENDERS,
@@ -49,7 +48,8 @@ export default function SymptomCheckerScreen() {
   const predict = usePredictDisease();
   const user = useAuthStore((state) => state.user);
   const { members, loadMembers } = useFamilyStore();
-  const addCheck = useHealthCheckStore((state) => state.addCheck);
+  // Opened from a family card: ?member=<id> preselects that member.
+  const { member: memberParam } = useLocalSearchParams<{ member?: string }>();
 
   // Step 1: who the check is for. Pre-filled from the profile / family member.
   const [patient, setPatient] = useState<PatientDetails | null>(null);
@@ -70,12 +70,21 @@ export default function SymptomCheckerScreen() {
     loadMembers().catch(() => {}); // offline: the persisted list is used
   }, [loadMembers]);
 
+
   function pickPerson(id: string) {
     setForWhom(id);
     const member = members.find((m) => m.id === id);
     const dob = id === ME ? user?.date_of_birth : undefined;
     setAge(member ? String(member.age) : dob ? String(ageFromDateOfBirth(dob)) : '');
     setGender(member ? (member.gender ?? null) : (user?.gender ?? null));
+  }
+
+  // Opened from a family card: select that member once their profile has loaded
+  // (adjusting state during render, so there is no extra effect pass).
+  const [memberApplied, setMemberApplied] = useState(false);
+  if (!memberApplied && memberParam && members.some((m) => m.id === memberParam)) {
+    setMemberApplied(true);
+    pickPerson(memberParam);
   }
 
   const parsedAge = Number(age);
@@ -341,24 +350,11 @@ export default function SymptomCheckerScreen() {
         label={selected.length ? `Check ${selected.length} symptom${selected.length === 1 ? '' : 's'}` : 'Select at least one symptom'}
         icon="pulse"
         onPress={() =>
-          predict.mutate(
-            {
-              symptoms: selected,
-              patient: { ...patient, description: description.trim() || undefined },
-            },
-            {
-              // Keep the result in Health Check history alongside questionnaire checks.
-              onSuccess: (found) =>
-                addCheck({
-                  id: `sc-${Date.now()}`,
-                  title: found.predictions[0] ? `Possible ${found.predictions[0].label}` : 'Symptom check',
-                  riskLevel: found.urgency,
-                  createdAt: new Date().toISOString(),
-                  summary: found.symptoms.map((id) => labels[id] ?? id).join(', '),
-                  forMember: forWhom === ME ? undefined : personName,
-                }),
-            },
-          )
+          predict.mutate({
+            symptoms: selected,
+            patient: { ...patient, description: description.trim() || undefined },
+            familyMemberId: forWhom === ME ? undefined : forWhom,
+          })
         }
         loading={predict.isPending}
         disabled={selected.length === 0}
@@ -432,6 +428,16 @@ export default function SymptomCheckerScreen() {
               {result.disclaimer}
             </Text>
           </Card>
+
+          {result.check_id ? (
+            <Button
+              label={`Saved to ${forWhom === ME ? 'your' : `${personName}'s`} history · View`}
+              icon="time-outline"
+              variant="ghost"
+              size="sm"
+              onPress={() => router.push('/(patient)/health-checks')}
+            />
+          ) : null}
         </View>
       ) : null}
     </Screen>

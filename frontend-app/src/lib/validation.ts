@@ -218,9 +218,12 @@ export function profileFormToPayload(form: ProfileForm): UserUpdatePayload {
   };
 }
 
+/** `email` may also be a phone number (family members log in with the one they were added with). */
 export function validateLogin(email: string, password: string) {
   const errors: { email?: string; password?: string } = {};
-  const emailError = validateEmail(email);
+  const value = email.trim();
+  const isPhone = /^\+?[\d\s-]{7,16}$/.test(value);
+  const emailError = isPhone ? undefined : value ? validateEmail(value) : 'Enter your email or phone number.';
   if (emailError) errors.email = emailError;
   if (!password) errors.password = 'Password is required.';
   return errors;

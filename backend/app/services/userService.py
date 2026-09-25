@@ -1,14 +1,25 @@
 import json
+import logging
 
 from app.core.config import settings
 from app.core.security import hashed_pasword
 from app.repositories.userRepositories import UserRepository
-from app.schemas.userSchema import CurrentUserResponse, UserCreate, UserLogin, UserUpdate
+from app.repositories.familyMemberRepository import FamilyMemberRepository
+from app.schemas.userSchema import (
+    CurrentUserResponse,
+    FamilyInviteAccept,
+    UserCreate,
+    UserLogin,
+    UserUpdate,
+)
 from app.utils.integration.cloudflarR2.index import delete_key, upload_avatar
 from app.utils.integration.medplum.index import MedplumIntegration
 from app.utils.otp.index import discard_otp , generate_store_otp, verify_otp
 from app.utils.otp.send_otp import send_otp_email
 from app.core.security import verify_password,create_access_token,decode_token 
+
+
+logger = logging.getLogger(__name__)
 
 
 class UserNotFoundError(Exception):
@@ -119,6 +130,7 @@ class UserService:
             user_data, password_hash=password_hash, is_active=True
         )
         self.redis_user.delete(pending_key)
+        self._link_family_rows(user)
         return user
 
     def create_fhir_patient(self, user_data, local_user_id: str | int) -> dict:
@@ -203,13 +215,17 @@ class UserService:
 
     def login_user(self, user_data: UserLogin):
         """Exchange email + password for an access token."""
-        user = self.user_repository.get_user_by_email(
-            user_data.email.strip().lower()
+        identifier = user_data.email.strip()
+        # Family members often only know the phone number the owner added.
+        user = (
+            self.user_repository.get_user_by_email(identifier.lower())
+            if "@" in identifier
+            else self.user_repository.get_active_user_by_number(identifier)
         )
         # The same error for a missing user and a wrong password, so the
         # response cannot be used to discover which emails are registered.
         if not user or not verify_password(user_data.password, user.hashed_password):
-            raise InvalidCredentialsError("Incorrect email or password.")
+            raise InvalidCredentialsError("Incorrect email/phone or password.")
 
         if not user.is_active:
             raise InactiveUserError(
@@ -217,6 +233,87 @@ class UserService:
             )
 
         # ``sub`` is the user id because that is what deps/auth.py looks up.
+        token = create_access_token({"sub": str(user.id)})
+        return {"access_token": token, "token_type": "bearer"}
+
+    # ------------------------------------------------------------ family invites
+
+    def _family_repo(self) -> FamilyMemberRepository:
+        return FamilyMemberRepository(self.user_repository.db)
+
+    def _link_family_rows(self, user) -> None:
+        """Link every family-member row with this email to the account."""
+        rows = self._family_repo().unlinked_by_email(user.email)
+        for row in rows:
+            if row.account_owner_id != user.id:
+                row.linked_user_id = user.id
+        if rows:
+            self.user_repository.db.commit()
+
+    def request_family_invite(self, email: str) -> None:
+        """Member side of the invite: send a fresh activation code.
+
+        Stays silent when no family added this email, so the endpoint can't be
+        used to find out who is on Symptora.
+        """
+        from app.services.familyMemberService import FamilyMemberService
+
+        rows = self._family_repo().unlinked_by_email(email)
+        if not rows:
+            return
+        existing = self.user_repository.get_user_by_email(email.strip().lower())
+        if existing and existing.is_active:
+            self._link_family_rows(existing)
+            raise ValueError("You already have a Symptora account. Log in with it instead.")
+        FamilyMemberService(self.user_repository.db).send_invite_code(rows[0], rows[0].account_owner)
+
+    def accept_family_invite(self, data: FamilyInviteAccept) -> dict:
+        """Create the member's own login from the family profile; returns a token."""
+        from app.services.familyMemberService import invite_otp_key
+
+        valid, message = verify_otp(invite_otp_key(data.email), data.otp)
+        if not valid:
+            raise ValueError(message)
+
+        rows = self._family_repo().unlinked_by_email(data.email)
+        if not rows:
+            raise ValueError("This invite is no longer available.")
+        member = rows[0]
+        number = (data.number or member.number or "").strip()
+        if not number:
+            raise ValueError("Add your phone number to finish.")
+
+        clash = self.user_repository.find_by_email_or_number(data.email, number)
+        if clash and clash.is_active:
+            raise ValueError("An account with this email or phone number already exists. Log in instead.")
+        if clash:
+            self.user_repository.delete_user(clash.id)  # unverified leftover signup
+
+        first, _, last = member.full_name.strip().partition(" ")
+        user_data = UserCreate(
+            first_name=first[:24],
+            last_name=last[:24],
+            email=data.email,
+            number=number,
+            date_of_birth=member.date_of_birth,
+            gender=member.gender,
+            password=data.password,
+        )
+        user = self.user_repository.create_user(
+            user_data, password_hash=hashed_pasword(data.password), is_active=True
+        )
+
+        # Reuse the member's FHIR Patient so their records stay in one place.
+        patient_id = member.medplum_patient_id
+        if not patient_id:
+            try:
+                patient_id = self.medplum.create_patient(self.create_fhir_patient(user_data, user.id)).get("id")
+            except Exception:
+                logger.exception("Medplum patient for invited user %s not created", user.id)
+        user.medplum_patient_id = patient_id
+        self.user_repository.db.commit()
+        self._link_family_rows(user)
+
         token = create_access_token({"sub": str(user.id)})
         return {"access_token": token, "token_type": "bearer"}
 

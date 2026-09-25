@@ -1,8 +1,9 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   fetchBlogPosts,
   fetchCatalogDoctors,
+  fetchChecks,
   fetchClinics,
   fetchDoctorAppointments,
   fetchNotifications,
@@ -15,8 +16,8 @@ import {
 import { useAuthStore } from '@/store/authStore';
 import type { PatientDetails } from '@/types';
 
-// Family members and Health Check history come from
-// useFamilyStore/useHealthCheckStore, not a query hook here.
+// Family members come from useFamilyStore. Symptom-checker history is on the
+// server (useChecks); questionnaire Health Checks stay in useHealthCheckStore.
 
 export function usePatientAppointments() {
   return useQuery({ queryKey: ['appointments', 'patient'], queryFn: fetchPatientAppointments });
@@ -65,8 +66,28 @@ export function useParseSymptoms() {
 /** `mutate({ symptoms: ['fatigue'], patient })` → `data` is the PredictionResult. */
 export function usePredictDisease() {
   const accessToken = useAuthStore((state) => state.accessToken);
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ symptoms, patient }: { symptoms: string[]; patient?: PatientDetails }) =>
-      predictDisease(accessToken, symptoms, patient),
+    mutationFn: ({
+      symptoms,
+      patient,
+      familyMemberId,
+    }: {
+      symptoms: string[];
+      patient?: PatientDetails;
+      familyMemberId?: string;
+    }) => predictDisease(accessToken, symptoms, patient, familyMemberId),
+    // The new result was saved server-side; refresh every history list.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['checks'] }),
+  });
+}
+
+/** Saved symptom checks (shared with family); `memberId` narrows to one member. */
+export function useChecks(memberId?: string) {
+  const accessToken = useAuthStore((state) => state.accessToken);
+  return useQuery({
+    queryKey: ['checks', accessToken, memberId ?? 'all'],
+    queryFn: () => fetchChecks(accessToken, memberId),
+    enabled: !!accessToken,
   });
 }

@@ -6,11 +6,10 @@ import {
   deleteFamilyMember,
   type FamilyMemberRecord,
   type FamilyRelationship,
+  inviteFamilyMember,
   listFamilyMembers,
 } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
-
-const NO_CHECKS = 'No checks yet'
 
 export interface FamilyMember {
   id: string
@@ -18,7 +17,10 @@ export interface FamilyMember {
   relation: FamilyRelationship
   age: number
   gender?: string
-  lastCheck?: string
+  email?: string
+  number?: string
+  /** They activated their own login and see their checks too. */
+  hasAccount: boolean
   avatarUrl?: string
 }
 
@@ -26,6 +28,9 @@ export interface NewFamilyMember {
   name: string
   relation: FamilyRelationship
   age: number
+  gender?: string
+  email?: string
+  number?: string
   avatarUrl?: string
 }
 
@@ -35,6 +40,8 @@ interface FamilyState {
   loadMembers: () => Promise<void>
   addMember: (member: NewFamilyMember) => Promise<FamilyMember>
   removeMember: (id: string) => Promise<void>
+  /** Emails the member an activation code; returns the message to show. */
+  inviteMember: (id: string) => Promise<string>
   clear: () => void
 }
 
@@ -63,15 +70,17 @@ export function ageFromDateOfBirth(dateOfBirth: string): number {
   return Math.max(age, 0)
 }
 
-function toFamilyMember(record: FamilyMemberRecord, lastCheck = NO_CHECKS): FamilyMember {
+function toFamilyMember(record: FamilyMemberRecord): FamilyMember {
   return {
     id: record.id,
     name: record.full_name,
     relation: record.relationship_to_owner ?? 'other',
     age: ageFromDateOfBirth(record.date_of_birth),
     gender: record.gender ?? undefined,
+    email: record.email ?? undefined,
+    number: record.number ?? undefined,
+    hasAccount: record.has_account,
     avatarUrl: record.profile ?? undefined,
-    lastCheck,
   }
 }
 
@@ -83,7 +92,7 @@ function requireToken(): string {
 
 export const useFamilyStore = create<FamilyState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       members: [],
       isLoading: false,
       loadMembers: async () => {
@@ -92,9 +101,7 @@ export const useFamilyStore = create<FamilyState>()(
         set({ isLoading: true })
         try {
           const records = await listFamilyMembers(token)
-          // lastCheck isn't stored server-side; keep what this browser knows.
-          const known = new Map(get().members.map((m) => [m.id, m.lastCheck]))
-          set({ members: records.map((r) => toFamilyMember(r, known.get(r.id))) })
+          set({ members: records.map(toFamilyMember) })
         } finally {
           set({ isLoading: false })
         }
@@ -105,6 +112,9 @@ export const useFamilyStore = create<FamilyState>()(
           relationship_to_owner: member.relation,
           date_of_birth: ageToDateOfBirth(member.age),
           profile: member.avatarUrl ?? null,
+          gender: member.gender || null,
+          email: member.email || null,
+          number: member.number || null,
         })
         const created = toFamilyMember(record)
         set((state) => ({ members: [...state.members, created] }))
@@ -113,6 +123,15 @@ export const useFamilyStore = create<FamilyState>()(
       removeMember: async (id) => {
         await deleteFamilyMember(requireToken(), id)
         set((state) => ({ members: state.members.filter((m) => m.id !== id) }))
+      },
+      inviteMember: async (id) => {
+        const { detail, has_account } = await inviteFamilyMember(requireToken(), id)
+        if (has_account) {
+          set((state) => ({
+            members: state.members.map((m) => (m.id === id ? { ...m, hasAccount: true } : m)),
+          }))
+        }
+        return detail
       },
       clear: () => set({ members: [] }),
     }),

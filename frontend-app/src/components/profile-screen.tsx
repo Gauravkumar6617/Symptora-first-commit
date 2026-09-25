@@ -15,7 +15,7 @@ import { APP_NAME } from '@/data/content';
 import { ageFromDob, formatDate, fullName, titleCase } from '@/lib/format';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuthStore } from '@/store/authStore';
-import { useHealthCheckStore } from '@/store/healthCheckStore';
+import { useHealthHistory } from '@/hooks/use-health-history';
 
 /** Shared profile tab for both the patient and doctor tab groups. */
 export function ProfileScreen() {
@@ -23,7 +23,7 @@ export function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, logout } = useAuthStore();
-  const checks = useHealthCheckStore((state) => state.checks);
+  const { checks } = useHealthHistory();
 
   const isDoctor = user?.role === 'doctor';
   const age = ageFromDob(user?.date_of_birth);

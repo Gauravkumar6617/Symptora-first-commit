@@ -7,10 +7,13 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.redis import redis_client
 from app.deps.auth import get_current_user
+from app.deps.medplum import get_medplum_integration
 from app.models.userModel import UserModel
 from app.repositories.userRepositories import UserRepository
 from app.schemas.userSchema import (
     CurrentUserResponse,
+    FamilyInviteAccept,
+    FamilyInviteRequest,
     OTPRequestResponse,
     RegistrationOTPVerify,
     TokenResponse,
@@ -26,15 +29,6 @@ from app.utils.integration.medplum.index import MedplumIntegration
 from app.controllers.userController import UserController
 
 router = APIRouter(prefix="/users", tags=["Users"])
-
-
-def get_medplum_integration() -> MedplumIntegration:
-    return MedplumIntegration(
-        base_url=settings.MEDPLUM_BASE_URL,
-        client_id=settings.MEDPLUM_CLIENT_ID,
-        client_secret=settings.MEDPLUM_CLIENT_SECRET,
-        project_id=settings.MEDPLUM_PROJECT_ID,
-    )
 
 
 def get_user_service(
@@ -74,6 +68,24 @@ def verify_registration_otp(
     service: UserService = Depends(get_user_service),
 ):
     return UserController.verify_registration_otp(verification=verification, service=service)
+
+
+@router.post("/family-invite/request", response_model=OTPRequestResponse)
+def request_family_invite(
+    data: FamilyInviteRequest,
+    service: UserService = Depends(get_user_service),
+):
+    """Family member asks for a (new) code to activate the profile someone added them with."""
+    return UserController.request_family_invite(data, service)
+
+
+@router.post("/family-invite/accept", response_model=TokenResponse)
+def accept_family_invite(
+    data: FamilyInviteAccept,
+    service: UserService = Depends(get_user_service),
+):
+    """Code + new password -> the member's own account, logged in."""
+    return UserController.accept_family_invite(data, service)
 
 
 @router.get("/me", response_model=CurrentUserResponse)
@@ -117,7 +129,7 @@ def login_for_swagger(
     except ValidationError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password.",
+            detail="Incorrect email/phone or password.",
             headers={"WWW-Authenticate": "Bearer"},
         )
     return UserController.login_user(user_data=user_data, service=service)
