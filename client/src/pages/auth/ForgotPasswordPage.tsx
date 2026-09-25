@@ -3,46 +3,83 @@ import { type FormEvent, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AuthSplitLayout } from '@/components/auth/AuthSplitLayout'
 import { FormField } from '@/components/auth/FormField'
+import {
+  ApiError,
+  requestPasswordReset,
+  resetPassword,
+  verifyPasswordReset,
+} from '@/lib/api'
 
 type Step = 'email' | 'otp' | 'reset' | 'done'
+
+function messageFrom(error: unknown, fallback: string) {
+  return error instanceof ApiError ? error.message : fallback
+}
 
 export function ForgotPasswordPage() {
   const navigate = useNavigate()
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
   const [otp, setOtp] = useState('')
+  const [resetToken, setResetToken] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
-  const [sending, setSending] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [busy, setBusy] = useState(false)
 
-  function handleSendOtp(event: FormEvent) {
+  async function sendCode() {
+    setError('')
+    setNotice('')
+    setBusy(true)
+    try {
+      await requestPasswordReset(email.trim().toLowerCase())
+      return true
+    } catch (err) {
+      setError(messageFrom(err, 'Could not send the code. Please try again.'))
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleSendOtp(event: FormEvent) {
     event.preventDefault()
-    if (!email) {
+    if (!email.includes('@')) {
       setError('Enter your email address.')
       return
     }
-    setError('')
-    setSending(true)
-    // TODO: replace with a real "send OTP to email" API call
-    setTimeout(() => {
-      setSending(false)
+    if (await sendCode()) {
+      setOtp('')
       setStep('otp')
-    }, 700)
+    }
   }
 
-  function handleVerifyOtp(event: FormEvent) {
+  async function handleResend() {
+    if (await sendCode()) setNotice('A new code is on its way.')
+  }
+
+  async function handleVerifyOtp(event: FormEvent) {
     event.preventDefault()
     if (otp.length !== 6) {
       setError('Enter the 6-digit code we emailed you.')
       return
     }
     setError('')
-    // TODO: verify OTP with the backend
-    setStep('reset')
+    setNotice('')
+    setBusy(true)
+    try {
+      const { reset_token } = await verifyPasswordReset(email.trim().toLowerCase(), otp)
+      setResetToken(reset_token)
+      setStep('reset')
+    } catch (err) {
+      setError(messageFrom(err, 'That code did not work. Please try again.'))
+    } finally {
+      setBusy(false)
+    }
   }
 
-  function handleResetPassword(event: FormEvent) {
+  async function handleResetPassword(event: FormEvent) {
     event.preventDefault()
     if (password.length < 8) {
       setError('Password must be at least 8 characters.')
@@ -53,8 +90,19 @@ export function ForgotPasswordPage() {
       return
     }
     setError('')
-    // TODO: submit new password to the backend
-    setStep('done')
+    setBusy(true)
+    try {
+      await resetPassword({
+        email: email.trim().toLowerCase(),
+        reset_token: resetToken,
+        password,
+      })
+      setStep('done')
+    } catch (err) {
+      setError(messageFrom(err, 'Could not reset your password. Please try again.'))
+    } finally {
+      setBusy(false)
+    }
   }
 
   if (step === 'done') {
@@ -95,7 +143,7 @@ export function ForgotPasswordPage() {
         step === 'email'
           ? "Enter your email and we'll send you a one-time code"
           : step === 'otp'
-            ? `We sent a 6-digit code to ${email}`
+            ? `If ${email} has an account, we sent it a 6-digit code`
             : 'Choose a new password for your account'
       }
     >
@@ -112,11 +160,11 @@ export function ForgotPasswordPage() {
           {error && <p className="text-sm text-danger">{error}</p>}
           <button
             type="submit"
-            disabled={sending}
+            disabled={busy}
             className="btn-raised flex w-full items-center justify-center gap-2 disabled:opacity-60"
           >
             <Mail className="h-4 w-4" />
-            {sending ? 'Sending code…' : 'Send OTP'}
+            {busy ? 'Sending code…' : 'Send code'}
           </button>
         </form>
       )}
@@ -133,16 +181,25 @@ export function ForgotPasswordPage() {
             placeholder="000000"
           />
           {error && <p className="text-sm text-danger">{error}</p>}
-          <button type="submit" className="btn-raised w-full">
-            Verify code
+          {notice && <p className="text-sm text-success">{notice}</p>}
+          <button type="submit" disabled={busy} className="btn-raised w-full disabled:opacity-60">
+            {busy ? 'Checking…' : 'Verify code'}
           </button>
-          <button
-            type="button"
-            onClick={() => setStep('email')}
-            className="w-full text-center text-sm font-medium text-primary"
-          >
-            Use a different email
-          </button>
+          <div className="flex justify-between text-sm font-medium text-primary">
+            <button
+              type="button"
+              onClick={() => {
+                setError('')
+                setNotice('')
+                setStep('email')
+              }}
+            >
+              Use a different email
+            </button>
+            <button type="button" onClick={handleResend} disabled={busy} className="disabled:opacity-60">
+              Resend code
+            </button>
+          </div>
         </form>
       )}
 
@@ -165,8 +222,8 @@ export function ForgotPasswordPage() {
             onChange={(e) => setConfirmPassword(e.target.value)}
           />
           {error && <p className="text-sm text-danger">{error}</p>}
-          <button type="submit" className="btn-raised w-full">
-            Reset password
+          <button type="submit" disabled={busy} className="btn-raised w-full disabled:opacity-60">
+            {busy ? 'Saving…' : 'Reset password'}
           </button>
         </form>
       )}

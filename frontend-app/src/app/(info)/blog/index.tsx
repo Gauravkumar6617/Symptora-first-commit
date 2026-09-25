@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -6,21 +7,24 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card } from '@/components/ui/card';
 import { Chip } from '@/components/ui/chip';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Screen } from '@/components/ui/screen';
 import { SkeletonList } from '@/components/ui/skeleton';
 import { StackHeader } from '@/components/ui/stack-header';
 import { Gradient, Radius, Spacing, Typography } from '@/constants/theme';
-import { blogCategories } from '@/data/mock/directory';
 import { useBlogPosts } from '@/hooks/use-queries';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function BlogListScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { data: posts, isLoading } = useBlogPosts();
+  const { data: posts, isLoading, isError, isRefetching, refetch } = useBlogPosts();
   const [category, setCategory] = useState<string | null>(null);
 
-  const categories = useMemo(() => blogCategories(), []);
+  const categories = useMemo(
+    () => Array.from(new Set((posts ?? []).map((post) => post.category))),
+    [posts],
+  );
   const [featured, ...rest] = posts ?? [];
 
   const filtered = useMemo(() => {
@@ -31,7 +35,9 @@ export default function BlogListScreen() {
 
   return (
     <Screen
-      header={<StackHeader title="Health guides" subtitle="Written and reviewed by clinicians" fallbackHref="/" />}>
+      header={<StackHeader title="Health guides" subtitle="Written and reviewed by clinicians" fallbackHref="/" />}
+      onRefresh={refetch}
+      refreshing={isRefetching}>
       <View style={styles.filters}>
         <Chip label="All" selected={!category} onPress={() => setCategory(null)} />
         {categories.map((item) => (
@@ -46,15 +52,31 @@ export default function BlogListScreen() {
 
       {isLoading ? (
         <SkeletonList count={3} lines={3} />
+      ) : isError ? (
+        <EmptyState
+          icon="cloud-offline-outline"
+          title="Couldn't load guides"
+          description="Check your connection and pull down to try again."
+        />
+      ) : posts?.length === 0 ? (
+        <EmptyState icon="book-outline" title="No guides yet" description="New articles will show up here." />
       ) : (
         <>
           {!category && featured ? (
             <Pressable onPress={() => router.push(`/(info)/blog/${featured.slug}`)}>
+              {featured.coverImageUrl ? (
+                <Image
+                  source={{ uri: featured.coverImageUrl }}
+                  style={styles.featuredImage}
+                  contentFit="cover"
+                  transition={200}
+                />
+              ) : null}
               <LinearGradient
                 colors={Gradient.teal}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={styles.featured}>
+                style={[styles.featured, featured.coverImageUrl ? styles.featuredWithImage : null]}>
                 <Text style={styles.featuredKicker}>FEATURED · {featured.category.toUpperCase()}</Text>
                 <Text style={styles.featuredTitle}>{featured.title}</Text>
                 <Text style={styles.featuredExcerpt} numberOfLines={3}>
@@ -73,6 +95,14 @@ export default function BlogListScreen() {
           <View style={{ gap: Spacing.three, marginTop: Spacing.three }}>
             {filtered.map((post) => (
               <Card key={post.slug} onPress={() => router.push(`/(info)/blog/${post.slug}`)} style={styles.card}>
+                {post.coverImageUrl ? (
+                  <Image
+                    source={{ uri: post.coverImageUrl }}
+                    style={styles.cardImage}
+                    contentFit="cover"
+                    transition={200}
+                  />
+                ) : null}
                 <Text style={[styles.category, { color: theme.primary }]}>{post.category.toUpperCase()}</Text>
                 <Text style={[styles.title, { color: theme.text }]}>{post.title}</Text>
                 <Text style={[styles.excerpt, { color: theme.textSecondary }]} numberOfLines={2}>
@@ -104,6 +134,20 @@ const styles = StyleSheet.create({
     borderRadius: Radius.xl,
     padding: Spacing.four,
     gap: 6,
+  },
+  featuredImage: {
+    height: 160,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+  },
+  featuredWithImage: {
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+  },
+  cardImage: {
+    height: 130,
+    borderRadius: Radius.md,
+    marginBottom: Spacing.two,
   },
   featuredKicker: {
     ...Typography.overline,

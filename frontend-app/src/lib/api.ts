@@ -9,7 +9,7 @@
  * it's real static content this app ships with.
  */
 
-import { blogPosts, catalogDoctors, partnerClinics } from '@/data/mock/directory';
+import { type BlogPost, blogPosts, catalogDoctors, partnerClinics } from '@/data/mock/directory';
 import { mockNotifications, mockPatient } from '@/data/mock/people';
 import { useAuthStore } from '@/store/authStore';
 import { specialties } from '@/data/specialties';
@@ -299,12 +299,39 @@ export async function updateMyProfile(payload: UserUpdatePayload, token?: string
   return toAuthUser(user);
 }
 
+/** POST /users/password/forgot — emails a 6-digit code (same reply for unknown emails). */
 export async function requestPasswordReset(email: string): Promise<void> {
   if (isDemoMode) {
     await delay(500);
     return;
   }
-  await request('/auth/forgot-password', { method: 'POST', body: { email } });
+  await request('/users/password/forgot', { method: 'POST', body: { email } });
+}
+
+/** POST /users/password/verify — checks the code; returns the token that authorises the reset. */
+export async function verifyPasswordReset(email: string, otp: string): Promise<string> {
+  if (isDemoMode) {
+    await delay(400);
+    return 'demo-reset-token';
+  }
+  const { reset_token } = await request<{ reset_token: string }>('/users/password/verify', {
+    method: 'POST',
+    body: { email, otp },
+  });
+  return reset_token;
+}
+
+/** POST /users/password/reset */
+export async function resetPassword(payload: {
+  email: string;
+  reset_token: string;
+  password: string;
+}): Promise<void> {
+  if (isDemoMode) {
+    await delay(500);
+    return;
+  }
+  await request('/users/password/reset', { method: 'POST', body: payload });
 }
 
 // ---------------------------------------------------------- family members
@@ -453,9 +480,56 @@ export async function fetchCatalogDoctors() {
   return catalogDoctors;
 }
 
-export async function fetchBlogPosts() {
-  await delay();
-  return blogPosts;
+/** backend schemas/blog.BlogPostRead — posts admins write on the website. */
+interface BlogPostRead {
+  id: string;
+  slug: string;
+  title: string;
+  category: string;
+  excerpt: string;
+  paragraphs: string[];
+  author: string;
+  cover_image_url: string | null;
+  published_at: string | null;
+  created_at: string;
+  read_time: string;
+}
+
+function toBlogPost(post: BlogPostRead): BlogPost {
+  return {
+    slug: post.slug,
+    title: post.title,
+    category: post.category,
+    excerpt: post.excerpt,
+    content: post.paragraphs,
+    author: post.author,
+    date: (post.published_at ?? post.created_at).slice(0, 10),
+    readTime: post.read_time,
+    coverImageUrl: post.cover_image_url,
+  };
+}
+
+/** GET /blogs — published posts, newest first. No login needed. */
+export async function fetchBlogPosts(): Promise<BlogPost[]> {
+  if (isDemoMode) {
+    await delay();
+    return blogPosts;
+  }
+  return (await request<BlogPostRead[]>('/blogs')).map(toBlogPost);
+}
+
+/** GET /blogs/{slug} — null when the post doesn't exist or was unpublished. */
+export async function fetchBlogPost(slug: string): Promise<BlogPost | null> {
+  if (isDemoMode) {
+    await delay(150);
+    return blogPosts.find((post) => post.slug === slug) ?? null;
+  }
+  try {
+    return toBlogPost(await request<BlogPostRead>(`/blogs/${encodeURIComponent(slug)}`));
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
 }
 
 export async function sendContactMessage(payload: {

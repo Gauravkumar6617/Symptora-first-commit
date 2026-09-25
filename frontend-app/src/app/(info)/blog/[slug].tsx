@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -6,22 +7,38 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Chip } from '@/components/ui/chip';
 import { Screen } from '@/components/ui/screen';
+import { SkeletonList } from '@/components/ui/skeleton';
 import { StackHeader } from '@/components/ui/stack-header';
 import { Radius, Spacing, Typography, tint } from '@/constants/theme';
-import { blogPosts, getBlogPostBySlug } from '@/data/mock/directory';
+import { useBlogPost, useBlogPosts } from '@/hooks/use-queries';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function BlogPostScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { slug } = useLocalSearchParams<{ slug: string }>();
-  const post = getBlogPostBySlug(slug);
+  const { data: post, isLoading, isError } = useBlogPost(slug);
+  const { data: posts } = useBlogPosts();
+
+  if (isLoading || isError) {
+    return (
+      <Screen header={<StackHeader title="Health guide" fallbackHref="/(info)/blog" />}>
+        {isError ? (
+          <Text style={[styles.paragraph, { color: theme.textSecondary }]}>
+            Couldn&apos;t load this guide. Check your connection and try again.
+          </Text>
+        ) : (
+          <SkeletonList count={2} lines={4} />
+        )}
+      </Screen>
+    );
+  }
 
   if (!post) {
     return <Redirect href="/(info)/blog" />;
   }
 
-  const related = blogPosts.filter((item) => item.slug !== post.slug).slice(0, 2);
+  const related = (posts ?? []).filter((item) => item.slug !== post.slug).slice(0, 2);
 
   return (
     <Screen header={<StackHeader title={post.category} fallbackHref="/(info)/blog" />}>
@@ -36,6 +53,15 @@ export default function BlogPostScreen() {
           {post.author} · {post.date} · {post.readTime}
         </Text>
       </View>
+
+      {post.coverImageUrl ? (
+        <Image
+          source={{ uri: post.coverImageUrl }}
+          style={styles.cover}
+          contentFit="cover"
+          transition={200}
+        />
+      ) : null}
 
       {post.content.map((paragraph, index) => (
         <Text key={index} style={[styles.paragraph, { color: theme.text }]}>
@@ -110,6 +136,11 @@ const styles = StyleSheet.create({
   },
   bylineText: {
     ...Typography.caption,
+  },
+  cover: {
+    height: 200,
+    borderRadius: Radius.lg,
+    marginBottom: Spacing.three,
   },
   paragraph: {
     ...Typography.body,

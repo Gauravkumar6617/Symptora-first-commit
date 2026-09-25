@@ -107,3 +107,28 @@ class UserController:
             return service.accept_family_invite(data)
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    @staticmethod
+    def request_password_reset(email: str, service: UserService):
+        try:
+            service.request_password_reset(email)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
+        except OTPDeliveryError as e:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
+        return {"detail": "If an account exists for this email, a reset code is on its way."}
+
+    @staticmethod
+    def verify_password_reset(email: str, otp: str, service: UserService):
+        try:
+            return {"reset_token": service.verify_password_reset(email, otp)}
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    @staticmethod
+    def reset_password(data, service: UserService):
+        try:
+            service.reset_password(data.email, data.reset_token, data.password)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        return {"detail": "Your password has been reset. You can log in now."}

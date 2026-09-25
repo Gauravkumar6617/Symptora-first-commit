@@ -11,6 +11,7 @@ from app.routers.clinicRouter import router as ClinicRouter
 from app.routers.adminRouter import router as AdminRouter
 from app.routers.familyMemberRouter import router as FamilyMemberRouter
 from app.routers.predictionRouter import router as PredictionRouter
+from app.routers.blogRouter import router as BlogRouter, admin_router as AdminBlogRouter
 from app.services.predictionService import get_prediction_service
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -55,6 +56,8 @@ app.include_router(ClinicRouter,prefix="/api/v1")
 app.include_router(AdminRouter,prefix="/api/v1")
 app.include_router(FamilyMemberRouter,prefix="/api/v1")
 app.include_router(PredictionRouter,prefix="/api/v1")
+app.include_router(BlogRouter,prefix="/api/v1")
+app.include_router(AdminBlogRouter,prefix="/api/v1")
 
 
 

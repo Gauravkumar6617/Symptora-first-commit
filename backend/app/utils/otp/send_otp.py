@@ -29,6 +29,31 @@ def send_otp_email(to_email: str, otp: str) -> None:
     _send(to_email, "Verify your Symptora email", text, _otp_email_html(otp), settings.FROM_EMAIL)
 
 
+def _password_reset_html(otp: str) -> str:
+    expiry_minutes = max(1, settings.OTP_EXPIRY_SECONDS // 60)
+    return f"""<!doctype html>
+<html><body style=\"margin:0;background:#f4f7fb;font-family:Arial,sans-serif;color:#172033\">
+  <div style=\"max-width:560px;margin:32px auto;background:#ffffff;border-radius:12px;overflow:hidden\">
+    <div style=\"padding:24px 32px;background:#1967d2;color:#ffffff\"><h1 style=\"margin:0;font-size:24px\">Symptora</h1></div>
+    <div style=\"padding:32px\"><h2 style=\"margin-top:0\">Reset your password</h2>
+      <p>Use this code to choose a new password:</p>
+      <p style=\"margin:28px 0;text-align:center;font-size:32px;font-weight:bold;letter-spacing:8px;color:#1967d2\">{otp}</p>
+      <p>This code expires in {expiry_minutes} minute{'s' if expiry_minutes != 1 else ''}. Do not share it with anyone.</p>
+      <p style=\"color:#667085;font-size:13px\">If you did not ask to reset your password, you can safely ignore this email. Your password stays the same.</p>
+    </div>
+  </div>
+</body></html>"""
+
+
+def send_password_reset_email(to_email: str, otp: str) -> None:
+    text = (
+        f"Your Symptora password reset code is {otp}. "
+        f"It expires in {max(1, settings.OTP_EXPIRY_SECONDS // 60)} minutes. "
+        "If you did not ask for this, ignore this email."
+    )
+    _send(to_email, "Reset your Symptora password", text, _password_reset_html(otp), settings.FROM_EMAIL)
+
+
 def _family_invite_html(otp: str, owner_name: str, member_name: str) -> str:
     expiry_minutes = max(1, settings.OTP_EXPIRY_SECONDS // 60)
     promo = settings.INVITE_PROMO_URL.strip()

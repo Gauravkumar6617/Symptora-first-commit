@@ -146,6 +146,26 @@ class FamilyInviteAccept(BaseModel):
     number: Optional[str] = Field(default=None, max_length=15)
 
 
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetVerify(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class PasswordResetVerifyResponse(BaseModel):
+    # Single-use proof that the emailed code was checked; send it with the new password.
+    reset_token: str
+
+
+class PasswordResetConfirm(BaseModel):
+    email: EmailStr
+    reset_token: str = Field(min_length=16, max_length=128)
+    password: str = Field(min_length=8, max_length=72)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
