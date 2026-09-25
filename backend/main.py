@@ -37,14 +37,19 @@ app = FastAPI(
 ) #making object of fastapi and tranfering to app
 
 origins = [
-    "http://localhost:3000",   # your frontend dev URL
-    "http://localhost:5173",   # e.g. Vite default
     "https://symptora-ten.vercel.app",  # production frontend
+    *[o.strip().rstrip("/") for o in settings.CORS_ORIGINS.split(",") if o.strip()],
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    # Local dev on any port: Vite (5173/5174...), Expo web (8081), and the
+    # same via 127.0.0.1 or a LAN IP. Plus Vercel preview deployments.
+    allow_origin_regex=(
+        r"https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?"
+        r"|https://symptora[a-z0-9-]*\.vercel\.app"
+    ),
     allow_credentials=True,
     allow_methods=["*"],   # or restrict: ["GET", "POST", "PUT", "DELETE"]
     allow_headers=["*"],   # or restrict: ["Authorization", "Content-Type"]

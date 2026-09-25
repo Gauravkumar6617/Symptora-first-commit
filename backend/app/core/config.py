@@ -44,6 +44,11 @@ class Settting(BaseSettings):
     INVITE_FROM_EMAIL             : str = ""
     INVITE_PROMO_URL              : str = ""
 
+#CORS
+    # Comma-separated extra browser origins allowed to call the API,
+    # e.g. "https://symptora.com,https://www.symptora.com".
+    CORS_ORIGINS                  : str = ""
+
     # cloudflare R2
     R2_ACCOUNT_ID: str
     R2_BUCKET: str
