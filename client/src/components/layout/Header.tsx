@@ -27,6 +27,7 @@ const navItems = [
 export function Header() {
   const { isAuthenticated, user, logout } = useAuthStore()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [brokenAvatar, setBrokenAvatar] = useState<string | null>(null)
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/60 bg-surface/95 shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_2px_6px_rgba(30,41,59,0.06)] backdrop-blur">
@@ -64,10 +65,12 @@ export function Header() {
                 className="flex max-w-[12rem] items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-ink hover:bg-ink/5"
               >
                 <span className="icon-badge h-8 w-8 overflow-hidden">
-                  {user?.avatarUrl ? (
+                  {user?.avatarUrl && brokenAvatar !== user.avatarUrl ? (
                     <img
                       src={user.avatarUrl}
                       alt=""
+                      // Presigned urls expire; show the icon until the session sync brings a fresh one.
+                      onError={() => setBrokenAvatar(user.avatarUrl ?? null)}
                       className="h-full w-full object-cover"
                     />
                   ) : (

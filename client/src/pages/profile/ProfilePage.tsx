@@ -9,7 +9,9 @@ export function ProfilePage() {
   const [name, setName] = useState(user?.name ?? '')
   const [phone, setPhone] = useState(user?.phone ?? '')
   const [address, setAddress] = useState(user?.address ?? '')
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatarUrl ?? null)
+  // undefined = not changed here, so the (session-synced) stored url is shown.
+  const [pickedAvatar, setPickedAvatar] = useState<string | null | undefined>(undefined)
+  const avatarUrl = pickedAvatar === undefined ? (user?.avatarUrl ?? null) : pickedAvatar
   const [saved, setSaved] = useState(false)
 
   function handleSubmit(event: FormEvent) {
@@ -18,7 +20,7 @@ export function ProfilePage() {
       name,
       phone,
       address,
-      avatarUrl: avatarUrl ?? undefined,
+      ...(pickedAvatar !== undefined && { avatarUrl: pickedAvatar ?? undefined }),
     })
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
@@ -44,7 +46,7 @@ export function ProfilePage() {
       </p>
 
       <form onSubmit={handleSubmit} className="card-raised mt-8 space-y-5 p-6 sm:p-8">
-        <AvatarUpload value={avatarUrl} onChange={setAvatarUrl} label="Profile photo" />
+        <AvatarUpload value={avatarUrl} onChange={setPickedAvatar} label="Profile photo" />
 
         {user.isDoctor && (
           <p className="flex items-center gap-2 rounded-xl bg-primary-50 px-4 py-2.5 text-sm font-medium text-primary-700">
