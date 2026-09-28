@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from app.repositories.doctorRepositories import DoctorRepository
 from app.repositories.userRepositories import UserRepository
-from app.schemas.doctor import DoctorProfileCreate
+from app.schemas.doctor import DoctorProfileCreate, DoctorSelfUpdate
 from app.models.doctorModel import DoctorProfile
 from app.models.enumModel import Status
 from app.utils.integration.medplum.index import MedplumIntegration
@@ -40,6 +40,24 @@ class DoctorService:
 
     def get_my_application(self, user_id: str) -> DoctorProfile | None:
         return self.doctor_repo.get_by_user_id(user_id)
+
+    def update_my_profile(self, user_id: str, data: DoctorSelfUpdate) -> DoctorProfile:
+        """An approved doctor editing their own contact info, fee, daily
+        quota and weekly availability."""
+        doctor = self.doctor_repo.get_by_user_id(user_id)
+        if not doctor or doctor.status != Status.APPROVED:
+            raise ValueError("Approved doctor profile not found")
+
+        changes = {k: v for k, v in data.model_dump(exclude_unset=True).items()}
+        availability_slots = changes.pop("availability_slots", None)
+        for clearable in ("contact_person_name", "contact_email", "contact_phone"):
+            if changes.get(clearable) == "":
+                changes[clearable] = None
+        if changes:
+            doctor = self.doctor_repo.update(doctor, changes)
+        if availability_slots is not None:
+            doctor = self.doctor_repo.replace_availability(doctor, availability_slots)
+        return doctor
 
     def get_public_profile(self, doctor_profile_id: str) -> dict:
         """An approved doctor's public profile, with their weekly availability

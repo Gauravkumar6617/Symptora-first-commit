@@ -11,6 +11,7 @@ from app.schemas.doctor import (
     DoctorProfileBase,
     DoctorProfileRead,
     DoctorProfileUpdate,
+    DoctorSelfUpdate,
     PublicDoctorRead,
 )
 from app.core.database import get_db
@@ -49,6 +50,21 @@ def get_my_doctor_application(
     """The caller's own doctor application, or null if they never applied."""
     service = DoctorService(db)
     return DoctorController.get_my_application(current_user, service)
+
+
+@router.patch(
+    "/me",
+    response_model=DoctorProfileRead,
+)
+def update_my_doctor_profile(
+    data: DoctorSelfUpdate,
+    current_user: UserModel = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """An approved doctor editing their own contact info, fee, daily
+    appointment quota and weekly availability."""
+    service = DoctorService(db)
+    return DoctorController.update_my_profile(data, current_user, service)
 
 
 @router.get(

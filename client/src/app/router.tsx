@@ -15,6 +15,7 @@ import { BlogPostPage } from '@/pages/blog/BlogPostPage'
 import { ClinicsPage } from '@/pages/clinics/ClinicsPage'
 import { ContactPage } from '@/pages/contact/ContactPage'
 import { DashboardPage } from '@/pages/dashboard/DashboardPage'
+import { DoctorDashboardPage } from '@/pages/doctor/DoctorDashboardPage'
 import { FamilyPage } from '@/pages/family/FamilyPage'
 import { HomePage } from '@/pages/home/HomePage'
 import { PrivacyPolicyPage } from '@/pages/legal/PrivacyPolicyPage'
@@ -39,6 +40,7 @@ export const router = createBrowserRouter([
       { path: '/blog', element: <BlogListPage /> },
       { path: '/blog/:slug', element: <BlogPostPage /> },
       { path: '/family', element: <FamilyPage /> },
+      { path: '/appointments', element: <AppointmentsPage /> },
       { path: '/about', element: <AboutPage /> },
       { path: '/contact', element: <ContactPage /> },
       { path: '/privacy', element: <PrivacyPolicyPage /> },
@@ -47,7 +49,7 @@ export const router = createBrowserRouter([
         element: <ProtectedRoute />,
         children: [
           { path: '/dashboard', element: <DashboardPage /> },
-          { path: '/appointments', element: <AppointmentsPage /> },
+          { path: '/doctor/dashboard', element: <DoctorDashboardPage /> },
           { path: '/profile', element: <ProfilePage /> },
           { path: '/apply-doctor', element: <ApplyDoctorPage /> },
           { path: '/symptom-checker', element: <SymptomCheckerPage /> },

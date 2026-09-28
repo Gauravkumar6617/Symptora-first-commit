@@ -176,8 +176,33 @@ export interface DoctorApplication {
   clinic_id: string | null
   medplum_practitioner_id: string | null
   status: DoctorApplicationStatus
+  contact_person_name: string | null
+  contact_email: string | null
+  contact_phone: string | null
+  max_appointments_per_day: number | null
+  fee: number | null
+  availability_slots: DoctorAvailability[]
   created_at: string
   updated_at: string
+}
+
+/** PATCH /doctor/me request body — what an approved doctor may edit about
+ * their own profile. */
+export interface DoctorSelfUpdatePayload {
+  contact_person_name?: string
+  contact_email?: string
+  contact_phone?: string
+  max_appointments_per_day?: number | null
+  fee?: number | null
+  availability_slots?: AvailabilitySlotPayload[]
+}
+
+/** PATCH /doctor/me */
+export async function updateMyDoctorProfile(
+  token: string,
+  payload: DoctorSelfUpdatePayload,
+): Promise<DoctorApplication> {
+  return request<DoctorApplication>('/doctor/me', { method: 'PATCH', body: payload, token })
 }
 
 // ---------------------------------------------------------------- clinics
@@ -1049,6 +1074,12 @@ export async function bookAppointmentByService(
 /** GET /appointments/me — the caller's own bookings. */
 export async function listMyAppointments(token: string): Promise<Appointment[]> {
   return request<Appointment[]>('/appointments/me', { token })
+}
+
+/** GET /appointments/doctor/me — appointments booked with the calling
+ * (approved) doctor. */
+export async function listMyPatientAppointments(token: string): Promise<Appointment[]> {
+  return request<Appointment[]>('/appointments/doctor/me', { token })
 }
 
 /** PATCH /appointments/{id}/cancel */

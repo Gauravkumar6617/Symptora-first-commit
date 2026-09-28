@@ -1,7 +1,17 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarDays, CheckCircle2, Clock, Stethoscope, UsersRound, Video } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { type DoctorApplication, getMyDoctorApplication, listChecks, type SymptomCheck } from '@/lib/api'
+import {
+  type Appointment,
+  ApiError,
+  cancelAppointment,
+  type DoctorApplication,
+  getMyDoctorApplication,
+  listChecks,
+  listMyAppointments,
+  type SymptomCheck,
+} from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 import { relationLabel, useFamilyStore } from '@/store/familyStore'
 import { MyClinicsCard } from './MyClinicsCard'
@@ -18,37 +28,24 @@ export function DashboardPage() {
   const token = useAuthStore((state) => state.token)
   const members = useFamilyStore((state) => state.members)
   const loadMembers = useFamilyStore((state) => state.loadMembers)
-  const [application, setApplication] = useState<DoctorApplication | null | undefined>(undefined)
-  const [checks, setChecks] = useState<SymptomCheck[] | null>(null)
 
-  useEffect(() => {
-    if (!token) return
-    listChecks(token)
-      .then(setChecks)
-      .catch(() => setChecks([]))
-  }, [token])
+  const enabled = Boolean(token)
+  const { data: checks = null } = useQuery({
+    queryKey: ['my-checks'],
+    queryFn: () => listChecks(token!),
+    enabled,
+  })
+  // undefined = still loading, null = never applied, otherwise pending/approved/rejected.
+  const { data: application } = useQuery({
+    queryKey: ['my-doctor-application'],
+    queryFn: () => getMyDoctorApplication(token!),
+    enabled,
+  })
 
   useEffect(() => {
     // Offline: the persisted list stays on screen.
     loadMembers().catch(() => {})
   }, [loadMembers])
-
-  // Drives the "apply as a doctor" card below: undefined = still loading,
-  // null = never applied, otherwise their pending/approved/rejected status.
-  useEffect(() => {
-    if (!token) return
-    let cancelled = false
-    getMyDoctorApplication(token)
-      .then((result) => {
-        if (!cancelled) setApplication(result)
-      })
-      .catch(() => {
-        if (!cancelled) setApplication(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [token])
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
@@ -77,6 +74,8 @@ export function DashboardPage() {
       {application !== undefined && <DoctorApplicationCard application={application} />}
       {application?.status === 'APPROVED' && <MyClinicsCard />}
 
+      <MyAppointmentsSection token={token} />
+
       <RecentChecks checks={checks} />
 
       <div className="mt-10">
@@ -99,6 +98,106 @@ export function DashboardPage() {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  )
+}
+
+const appointmentStatusBadge: Record<Appointment['status'], string> = {
+  scheduled: 'bg-primary/10 text-primary',
+  rescheduled: 'bg-warning/10 text-warning',
+  cancelled: 'bg-ink/10 text-ink/50',
+  completed: 'bg-success/10 text-success',
+}
+
+/** Your own upcoming and past bookings, with a cancel action while they're
+ * still live. */
+function MyAppointmentsSection({ token }: { token: string | null }) {
+  const queryClient = useQueryClient()
+  const [cancelling, setCancelling] = useState<string | null>(null)
+  const [error, setError] = useState('')
+
+  const { data: appointments = [] } = useQuery({
+    queryKey: ['my-appointments'],
+    queryFn: () => listMyAppointments(token!),
+    enabled: Boolean(token),
+  })
+
+  async function handleCancel(id: string) {
+    if (!token) return
+    if (!window.confirm('Cancel this appointment?')) return
+    setError('')
+    setCancelling(id)
+    try {
+      await cancelAppointment(token, id)
+      await queryClient.invalidateQueries({ queryKey: ['my-appointments'] })
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not cancel that appointment.')
+    } finally {
+      setCancelling(null)
+    }
+  }
+
+  if (appointments.length === 0) return null
+
+  const sorted = [...appointments].sort((a, b) => b.appointment_date.localeCompare(a.appointment_date))
+
+  return (
+    <div className="mt-10">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold text-ink">My appointments</h2>
+        <Link to="/appointments" className="text-sm font-semibold text-primary">
+          Book another →
+        </Link>
+      </div>
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      <div className="mt-4 space-y-3">
+        {sorted.map((a) => (
+          <div key={a.id} className="card-raised flex flex-wrap items-center justify-between gap-3 p-4">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-ink">
+                {a.doctor_name ?? 'Doctor'}
+                {a.doctor_specialization ? ` · ${a.doctor_specialization}` : ''}
+              </p>
+              <p className="mt-0.5 text-xs text-ink/60">
+                {new Date(a.appointment_date).toLocaleDateString(undefined, {
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric',
+                })}{' '}
+                · {a.slot.toUpperCase()} · {a.clinic_name}
+              </p>
+              <p className="mt-1 text-xs text-ink/50">{a.reason}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${appointmentStatusBadge[a.status]}`}
+              >
+                {a.status}
+              </span>
+              {a.meet_link && (
+                <a
+                  href={a.meet_link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                >
+                  <Video className="h-3.5 w-3.5" /> Join
+                </a>
+              )}
+              {(a.status === 'scheduled' || a.status === 'rescheduled') && (
+                <button
+                  type="button"
+                  onClick={() => handleCancel(a.id)}
+                  disabled={cancelling === a.id}
+                  className="rounded-lg border border-danger/20 px-3 py-1.5 text-xs font-semibold text-danger hover:bg-danger/5 disabled:opacity-60"
+                >
+                  {cancelling === a.id ? 'Cancelling…' : 'Cancel'}
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -192,17 +291,21 @@ function DoctorApplicationCard({ application }: { application: DoctorApplication
 
   if (application.status === 'APPROVED') {
     return (
-      <div className="card-raised mt-10 flex items-center gap-4 p-5">
+      <Link
+        to="/doctor/dashboard"
+        className="card-raised mt-10 flex items-center gap-4 p-5 transition-colors hover:border-primary/40"
+      >
         <span className="icon-badge">
           <CheckCircle2 className="h-6 w-6 text-success" />
         </span>
         <div>
           <h3 className="text-sm font-semibold text-ink">You're a verified doctor</h3>
           <p className="mt-1 text-xs text-ink/60">
-            Your {application.specialization} profile is live on Symptora.
+            Your {application.specialization} profile is live on Symptora — open your doctor
+            dashboard for appointments and profile settings.
           </p>
         </div>
-      </div>
+      </Link>
     )
   }
 

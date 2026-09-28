@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   type Appointment,
   ApiError,
@@ -129,6 +130,11 @@ function BookingSidePanel() {
 export function AppointmentsPage() {
   const { user, token } = useAuthStore()
   const { members, loadMembers } = useFamilyStore()
+  const navigate = useNavigate()
+
+  // Booking needs an account; browsing doctors/services doesn't, so the page
+  // stays open and just nudges logged-out visitors to log in.
+  const [showLoginNotice, setShowLoginNotice] = useState(!token)
 
   const {
     data: clinicsList = [] as PublicClinic[],
@@ -225,6 +231,10 @@ export function AppointmentsPage() {
   /** "Confirm appointment" opens the review dialog; the actual booking only
    * happens once the patient confirms there too. */
   function handleConfirmClick() {
+    if (!token) {
+      setShowLoginNotice(true)
+      return
+    }
     if (!canBook()) return
     setConfirming(true)
   }
@@ -718,6 +728,44 @@ export function AppointmentsPage() {
                 className="rounded-xl border border-ink/15 px-4 py-3 text-sm font-semibold text-ink hover:bg-ink/5"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLoginNotice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="card-raised w-full max-w-sm p-6 text-center">
+            <span className="icon-badge mx-auto h-12 w-12">
+              <ShieldCheck className="h-6 w-6 text-primary-600" />
+            </span>
+            <h2 className="mt-4 text-lg font-bold text-ink">Please log in to book</h2>
+            <p className="mt-2 text-sm text-ink/60">
+              An account is required to book an appointment. You can still browse doctors and
+              services below, or log in now to continue.
+            </p>
+            <div className="mt-5 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/login', { state: { from: '/appointments' } })}
+                className="btn-raised w-full"
+              >
+                Log in
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/signup', { state: { from: '/appointments' } })}
+                className="rounded-xl border border-ink/15 px-4 py-3 text-sm font-semibold text-ink hover:bg-ink/5"
+              >
+                Create an account
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowLoginNotice(false)}
+                className="mt-1 text-xs font-medium text-ink/50 hover:text-ink"
+              >
+                Continue browsing
               </button>
             </div>
           </div>

@@ -31,6 +31,18 @@ class DoctorProfileUpdate(BaseModel):
     availability_slots: Optional[List[DoctorAvailabilityCreate]] = None
 
 
+class DoctorSelfUpdate(BaseModel):
+    """PATCH /doctor/me — what an approved doctor may edit about their own
+    profile; specialization/license/clinic stay admin-only."""
+
+    contact_person_name: Optional[str] = Field(default=None, max_length=100)
+    contact_email: Optional[str] = Field(default=None, max_length=120)
+    contact_phone: Optional[str] = Field(default=None, max_length=30)
+    max_appointments_per_day: Optional[int] = Field(default=None, ge=1)
+    fee: Optional[float] = Field(default=None, ge=0)
+    availability_slots: Optional[List[DoctorAvailabilityCreate]] = None
+
+
 class DoctorProfileReject(BaseModel):
     reason: Optional[str] = None
 
