@@ -257,6 +257,7 @@ export interface ClinicDoctor {
   name: string
   specialization: string
   fee: number | null
+  avatar_url: string | null
 }
 
 /** backend AdminClinicRead — a clinic plus its linked doctors. */
@@ -610,6 +611,7 @@ export interface PublicDoctor {
   name: string
   specialization: string
   fee: number | null
+  avatar_url: string | null
   availability_slots: DoctorAvailability[]
   clinics: Clinic[]
 }

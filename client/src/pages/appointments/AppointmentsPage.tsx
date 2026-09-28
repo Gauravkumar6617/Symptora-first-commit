@@ -5,8 +5,10 @@ import {
   MapPin,
   Phone,
   ShieldCheck,
+  Stethoscope,
   UserRound,
   Video,
+  X,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
@@ -171,6 +173,14 @@ export function AppointmentsPage() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [confirmed, setConfirmed] = useState<Appointment | null>(null)
   const [confirming, setConfirming] = useState(false)
+
+  // Bottom sheet shown right after picking a doctor or service, with its
+  // photo (doctor only) and full details.
+  const [detailSheet, setDetailSheet] = useState<
+    | { type: 'doctor'; data: ClinicDoctor & { clinicId: string; clinicName: string } }
+    | { type: 'service'; data: Service }
+    | null
+  >(null)
 
   useEffect(() => {
     loadMembers().catch(() => {})
@@ -429,7 +439,10 @@ export function AppointmentsPage() {
                       key={svc.id}
                       type="button"
                       title={svc.description ?? undefined}
-                      onClick={() => pickService(svc)}
+                      onClick={() => {
+                        pickService(svc)
+                        setDetailSheet({ type: 'service', data: svc })
+                      }}
                       className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                         selectedService?.id === svc.id
                           ? 'bg-primary text-white shadow-[0_6px_14px_-6px_rgba(37,99,235,0.6)]'
@@ -523,15 +536,26 @@ export function AppointmentsPage() {
                   <button
                     key={`${doctor.clinicId}-${doctor.id}`}
                     type="button"
-                    onClick={() => pickDoctor(doctor)}
+                    onClick={() => {
+                      pickDoctor(doctor)
+                      setDetailSheet({ type: 'doctor', data: doctor })
+                    }}
                     className={`card-raised flex flex-col gap-2 p-4 text-left ${
                       isSelected ? 'ring-2 ring-primary' : ''
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <span className="icon-badge h-11 w-11">
-                        <UserRound className="h-5 w-5 text-primary-600" />
-                      </span>
+                      {doctor.avatar_url ? (
+                        <img
+                          src={doctor.avatar_url}
+                          alt={doctor.name}
+                          className="h-11 w-11 shrink-0 rounded-full object-cover"
+                        />
+                      ) : (
+                        <span className="icon-badge h-11 w-11">
+                          <UserRound className="h-5 w-5 text-primary-600" />
+                        </span>
+                      )}
                       <div>
                         <p className="text-sm font-semibold text-ink">
                           {doctor.name}
@@ -688,6 +712,69 @@ export function AppointmentsPage() {
           </div>
         </div>
       </div>
+
+      {detailSheet && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:px-4"
+          onClick={() => setDetailSheet(null)}
+        >
+          <div
+            className="card-raised w-full max-w-sm rounded-b-none p-6 sm:rounded-b-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                {detailSheet.type === 'doctor' && detailSheet.data.avatar_url ? (
+                  <img
+                    src={detailSheet.data.avatar_url}
+                    alt={detailSheet.data.name}
+                    className="h-14 w-14 shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="icon-badge h-14 w-14 shrink-0">
+                    {detailSheet.type === 'doctor' ? (
+                      <UserRound className="h-6 w-6 text-primary-600" />
+                    ) : (
+                      <Stethoscope className="h-6 w-6 text-primary-600" />
+                    )}
+                  </span>
+                )}
+                <div>
+                  <h2 className="text-lg font-bold text-ink">{detailSheet.data.name}</h2>
+                  <p className="text-sm text-ink/50">{detailSheet.data.specialization}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailSheet(null)}
+                className="shrink-0 text-ink/40 hover:text-ink"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-1.5 rounded-xl border border-ink/10 bg-surface/60 p-4 text-sm text-ink/70">
+              {detailSheet.type === 'doctor' ? (
+                <p className="flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 shrink-0" /> {detailSheet.data.clinicName}
+                </p>
+              ) : (
+                detailSheet.data.description && <p>{detailSheet.data.description}</p>
+              )}
+              {detailSheet.data.fee != null && (
+                <p>
+                  <span className="font-semibold text-ink">Consultation fee:</span> {detailSheet.data.fee}
+                </p>
+              )}
+            </div>
+
+            <button type="button" onClick={() => setDetailSheet(null)} className="btn-raised mt-5 w-full">
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
 
       {confirming && selectedSlot && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">

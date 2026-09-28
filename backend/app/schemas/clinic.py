@@ -57,6 +57,7 @@ class ClinicDoctor(BaseModel):
     name: str
     specialization: str
     fee: Optional[float] = None
+    avatar_url: Optional[str] = None
 
 
 class AdminClinicRead(ClinicRead):

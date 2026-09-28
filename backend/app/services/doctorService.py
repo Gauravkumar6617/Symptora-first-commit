@@ -5,6 +5,7 @@ from app.schemas.doctor import DoctorProfileCreate, DoctorSelfUpdate
 from app.models.doctorModel import DoctorProfile
 from app.models.enumModel import Status
 from app.utils.integration.medplum.index import MedplumIntegration
+from app.utils.integration.cloudflarR2.index import file_url
 from app.core.config import settings
 
 
@@ -71,6 +72,7 @@ class DoctorService:
             "name": f"Dr. {doctor.user.first_name} {doctor.user.last_name}",
             "specialization": doctor.specialization,
             "fee": float(doctor.fee) if doctor.fee is not None else None,
+            "avatar_url": file_url(doctor.user.avatar) if doctor.user.avatar else None,
             "availability_slots": doctor.effective_availability_slots,
             "clinics": [link.clinic for link in doctor.clinic_links],
         }

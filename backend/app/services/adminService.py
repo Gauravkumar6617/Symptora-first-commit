@@ -47,6 +47,7 @@ def clinic_doctors(clinic: CliniModel) -> list[dict]:
             "name": f"Dr. {profile.user.first_name} {profile.user.last_name}".strip(),
             "specialization": profile.specialization,
             "fee": float(profile.fee) if profile.fee is not None else None,
+            "avatar_url": file_url(profile.user.avatar) if profile.user.avatar else None,
         })
     return sorted(doctors, key=lambda d: d["name"])
 

@@ -65,6 +65,7 @@ class PublicDoctorRead(BaseModel):
     name: str
     specialization: str
     fee: Optional[float] = None
+    avatar_url: Optional[str] = None
     availability_slots: List[DoctorAvailabilityRead] = []
     clinics: List[ClinicRead] = []
 
