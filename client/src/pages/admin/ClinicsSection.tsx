@@ -1,13 +1,18 @@
-import { Building2, ImagePlus, MapPin, Pencil, Phone, PlusCircle, Search, Trash2 } from 'lucide-react'
+import { Building2, Clock, ImagePlus, MapPin, Pencil, Phone, PlusCircle, Search, Trash2, UserPlus, X } from 'lucide-react'
 import { type ChangeEvent, type FormEvent, useMemo, useRef, useState } from 'react'
 import {
   type AdminClinic,
+  type AdminDoctor,
   ApiError,
+  type AvailabilitySlotPayload,
+  assignDoctorToClinicAdmin,
   createClinic,
   deleteClinic,
+  unassignDoctorFromClinicAdmin,
   updateClinic,
   uploadClinicPicture,
 } from '@/lib/api'
+import { AvailabilityGrid } from '@/components/AvailabilityGrid'
 
 const inputClass =
   'w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-primary'
@@ -19,10 +24,12 @@ function errorMessage(error: unknown, fallback: string) {
 /** Admin list of clinics: search, add, edit, delete. */
 export function ClinicsSection({
   clinics,
+  doctors,
   token,
   onChanged,
 }: {
   clinics: AdminClinic[]
+  doctors: AdminDoctor[]
   token: string | null
   /** Reload clinics (and stats) after a change. */
   onChanged: () => Promise<void>
@@ -32,6 +39,8 @@ export function ClinicsSection({
   const [query, setQuery] = useState('')
   const [error, setError] = useState('')
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [linking, setLinking] = useState<string | null>(null)
+  const [pickingClinic, setPickingClinic] = useState<string | null>(null)
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -59,6 +68,35 @@ export function ClinicsSection({
       setError(errorMessage(err, 'Could not delete that clinic.'))
     } finally {
       setDeleting(null)
+    }
+  }
+
+  async function handleAssign(clinic: AdminClinic, doctorId: string) {
+    if (!token || !doctorId) return
+    setError('')
+    setLinking(doctorId)
+    try {
+      await assignDoctorToClinicAdmin(token, clinic.id, doctorId)
+      setPickingClinic(null)
+      await onChanged()
+    } catch (err) {
+      setError(errorMessage(err, 'Could not link that doctor.'))
+    } finally {
+      setLinking(null)
+    }
+  }
+
+  async function handleUnassign(clinic: AdminClinic, doctorId: string) {
+    if (!token) return
+    setError('')
+    setLinking(doctorId)
+    try {
+      await unassignDoctorFromClinicAdmin(token, clinic.id, doctorId)
+      await onChanged()
+    } catch (err) {
+      setError(errorMessage(err, 'Could not unlink that doctor.'))
+    } finally {
+      setLinking(null)
     }
   }
 
@@ -132,21 +170,71 @@ export function ClinicsSection({
                     <Phone className="h-3.5 w-3.5 shrink-0" /> {clinic.phone}
                   </p>
                 )}
+                {clinic.opening_hours && (
+                  <p className="mt-1 flex items-center gap-1.5 text-xs text-ink/60">
+                    <Clock className="h-3.5 w-3.5 shrink-0" /> {clinic.opening_hours}
+                  </p>
+                )}
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  {clinic.doctors.length === 0 ? (
+                  {clinic.doctors.length === 0 && pickingClinic !== clinic.id && (
                     <span className="text-xs text-ink/40">No doctors linked yet</span>
-                  ) : (
-                    clinic.doctors.map((doctor) => (
-                      <span
-                        key={doctor.id}
-                        title={doctor.specialization}
-                        className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary"
-                      >
-                        {doctor.name}
-                      </span>
-                    ))
                   )}
+                  {clinic.doctors.map((doctor) => (
+                    <span
+                      key={doctor.id}
+                      title={doctor.specialization}
+                      className="flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary"
+                    >
+                      {doctor.name}
+                      <button
+                        type="button"
+                        onClick={() => handleUnassign(clinic, doctor.id)}
+                        disabled={linking === doctor.id}
+                        aria-label={`Unlink ${doctor.name}`}
+                        className="text-primary/60 hover:text-primary disabled:opacity-50"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
                 </div>
+                {pickingClinic === clinic.id ? (
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <select
+                      autoFocus
+                      onChange={(e) => handleAssign(clinic, e.target.value)}
+                      disabled={linking !== null}
+                      defaultValue=""
+                      className="w-full rounded-lg border border-ink/15 px-2 py-1 text-xs outline-none focus:border-primary"
+                    >
+                      <option value="" disabled>
+                        Choose a doctor…
+                      </option>
+                      {doctors
+                        .filter((d) => !clinic.doctors.some((linked) => linked.id === d.id))
+                        .map((d) => (
+                          <option key={d.id} value={d.id}>
+                            Dr. {d.first_name} {d.last_name} · {d.specialization}
+                          </option>
+                        ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setPickingClinic(null)}
+                      className="shrink-0 rounded-lg border border-ink/15 px-2 py-1 text-xs text-ink hover:bg-ink/5"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setPickingClinic(clinic.id)}
+                    className="mt-2 flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                  >
+                    <UserPlus className="h-3.5 w-3.5" /> Link a doctor
+                  </button>
+                )}
                 <div className="mt-auto flex gap-2 pt-4">
                   <button
                     type="button"
@@ -203,7 +291,14 @@ function ClinicForm({
   const [preview, setPreview] = useState(clinic?.picture_url ?? '')
   const [address, setAddress] = useState(clinic?.address ?? '')
   const [phone, setPhone] = useState(clinic?.phone ?? '')
+  const [openingHours, setOpeningHours] = useState(clinic?.opening_hours ?? '')
   const [description, setDescription] = useState(clinic?.description ?? '')
+  const [contactPersonName, setContactPersonName] = useState(clinic?.contact_person_name ?? '')
+  const [contactEmail, setContactEmail] = useState(clinic?.contact_email ?? '')
+  const [contactPhone, setContactPhone] = useState(clinic?.contact_phone ?? '')
+  const [availability, setAvailability] = useState<AvailabilitySlotPayload[]>(
+    clinic?.availability_slots.map((s) => ({ days: s.days, slot: s.slot })) ?? [],
+  )
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -244,21 +339,35 @@ function ClinicForm({
       picture: picture.trim(),
       address: address.trim(),
       phone: phone.trim(),
+      opening_hours: openingHours.trim(),
       description: description.trim(),
+      contact_person_name: contactPersonName.trim(),
+      contact_email: contactEmail.trim(),
+      contact_phone: contactPhone.trim(),
     }
+    const availabilityChanged =
+      !clinic ||
+      JSON.stringify(availability) !==
+        JSON.stringify(clinic.availability_slots.map((s) => ({ days: s.days, slot: s.slot })))
     try {
       if (clinic) {
         // Send only what changed; "" clears an optional field.
-        const changes = Object.fromEntries(
+        const changes: Record<string, unknown> = Object.fromEntries(
           Object.entries(fields).filter(([key, value]) => value !== (clinic[key as keyof typeof fields] ?? '')),
         )
+        if (availabilityChanged) changes.availability_slots = availability
         if (Object.keys(changes).length > 0) await updateClinic(token, clinic.id, changes)
       } else {
         await createClinic(token, {
           ...fields,
           address: fields.address || undefined,
           phone: fields.phone || undefined,
+          opening_hours: fields.opening_hours || undefined,
           description: fields.description || undefined,
+          contact_person_name: fields.contact_person_name || undefined,
+          contact_email: fields.contact_email || undefined,
+          contact_phone: fields.contact_phone || undefined,
+          availability_slots: availability,
         })
       }
       await onSaved()
@@ -314,6 +423,13 @@ function ClinicForm({
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Clinic name" maxLength={50} className={inputClass} />
         <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone (optional)" className={inputClass} />
         <input
+          value={openingHours}
+          onChange={(e) => setOpeningHours(e.target.value)}
+          placeholder="Opening hours (e.g. Mon–Fri 9:00 AM – 6:00 PM)"
+          maxLength={120}
+          className={inputClass}
+        />
+        <input
           value={address}
           onChange={(e) => setAddress(e.target.value)}
           placeholder="Address (optional)"
@@ -328,6 +444,31 @@ function ClinicForm({
         maxLength={255}
         className={inputClass}
       />
+      <AvailabilityGrid slots={availability} onChange={setAvailability} />
+      <div className="grid gap-3 sm:grid-cols-3">
+        <input
+          value={contactPersonName}
+          onChange={(e) => setContactPersonName(e.target.value)}
+          placeholder="Contact person name"
+          maxLength={100}
+          className={inputClass}
+        />
+        <input
+          type="email"
+          value={contactEmail}
+          onChange={(e) => setContactEmail(e.target.value)}
+          placeholder="Contact email"
+          maxLength={120}
+          className={inputClass}
+        />
+        <input
+          value={contactPhone}
+          onChange={(e) => setContactPhone(e.target.value)}
+          placeholder="Contact phone"
+          maxLength={30}
+          className={inputClass}
+        />
+      </div>
       {error && <p className="text-sm text-danger">{error}</p>}
       <div className="flex gap-2">
         <button type="submit" className="btn-raised px-4 py-2 text-sm" disabled={saving || uploading}>

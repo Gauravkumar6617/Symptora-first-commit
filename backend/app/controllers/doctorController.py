@@ -37,6 +37,13 @@ class DoctorController:
         return service.get_my_application(str(current_user.id))
 
     @staticmethod
+    def get_public_profile(doctor_id: str, service: DoctorService):
+        try:
+            return service.get_public_profile(doctor_id)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+    @staticmethod
     def list_pending_applications(current_admin: UserModel, service: DoctorService):
         try:
             return service.list_pending_applications(current_admin)

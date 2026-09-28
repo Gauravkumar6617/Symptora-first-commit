@@ -38,7 +38,6 @@ export const router = createBrowserRouter([
       { path: '/clinics', element: <ClinicsPage /> },
       { path: '/blog', element: <BlogListPage /> },
       { path: '/blog/:slug', element: <BlogPostPage /> },
-      { path: '/appointments', element: <AppointmentsPage /> },
       { path: '/family', element: <FamilyPage /> },
       { path: '/about', element: <AboutPage /> },
       { path: '/contact', element: <ContactPage /> },
@@ -48,6 +47,7 @@ export const router = createBrowserRouter([
         element: <ProtectedRoute />,
         children: [
           { path: '/dashboard', element: <DashboardPage /> },
+          { path: '/appointments', element: <AppointmentsPage /> },
           { path: '/profile', element: <ProfilePage /> },
           { path: '/apply-doctor', element: <ApplyDoctorPage /> },
           { path: '/symptom-checker', element: <SymptomCheckerPage /> },

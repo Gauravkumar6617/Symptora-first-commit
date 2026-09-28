@@ -32,6 +32,28 @@ class DoctorClinicService:
         if not doctor_profile:
             raise ValueError("Doctor profile not found")
 
+        return self._link(doctor_profile.id, clinic_id)
+
+    def admin_assign_doctor_to_clinic(self, doctor_profile_id: str, clinic_id: str) -> DoctorClinicModel:
+        """Admin-initiated link: any approved doctor may be attached to any clinic."""
+        doctor_profile = self.doctor_repo.get_by_id(doctor_profile_id)
+        if not doctor_profile:
+            raise ValueError("Doctor profile not found")
+        return self._link(doctor_profile.id, clinic_id)
+
+    def admin_unassign_doctor_from_clinic(self, doctor_profile_id: str, clinic_id: str) -> None:
+        link = self.doctor_clinic_repo.get_by_doctor_and_clinic(doctor_profile_id, clinic_id)
+        if not link:
+            raise ValueError("Doctor is not assigned to this clinic")
+        if link.medplum_practitioner_role_id:
+            try:
+                self.medplum.delete_resource("PractitionerRole", link.medplum_practitioner_role_id)
+            except Exception:
+                pass
+        self.doctor_clinic_repo.delete(link)
+
+    def _link(self, doctor_profile_id: str, clinic_id: str) -> DoctorClinicModel:
+        doctor_profile = self.doctor_repo.get_by_id(doctor_profile_id)
         if not doctor_profile.medplum_practitioner_id:
             raise ValueError("Doctor has no Medplum practitioner record")
 

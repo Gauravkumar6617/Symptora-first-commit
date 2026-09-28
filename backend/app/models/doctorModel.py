@@ -1,4 +1,4 @@
-from sqlalchemy import String,Column,Integer,Boolean,ForeignKey,Enum as SAEnum
+from sqlalchemy import String,Column,Integer,Boolean,ForeignKey,Enum as SAEnum,Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.models.base import BaseModel
@@ -17,6 +17,13 @@ class DoctorProfile(BaseModel):
     user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), unique=True, nullable=False)
     specialization = Column(String,nullable=False)
     license_number= Column(String(25),nullable=False,unique=True)
+    contact_person_name = Column(String(100), nullable=True)
+    contact_email = Column(String(120), nullable=True)
+    contact_phone = Column(String(30), nullable=True)
+    # Cap on how many appointments this doctor accepts per calendar day; null = unlimited.
+    max_appointments_per_day = Column(Integer, nullable=True)
+    # Consultation fee; overrides the service's fee when this doctor is booked directly.
+    fee = Column(Numeric(8, 2), nullable=True)
     # A submitted doctor application starts pending, and only shows up on a
     # profile / clinic once an admin approves it.
     status = Column(
@@ -33,4 +40,16 @@ class DoctorProfile(BaseModel):
     clinic = relationship("CliniModel", back_populates="doctor_profiles")
     clinic_links = relationship("DoctorClinicModel", back_populates="doctor_profile", cascade="all, delete-orphan")
     availability_slots=relationship("doctorAvailabilityModel",back_populates="doctor_profile",cascade="all, delete-orphan")
-    
+
+    @property
+    def effective_availability_slots(self):
+        """The doctor's own weekly hours, or — if never set — the hours of
+        whichever linked clinic has them, so setting hours on either the
+        doctor or the clinic form makes the doctor bookable."""
+        if self.availability_slots:
+            return self.availability_slots
+        for link in self.clinic_links:
+            if link.clinic and link.clinic.availability_slots:
+                return link.clinic.availability_slots
+        return []
+

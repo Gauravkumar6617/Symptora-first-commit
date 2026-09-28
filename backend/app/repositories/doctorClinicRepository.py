@@ -48,3 +48,7 @@ class DoctorClinicRepository:
             .filter(DoctorClinicModel.clinic_id == clinic_id)
             .all()
         )
+
+    def delete(self, link: DoctorClinicModel) -> None:
+        self.db.delete(link)
+        self.db.commit()

@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from app.models.enumModel import Status
 from app.schemas.clinic import ClinicRead
 from app.schemas.common import ORMReadBase
-from app.schemas.doctor_availability import DoctorAvailabilityRead
+from app.schemas.doctor_availability import DoctorAvailabilityCreate, DoctorAvailabilityRead
 
 
 class DoctorProfileBase(BaseModel):
@@ -23,6 +23,12 @@ class DoctorProfileUpdate(BaseModel):
     specialization: Optional[str] = None
     clinic_id: Optional[str] = None
     medplum_practitioner_id: Optional[str] = None
+    contact_person_name: Optional[str] = Field(default=None, max_length=100)
+    contact_email: Optional[str] = Field(default=None, max_length=120)
+    contact_phone: Optional[str] = Field(default=None, max_length=30)
+    max_appointments_per_day: Optional[int] = Field(default=None, ge=1)
+    fee: Optional[float] = Field(default=None, ge=0)
+    availability_slots: Optional[List[DoctorAvailabilityCreate]] = None
 
 
 class DoctorProfileReject(BaseModel):
@@ -32,7 +38,23 @@ class DoctorProfileReject(BaseModel):
 class DoctorProfileRead(DoctorProfileBase, ORMReadBase):
     user_id: str
     status: Status
+    contact_person_name: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    max_appointments_per_day: Optional[int] = None
+    fee: Optional[float] = None
     availability_slots: List[DoctorAvailabilityRead] = []
+
+
+class PublicDoctorRead(BaseModel):
+    """GET /doctor/{id}/public — what a patient sees on the booking page."""
+
+    id: str
+    name: str
+    specialization: str
+    fee: Optional[float] = None
+    availability_slots: List[DoctorAvailabilityRead] = []
+    clinics: List[ClinicRead] = []
 
 
 class AdminDoctorRead(DoctorProfileRead):

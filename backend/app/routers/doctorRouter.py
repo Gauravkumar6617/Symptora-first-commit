@@ -11,6 +11,7 @@ from app.schemas.doctor import (
     DoctorProfileBase,
     DoctorProfileRead,
     DoctorProfileUpdate,
+    PublicDoctorRead,
 )
 from app.core.database import get_db
 from app.deps.auth import get_current_admin, get_current_user
@@ -48,6 +49,17 @@ def get_my_doctor_application(
     """The caller's own doctor application, or null if they never applied."""
     service = DoctorService(db)
     return DoctorController.get_my_application(current_user, service)
+
+
+@router.get(
+    "/{doctor_id}/public",
+    response_model=PublicDoctorRead,
+)
+def get_doctor_public_profile(doctor_id: str, db: Session = Depends(get_db)):
+    """Approved doctor's name, specialty, clinics and weekly availability —
+    no login needed, used by the appointment booking page."""
+    service = DoctorService(db)
+    return DoctorController.get_public_profile(doctor_id, service)
 
 
 @router.get(

@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.utils.integration.cloudflarR2.index import file_url
 
+from app.schemas.clinic_availability import ClinicAvailabilityCreate, ClinicAvailabilityRead
 from app.schemas.common import ORMReadBase
 
 
@@ -14,6 +15,11 @@ class ClinicBase(BaseModel):
     description: Optional[str] = Field(default=None, max_length=255)
     address: Optional[str] = None
     phone: Optional[str] = None
+    opening_hours: Optional[str] = Field(default=None, max_length=120)
+    contact_person_name: Optional[str] = Field(default=None, max_length=100)
+    contact_email: Optional[str] = Field(default=None, max_length=120)
+    contact_phone: Optional[str] = Field(default=None, max_length=30)
+    availability_slots: Optional[List[ClinicAvailabilityCreate]] = None
 
 
 class ClinicCreate(ClinicBase):
@@ -26,12 +32,18 @@ class ClinicUpdate(BaseModel):
     description: Optional[str] = Field(default=None, max_length=255)
     address: Optional[str] = None
     phone: Optional[str] = None
+    opening_hours: Optional[str] = Field(default=None, max_length=120)
+    contact_person_name: Optional[str] = Field(default=None, max_length=100)
+    contact_email: Optional[str] = Field(default=None, max_length=120)
+    contact_phone: Optional[str] = Field(default=None, max_length=30)
+    availability_slots: Optional[List[ClinicAvailabilityCreate]] = None
 
 
 class ClinicRead(ClinicBase, ORMReadBase):
     medplum_organisation_id: str
     # Presigned, short-lived download url derived from ``picture``.
     picture_url: Optional[str] = None
+    availability_slots: List[ClinicAvailabilityRead] = []
 
     @model_validator(mode="after")
     def _attach_picture_url(self):
@@ -44,6 +56,7 @@ class ClinicDoctor(BaseModel):
     id: str  # doctor profile id
     name: str
     specialization: str
+    fee: Optional[float] = None
 
 
 class AdminClinicRead(ClinicRead):
@@ -59,6 +72,8 @@ class PublicClinicRead(BaseModel):
     description: Optional[str] = None
     address: Optional[str] = None
     phone: Optional[str] = None
+    opening_hours: Optional[str] = None
+    availability_slots: List[ClinicAvailabilityRead] = []
     doctors: List[ClinicDoctor] = []
 
 

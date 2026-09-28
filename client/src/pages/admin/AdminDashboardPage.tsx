@@ -6,13 +6,12 @@ import {
   UsersRound,
   XCircle,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { type FormEvent, useState } from 'react'
 import {
-  type AdminClinic,
   type AdminDoctor,
-  type AdminStats,
+  type AvailabilitySlotPayload,
   ApiError,
-  type BlogPost,
   approveDoctorApplication,
   type DoctorApplication,
   fetchAdminDoctors,
@@ -20,70 +19,70 @@ import {
   fetchAdminStats,
   listAdminBlogPosts,
   listAdminClinics,
+  listAdminServices,
   listPendingDoctorApplications,
   rejectDoctorApplication,
+  updateDoctorAdmin,
   type UserResponse,
 } from '@/lib/api'
 import { queryClient } from '@/lib/queryClient'
 import { useAuthStore } from '@/store/authStore'
+import { AvailabilityGrid } from '@/components/AvailabilityGrid'
 import { BlogsSection } from './BlogsSection'
 import { ClinicsSection } from './ClinicsSection'
+import { ServicesSection } from './ServicesSection'
+
+const TABS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'clinics', label: 'Clinics' },
+  { key: 'doctors', label: 'Doctors' },
+  { key: 'services', label: 'Services' },
+  { key: 'patients', label: 'Patients' },
+  { key: 'blog', label: 'Blog' },
+] as const
+type TabKey = (typeof TABS)[number]['key']
+
+// Shared by admin mutations to refresh whichever query their change touches.
+const QK = {
+  stats: ['admin-stats'],
+  pending: ['admin-pending-applications'],
+  doctors: ['admin-doctors'],
+  patients: ['admin-patients'],
+  clinics: ['admin-clinics'],
+  services: ['admin-services'],
+  blog: ['admin-blog-posts'],
+} as const
 
 export function AdminDashboardPage() {
   const token = useAuthStore((state) => state.token)
   const adminName = useAuthStore((state) => state.user?.name ?? '')
-  const [stats, setStats] = useState<AdminStats | null>(null)
-  const [pending, setPending] = useState<DoctorApplication[]>([])
-  const [doctors, setDoctors] = useState<AdminDoctor[]>([])
-  const [patients, setPatients] = useState<UserResponse[]>([])
-  const [clinics, setClinics] = useState<AdminClinic[]>([])
-  const [blogPosts, setBlogPosts] = useState<BlogPost[]>([])
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [tab, setTab] = useState<TabKey>('overview')
 
-  async function loadAll(authToken: string) {
-    const [statsRes, pendingRes, doctorsRes, patientsRes, clinicsRes, blogRes] = await Promise.all([
-      fetchAdminStats(authToken),
-      listPendingDoctorApplications(authToken),
-      fetchAdminDoctors(authToken),
-      fetchAdminPatients(authToken),
-      listAdminClinics(authToken),
-      listAdminBlogPosts(authToken),
-    ])
-    setStats(statsRes)
-    setPending(pendingRes)
-    setDoctors(doctorsRes)
-    setPatients(patientsRes)
-    setClinics(clinicsRes)
-    setBlogPosts(blogRes)
-  }
+  const enabled = Boolean(token)
+  const statsQuery = useQuery({ queryKey: QK.stats, queryFn: () => fetchAdminStats(token!), enabled })
+  const pendingQuery = useQuery({ queryKey: QK.pending, queryFn: () => listPendingDoctorApplications(token!), enabled })
+  const doctorsQuery = useQuery({ queryKey: QK.doctors, queryFn: () => fetchAdminDoctors(token!), enabled })
+  const patientsQuery = useQuery({ queryKey: QK.patients, queryFn: () => fetchAdminPatients(token!), enabled })
+  const clinicsQuery = useQuery({ queryKey: QK.clinics, queryFn: () => listAdminClinics(token!), enabled })
+  const servicesQuery = useQuery({ queryKey: QK.services, queryFn: () => listAdminServices(token!), enabled })
+  const blogQuery = useQuery({ queryKey: QK.blog, queryFn: () => listAdminBlogPosts(token!), enabled })
 
-  useEffect(() => {
-    if (!token) {
-      setLoading(false)
-      return
-    }
-    let cancelled = false
-    loadAll(token)
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : 'Could not load the admin dashboard.')
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token])
+  const stats = statsQuery.data ?? null
+  const pending = pendingQuery.data ?? []
+  const doctors = doctorsQuery.data ?? []
+  const patients = patientsQuery.data ?? []
+  const clinics = clinicsQuery.data ?? []
+  const services = servicesQuery.data ?? []
+  const blogPosts = blogQuery.data ?? []
 
   async function handleApprove(id: string) {
     if (!token) return
     try {
       await approveDoctorApplication(token, id)
-      await loadAll(token)
+      await queryClient.invalidateQueries({ queryKey: QK.pending })
+      await queryClient.invalidateQueries({ queryKey: QK.doctors })
+      await queryClient.invalidateQueries({ queryKey: QK.stats })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not approve that application.')
     }
@@ -93,13 +92,14 @@ export function AdminDashboardPage() {
     if (!token) return
     try {
       await rejectDoctorApplication(token, id)
-      await loadAll(token)
+      await queryClient.invalidateQueries({ queryKey: QK.pending })
+      await queryClient.invalidateQueries({ queryKey: QK.stats })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not reject that application.')
     }
   }
 
-  if (loading) {
+  if (statsQuery.isLoading) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
         <p className="text-sm text-ink/50">Loading admin dashboard…</p>
@@ -116,7 +116,24 @@ export function AdminDashboardPage() {
 
       {error && <p className="mt-4 text-sm text-danger">{error}</p>}
 
-      {stats && (
+      <div className="mt-6 flex flex-wrap gap-1 border-b border-ink/10">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${
+              tab === t.key
+                ? 'border-primary text-primary'
+                : 'border-transparent text-ink/50 hover:text-ink'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'overview' && stats && (
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard icon={UsersRound} label="Patients" value={stats.patients} />
           <StatCard icon={Stethoscope} label="Doctors" value={stats.doctors} />
@@ -125,38 +142,62 @@ export function AdminDashboardPage() {
         </div>
       )}
 
-      <PendingApplicationsSection
-        pending={pending}
-        onApprove={handleApprove}
-        onReject={handleReject}
-      />
+      {tab === 'clinics' && (
+        <ClinicsSection
+          clinics={clinics}
+          doctors={doctors}
+          token={token}
+          onChanged={async () => {
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: QK.clinics }),
+              queryClient.invalidateQueries({ queryKey: QK.stats }),
+              queryClient.invalidateQueries({ queryKey: QK.doctors }),
+            ])
+          }}
+        />
+      )}
 
-      <ClinicsSection
-        clinics={clinics}
-        token={token}
-        onChanged={async () => {
-          if (!token) return
-          const [clinicsRes, statsRes] = await Promise.all([listAdminClinics(token), fetchAdminStats(token)])
-          setClinics(clinicsRes)
-          setStats(statsRes)
-        }}
-      />
+      {tab === 'doctors' && (
+        <>
+          <PendingApplicationsSection
+            pending={pending}
+            onApprove={handleApprove}
+            onReject={handleReject}
+          />
+          <DoctorsSection
+            doctors={doctors}
+            token={token}
+            onChanged={async () => {
+              await queryClient.invalidateQueries({ queryKey: QK.doctors })
+            }}
+          />
+        </>
+      )}
 
-      <BlogsSection
-        posts={blogPosts}
-        token={token}
-        authorName={adminName}
-        onChanged={async () => {
-          if (!token) return
-          setBlogPosts(await listAdminBlogPosts(token))
-          // The public blog pages read through react-query.
-          await queryClient.invalidateQueries({ queryKey: ['blog-posts'] })
-        }}
-      />
+      {tab === 'services' && (
+        <ServicesSection
+          services={services}
+          token={token}
+          onChanged={async () => {
+            await queryClient.invalidateQueries({ queryKey: QK.services })
+          }}
+        />
+      )}
 
-      <DoctorsSection doctors={doctors} />
+      {tab === 'patients' && <PatientsSection patients={patients} />}
 
-      <PatientsSection patients={patients} />
+      {tab === 'blog' && (
+        <BlogsSection
+          posts={blogPosts}
+          token={token}
+          authorName={adminName}
+          onChanged={async () => {
+            await queryClient.invalidateQueries({ queryKey: QK.blog })
+            // The public blog pages read through react-query too.
+            await queryClient.invalidateQueries({ queryKey: ['blog-posts'] })
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -248,7 +289,17 @@ function PendingApplicationsSection({
   )
 }
 
-function DoctorsSection({ doctors }: { doctors: AdminDoctor[] }) {
+function DoctorsSection({
+  doctors,
+  token,
+  onChanged,
+}: {
+  doctors: AdminDoctor[]
+  token: string | null
+  onChanged: () => Promise<void>
+}) {
+  const [editing, setEditing] = useState<string | null>(null)
+
   return (
     <>
       <SectionHeader title="Doctors" subtitle={`${doctors.length} approved`} />
@@ -263,6 +314,7 @@ function DoctorsSection({ doctors }: { doctors: AdminDoctor[] }) {
                 <th className="px-4 py-3">Specialization</th>
                 <th className="px-4 py-3">License</th>
                 <th className="px-4 py-3">Clinics</th>
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-ink/10">
@@ -281,13 +333,154 @@ function DoctorsSection({ doctors }: { doctors: AdminDoctor[] }) {
                       ? '—'
                       : doctor.clinics.map((c) => c.name).join(', ')}
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setEditing(editing === doctor.id ? null : doctor.id)}
+                      className="text-xs font-semibold text-primary hover:underline"
+                    >
+                      {editing === doctor.id ? 'Close' : 'Edit'}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+      {editing && (
+        <DoctorEditForm
+          key={editing}
+          doctor={doctors.find((d) => d.id === editing)!}
+          token={token}
+          onCancel={() => setEditing(null)}
+          onSaved={async () => {
+            setEditing(null)
+            await onChanged()
+          }}
+        />
+      )}
     </>
+  )
+}
+
+const inputClass =
+  'w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-primary'
+
+/** Edit a doctor's contact info and weekly availability. */
+function DoctorEditForm({
+  doctor,
+  token,
+  onCancel,
+  onSaved,
+}: {
+  doctor: AdminDoctor
+  token: string | null
+  onCancel: () => void
+  onSaved: () => Promise<void>
+}) {
+  const [contactPersonName, setContactPersonName] = useState(doctor.contact_person_name ?? '')
+  const [contactEmail, setContactEmail] = useState(doctor.contact_email ?? '')
+  const [contactPhone, setContactPhone] = useState(doctor.contact_phone ?? '')
+  const [maxPerDay, setMaxPerDay] = useState(doctor.max_appointments_per_day?.toString() ?? '')
+  const [fee, setFee] = useState(doctor.fee?.toString() ?? '')
+  const [availability, setAvailability] = useState<AvailabilitySlotPayload[]>(
+    doctor.availability_slots.map((s) => ({ days: s.days, slot: s.slot })),
+  )
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    if (!token) return
+    setError('')
+    setSaving(true)
+    try {
+      await updateDoctorAdmin(token, doctor.id, {
+        contact_person_name: contactPersonName.trim(),
+        contact_email: contactEmail.trim(),
+        contact_phone: contactPhone.trim(),
+        max_appointments_per_day: maxPerDay.trim() ? Number(maxPerDay) : null,
+        fee: fee.trim() ? Number(fee) : null,
+        availability_slots: availability,
+      })
+      await onSaved()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save your changes.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="card-raised mt-4 space-y-3 p-5">
+      <p className="text-sm font-semibold text-ink">
+        Edit Dr. {doctor.first_name} {doctor.last_name}
+      </p>
+      <AvailabilityGrid slots={availability} onChange={setAvailability} />
+      <div className="grid gap-3 sm:grid-cols-3">
+        <input
+          value={contactPersonName}
+          onChange={(e) => setContactPersonName(e.target.value)}
+          placeholder="Contact person name"
+          maxLength={100}
+          className={inputClass}
+        />
+        <input
+          type="email"
+          value={contactEmail}
+          onChange={(e) => setContactEmail(e.target.value)}
+          placeholder="Contact email"
+          maxLength={120}
+          className={inputClass}
+        />
+        <input
+          value={contactPhone}
+          onChange={(e) => setContactPhone(e.target.value)}
+          placeholder="Contact phone"
+          maxLength={30}
+          className={inputClass}
+        />
+      </div>
+      <div>
+        <label className="text-xs font-medium text-ink/60">
+          Max appointments per day
+          <input
+            type="number"
+            min={1}
+            value={maxPerDay}
+            onChange={(e) => setMaxPerDay(e.target.value)}
+            placeholder="No limit"
+            className={`${inputClass} mt-1`}
+          />
+        </label>
+        <label className="mt-3 block text-xs font-medium text-ink/60">
+          Consultation fee
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={fee}
+            onChange={(e) => setFee(e.target.value)}
+            placeholder="No fee set"
+            className={`${inputClass} mt-1`}
+          />
+        </label>
+      </div>
+      {error && <p className="text-sm text-danger">{error}</p>}
+      <div className="flex gap-2">
+        <button type="submit" className="btn-raised px-4 py-2 text-sm" disabled={saving}>
+          {saving ? 'Saving…' : 'Save changes'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-lg border border-ink/15 px-4 py-2 text-sm font-semibold text-ink hover:bg-ink/5"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
   )
 }
 

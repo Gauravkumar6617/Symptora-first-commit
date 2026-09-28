@@ -34,6 +34,8 @@ class CliniService:
                 "description": c.description,
                 "address": c.address,
                 "phone": c.phone,
+                "opening_hours": c.opening_hours,
+                "availability_slots": c.availability_slots,
                 "doctors": clinic_doctors(c),
             }
             for c in self.clinic_repo.list_all()

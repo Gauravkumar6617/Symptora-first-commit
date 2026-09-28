@@ -41,6 +41,22 @@ class DoctorService:
     def get_my_application(self, user_id: str) -> DoctorProfile | None:
         return self.doctor_repo.get_by_user_id(user_id)
 
+    def get_public_profile(self, doctor_profile_id: str) -> dict:
+        """An approved doctor's public profile, with their weekly availability
+        — what a patient sees on the booking page."""
+        doctor = self.doctor_repo.get_by_id(doctor_profile_id)
+        if not doctor or doctor.status != Status.APPROVED:
+            raise ValueError("Doctor not found")
+
+        return {
+            "id": doctor.id,
+            "name": f"Dr. {doctor.user.first_name} {doctor.user.last_name}",
+            "specialization": doctor.specialization,
+            "fee": float(doctor.fee) if doctor.fee is not None else None,
+            "availability_slots": doctor.effective_availability_slots,
+            "clinics": [link.clinic for link in doctor.clinic_links],
+        }
+
     def list_pending_applications(self, admin_user) -> list[DoctorProfile]:
         if not admin_user.is_admin:
             raise PermissionError("Admin access required.")

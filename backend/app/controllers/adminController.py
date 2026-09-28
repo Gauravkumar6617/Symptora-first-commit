@@ -1,9 +1,13 @@
 from fastapi import HTTPException, status
 
 from app.schemas.clinic import ClinicBase, ClinicUpdate
-from app.services.adminService import AdminService, ClinicNotFoundError
+from app.schemas.doctor import DoctorProfileUpdate
+from app.schemas.service import ServiceCreate, ServiceUpdate
+from app.services.adminService import AdminService, ClinicNotFoundError, DoctorNotFoundError, ServiceNotFoundError
 
 CLINIC_NOT_FOUND = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Clinic not found.")
+DOCTOR_NOT_FOUND = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found.")
+SERVICE_NOT_FOUND = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Service not found.")
 
 
 class AdminController:
@@ -37,6 +41,13 @@ class AdminController:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Listing doctors failed: {e}",
             )
+
+    @staticmethod
+    def update_doctor(doctor_id: str, data: DoctorProfileUpdate, service: AdminService):
+        try:
+            return service.update_doctor(doctor_id, data)
+        except DoctorNotFoundError:
+            raise DOCTOR_NOT_FOUND
 
     @staticmethod
     def list_clinics(service: AdminService):
@@ -83,3 +94,36 @@ class AdminController:
             service.delete_clinic(clinic_id)
         except ClinicNotFoundError:
             raise CLINIC_NOT_FOUND
+
+    @staticmethod
+    def list_services(service: AdminService):
+        try:
+            return service.list_services()
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Listing services failed: {e}",
+            )
+
+    @staticmethod
+    def create_service(data: ServiceCreate, service: AdminService):
+        try:
+            return service.create_service(data)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    @staticmethod
+    def update_service(service_id: str, data: ServiceUpdate, service: AdminService):
+        try:
+            return service.update_service(service_id, data)
+        except ServiceNotFoundError:
+            raise SERVICE_NOT_FOUND
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    @staticmethod
+    def delete_service(service_id: str, service: AdminService):
+        try:
+            service.delete_service(service_id)
+        except ServiceNotFoundError:
+            raise SERVICE_NOT_FOUND
