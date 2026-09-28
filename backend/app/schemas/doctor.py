@@ -28,18 +28,23 @@ class DoctorProfileUpdate(BaseModel):
     contact_phone: Optional[str] = Field(default=None, max_length=30)
     max_appointments_per_day: Optional[int] = Field(default=None, ge=1)
     fee: Optional[float] = Field(default=None, ge=0)
+    years_of_practice: Optional[int] = Field(default=None, ge=0)
+    languages: Optional[str] = Field(default=None, max_length=255)
+    display_order: Optional[int] = Field(default=None, ge=0)
     availability_slots: Optional[List[DoctorAvailabilityCreate]] = None
 
 
 class DoctorSelfUpdate(BaseModel):
     """PATCH /doctor/me — what an approved doctor may edit about their own
-    profile; specialization/license/clinic stay admin-only."""
+    profile; specialization/license/clinic/display_order stay admin-only."""
 
     contact_person_name: Optional[str] = Field(default=None, max_length=100)
     contact_email: Optional[str] = Field(default=None, max_length=120)
     contact_phone: Optional[str] = Field(default=None, max_length=30)
     max_appointments_per_day: Optional[int] = Field(default=None, ge=1)
     fee: Optional[float] = Field(default=None, ge=0)
+    years_of_practice: Optional[int] = Field(default=None, ge=0)
+    languages: Optional[str] = Field(default=None, max_length=255)
     availability_slots: Optional[List[DoctorAvailabilityCreate]] = None
 
 
@@ -55,6 +60,9 @@ class DoctorProfileRead(DoctorProfileBase, ORMReadBase):
     contact_phone: Optional[str] = None
     max_appointments_per_day: Optional[int] = None
     fee: Optional[float] = None
+    years_of_practice: Optional[int] = None
+    languages: Optional[str] = None
+    display_order: int = 0
     availability_slots: List[DoctorAvailabilityRead] = []
 
 
@@ -66,6 +74,8 @@ class PublicDoctorRead(BaseModel):
     specialization: str
     fee: Optional[float] = None
     avatar_url: Optional[str] = None
+    years_of_practice: Optional[int] = None
+    languages: Optional[str] = None
     availability_slots: List[DoctorAvailabilityRead] = []
     clinics: List[ClinicRead] = []
 

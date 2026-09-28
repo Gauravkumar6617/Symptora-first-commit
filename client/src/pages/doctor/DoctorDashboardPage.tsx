@@ -181,6 +181,8 @@ function ProfileForm({
   const [contactPhone, setContactPhone] = useState(profile.contact_phone ?? '')
   const [maxPerDay, setMaxPerDay] = useState(profile.max_appointments_per_day?.toString() ?? '')
   const [fee, setFee] = useState(profile.fee?.toString() ?? '')
+  const [yearsOfPractice, setYearsOfPractice] = useState(profile.years_of_practice?.toString() ?? '')
+  const [languages, setLanguages] = useState(profile.languages ?? '')
   const [availability, setAvailability] = useState<AvailabilitySlotPayload[]>(
     profile.availability_slots.map((s) => ({ days: s.days, slot: s.slot })),
   )
@@ -201,6 +203,8 @@ function ProfileForm({
         contact_phone: contactPhone.trim(),
         max_appointments_per_day: maxPerDay.trim() ? Number(maxPerDay) : null,
         fee: fee.trim() ? Number(fee) : null,
+        years_of_practice: yearsOfPractice.trim() ? Number(yearsOfPractice) : null,
+        languages: languages.trim(),
         availability_slots: availability,
       })
       setSaved(true)
@@ -265,6 +269,29 @@ function ProfileForm({
               value={fee}
               onChange={(e) => setFee(e.target.value)}
               placeholder="No fee set"
+              className={`${inputClass} mt-1`}
+            />
+          </label>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-xs font-medium text-ink/60">
+            Years of practice
+            <input
+              type="number"
+              min={0}
+              value={yearsOfPractice}
+              onChange={(e) => setYearsOfPractice(e.target.value)}
+              placeholder="e.g. 8"
+              className={`${inputClass} mt-1`}
+            />
+          </label>
+          <label className="text-xs font-medium text-ink/60">
+            Languages
+            <input
+              value={languages}
+              onChange={(e) => setLanguages(e.target.value)}
+              placeholder="e.g. English, Hindi"
+              maxLength={255}
               className={`${inputClass} mt-1`}
             />
           </label>

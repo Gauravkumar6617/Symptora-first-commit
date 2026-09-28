@@ -756,9 +756,23 @@ export function AppointmentsPage() {
 
             <div className="mt-4 space-y-1.5 rounded-xl border border-ink/10 bg-surface/60 p-4 text-sm text-ink/70">
               {detailSheet.type === 'doctor' ? (
-                <p className="flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5 shrink-0" /> {detailSheet.data.clinicName}
-                </p>
+                <>
+                  <p className="flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 shrink-0" /> {detailSheet.data.clinicName}
+                  </p>
+                  {detailSheet.data.years_of_practice != null && (
+                    <p>
+                      <span className="font-semibold text-ink">Experience:</span>{' '}
+                      {detailSheet.data.years_of_practice}{' '}
+                      {detailSheet.data.years_of_practice === 1 ? 'year' : 'years'}
+                    </p>
+                  )}
+                  {detailSheet.data.languages && (
+                    <p>
+                      <span className="font-semibold text-ink">Languages:</span> {detailSheet.data.languages}
+                    </p>
+                  )}
+                </>
               ) : (
                 detailSheet.data.description && <p>{detailSheet.data.description}</p>
               )}

@@ -11,6 +11,8 @@ class ServiceBase(BaseModel):
     specialization: str = Field(min_length=2, max_length=80)
     description: Optional[str] = Field(default=None, max_length=255)
     fee: Optional[float] = Field(default=None, ge=0)
+    # Lower sorts first among the service pills on the booking page.
+    display_order: int = Field(default=0, ge=0)
 
 
 class ServiceCreate(ServiceBase):
@@ -22,6 +24,7 @@ class ServiceUpdate(BaseModel):
     specialization: Optional[str] = Field(default=None, min_length=2, max_length=80)
     description: Optional[str] = Field(default=None, max_length=255)
     fee: Optional[float] = Field(default=None, ge=0)
+    display_order: Optional[int] = Field(default=None, ge=0)
 
 
 class ServiceRead(ServiceBase, ORMReadBase):

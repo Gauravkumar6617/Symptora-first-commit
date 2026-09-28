@@ -1,4 +1,4 @@
-from sqlalchemy import String, Column, Numeric
+from sqlalchemy import String, Column, Numeric, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from app.models.base import BaseModel
 import uuid
@@ -20,3 +20,5 @@ class ServiceModel(BaseModel):
     specialization = Column(String(80), nullable=False)
     description = Column(String(255), nullable=True)
     fee = Column(Numeric(8, 2), nullable=True)
+    # Lower sorts first among the service pills on the booking page.
+    display_order = Column(Integer, nullable=False, default=0, server_default="0")

@@ -7,6 +7,7 @@ import {
   type Service,
   updateService,
 } from '@/lib/api'
+import { SPECIALTIES } from '@/lib/constants'
 
 const inputClass =
   'w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-primary'
@@ -135,9 +136,10 @@ function ServiceForm({
   onSaved: () => Promise<void>
 }) {
   const [name, setName] = useState(service?.name ?? '')
-  const [specialization, setSpecialization] = useState(service?.specialization ?? '')
+  const [specialization, setSpecialization] = useState(service?.specialization ?? SPECIALTIES[0])
   const [description, setDescription] = useState(service?.description ?? '')
   const [fee, setFee] = useState(service?.fee?.toString() ?? '')
+  const [displayOrder, setDisplayOrder] = useState((service?.display_order ?? 0).toString())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -148,27 +150,30 @@ function ServiceForm({
       setError('Enter the service name.')
       return
     }
-    if (specialization.trim().length < 2) {
-      setError('Enter the specialty this service should filter to (must match a doctor specialty).')
-      return
-    }
     setError('')
     setSaving(true)
     const fields = {
       name: name.trim(),
-      specialization: specialization.trim(),
+      specialization,
       description: description.trim(),
     }
     const feeValue = fee.trim() ? Number(fee) : null
+    const displayOrderValue = displayOrder.trim() ? Number(displayOrder) : 0
     try {
       if (service) {
         const changes: Record<string, unknown> = Object.fromEntries(
           Object.entries(fields).filter(([key, value]) => value !== (service[key as keyof typeof fields] ?? '')),
         )
         if (feeValue !== service.fee) changes.fee = feeValue
+        if (displayOrderValue !== service.display_order) changes.display_order = displayOrderValue
         if (Object.keys(changes).length > 0) await updateService(token, service.id, changes)
       } else {
-        await createService(token, { ...fields, description: fields.description || undefined, fee: feeValue })
+        await createService(token, {
+          ...fields,
+          description: fields.description || undefined,
+          fee: feeValue,
+          display_order: displayOrderValue,
+        })
       }
       await onSaved()
     } catch (err) {
@@ -183,13 +188,13 @@ function ServiceForm({
       <p className="text-sm font-semibold text-ink">{service ? `Edit ${service.name}` : 'New service'}</p>
       <div className="grid gap-3 sm:grid-cols-2">
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Service name (e.g. Regular Health Checkup)" maxLength={80} className={inputClass} />
-        <input
-          value={specialization}
-          onChange={(e) => setSpecialization(e.target.value)}
-          placeholder="Specialty (e.g. General Physician)"
-          maxLength={80}
-          className={inputClass}
-        />
+        <select value={specialization} onChange={(e) => setSpecialization(e.target.value)} className={inputClass}>
+          {SPECIALTIES.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
         <input
           type="number"
           min={0}
@@ -199,6 +204,16 @@ function ServiceForm({
           placeholder="Fee (optional)"
           className={inputClass}
         />
+        <label className="text-xs font-medium text-ink/60">
+          Display order
+          <input
+            type="number"
+            min={0}
+            value={displayOrder}
+            onChange={(e) => setDisplayOrder(e.target.value)}
+            className={`${inputClass} mt-1`}
+          />
+        </label>
       </div>
       <textarea
         value={description ?? ''}

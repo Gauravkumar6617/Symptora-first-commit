@@ -48,8 +48,14 @@ def clinic_doctors(clinic: CliniModel) -> list[dict]:
             "specialization": profile.specialization,
             "fee": float(profile.fee) if profile.fee is not None else None,
             "avatar_url": file_url(profile.user.avatar) if profile.user.avatar else None,
+            "years_of_practice": profile.years_of_practice,
+            "languages": profile.languages,
+            "_display_order": profile.display_order or 0,
         })
-    return sorted(doctors, key=lambda d: d["name"])
+    doctors.sort(key=lambda d: (d["_display_order"], d["name"]))
+    for d in doctors:
+        del d["_display_order"]
+    return doctors
 
 
 class AdminService:
@@ -105,6 +111,9 @@ class AdminService:
                     contact_phone=doctor.contact_phone,
                     max_appointments_per_day=doctor.max_appointments_per_day,
                     fee=float(doctor.fee) if doctor.fee is not None else None,
+                    years_of_practice=doctor.years_of_practice,
+                    languages=doctor.languages,
+                    display_order=doctor.display_order,
                     availability_slots=doctor.availability_slots,
                     first_name=user.first_name if user else "",
                     last_name=user.last_name if user else "",
@@ -120,7 +129,7 @@ class AdminService:
         if not changes:
             return doctor
         availability_slots = changes.pop("availability_slots", None)
-        for clearable in ("contact_person_name", "contact_email", "contact_phone", "medplum_practitioner_id"):
+        for clearable in ("contact_person_name", "contact_email", "contact_phone", "medplum_practitioner_id", "languages"):
             if changes.get(clearable) == "":
                 changes[clearable] = None
         if changes:

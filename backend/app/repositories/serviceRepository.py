@@ -16,6 +16,7 @@ class ServiceRepository:
             specialization=data.specialization,
             description=data.description,
             fee=data.fee,
+            display_order=data.display_order,
         )
         self.db.add(service)
         self.db.commit()
@@ -33,7 +34,7 @@ class ServiceRepository:
         )
 
     def list_all(self) -> list[ServiceModel]:
-        return self.db.query(ServiceModel).order_by(ServiceModel.name).all()
+        return self.db.query(ServiceModel).order_by(ServiceModel.display_order, ServiceModel.name).all()
 
     def update(self, service: ServiceModel, changes: dict) -> ServiceModel:
         for field, value in changes.items():

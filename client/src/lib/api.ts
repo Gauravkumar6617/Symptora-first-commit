@@ -181,6 +181,9 @@ export interface DoctorApplication {
   contact_phone: string | null
   max_appointments_per_day: number | null
   fee: number | null
+  years_of_practice: number | null
+  languages: string | null
+  display_order: number
   availability_slots: DoctorAvailability[]
   created_at: string
   updated_at: string
@@ -194,6 +197,8 @@ export interface DoctorSelfUpdatePayload {
   contact_phone?: string
   max_appointments_per_day?: number | null
   fee?: number | null
+  years_of_practice?: number | null
+  languages?: string
   availability_slots?: AvailabilitySlotPayload[]
 }
 
@@ -258,6 +263,8 @@ export interface ClinicDoctor {
   specialization: string
   fee: number | null
   avatar_url: string | null
+  years_of_practice: number | null
+  languages: string | null
 }
 
 /** backend AdminClinicRead — a clinic plus its linked doctors. */
@@ -312,6 +319,7 @@ export interface Service {
   specialization: string
   description: string | null
   fee: number | null
+  display_order: number
   created_at: string
   updated_at: string
 }
@@ -321,6 +329,7 @@ export interface ServicePayload {
   specialization: string
   description?: string
   fee?: number | null
+  display_order?: number
 }
 
 /** GET /services — public list, for the appointment booking page. */
@@ -374,6 +383,9 @@ export interface AdminDoctor {
   contact_phone: string | null
   max_appointments_per_day: number | null
   fee: number | null
+  years_of_practice: number | null
+  languages: string | null
+  display_order: number
   availability_slots: DoctorAvailability[]
   first_name: string
   last_name: string
@@ -390,6 +402,9 @@ export interface DoctorUpdatePayload {
   contact_phone?: string
   max_appointments_per_day?: number | null
   fee?: number | null
+  years_of_practice?: number | null
+  languages?: string
+  display_order?: number
   availability_slots?: AvailabilitySlotPayload[]
 }
 
@@ -612,6 +627,8 @@ export interface PublicDoctor {
   specialization: string
   fee: number | null
   avatar_url: string | null
+  years_of_practice: number | null
+  languages: string | null
   availability_slots: DoctorAvailability[]
   clinics: Clinic[]
 }

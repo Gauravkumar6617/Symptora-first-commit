@@ -24,6 +24,11 @@ class DoctorProfile(BaseModel):
     max_appointments_per_day = Column(Integer, nullable=True)
     # Consultation fee; overrides the service's fee when this doctor is booked directly.
     fee = Column(Numeric(8, 2), nullable=True)
+    years_of_practice = Column(Integer, nullable=True)
+    # Comma-separated list, e.g. "English, Hindi, Punjabi".
+    languages = Column(String(255), nullable=True)
+    # Lower sorts first in the patient-facing doctor list; admin-set only.
+    display_order = Column(Integer, nullable=False, default=0, server_default="0")
     # A submitted doctor application starts pending, and only shows up on a
     # profile / clinic once an admin approves it.
     status = Column(

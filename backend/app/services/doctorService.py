@@ -51,7 +51,7 @@ class DoctorService:
 
         changes = {k: v for k, v in data.model_dump(exclude_unset=True).items()}
         availability_slots = changes.pop("availability_slots", None)
-        for clearable in ("contact_person_name", "contact_email", "contact_phone"):
+        for clearable in ("contact_person_name", "contact_email", "contact_phone", "languages"):
             if changes.get(clearable) == "":
                 changes[clearable] = None
         if changes:
@@ -73,6 +73,8 @@ class DoctorService:
             "specialization": doctor.specialization,
             "fee": float(doctor.fee) if doctor.fee is not None else None,
             "avatar_url": file_url(doctor.user.avatar) if doctor.user.avatar else None,
+            "years_of_practice": doctor.years_of_practice,
+            "languages": doctor.languages,
             "availability_slots": doctor.effective_availability_slots,
             "clinics": [link.clinic for link in doctor.clinic_links],
         }

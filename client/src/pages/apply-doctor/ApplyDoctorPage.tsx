@@ -8,19 +8,8 @@ import {
   type DoctorApplication,
   getMyDoctorApplication,
 } from '@/lib/api'
-import { APP_NAME } from '@/lib/constants'
+import { APP_NAME, SPECIALTIES as specialties } from '@/lib/constants'
 import { useAuthStore } from '@/store/authStore'
-
-const specialties = [
-  'General Physician',
-  'Pediatrician',
-  'Dermatologist',
-  'Gynecologist',
-  'ENT Specialist',
-  'Psychiatrist',
-  'Dentist',
-  'Other',
-]
 
 const perks = [
   {
