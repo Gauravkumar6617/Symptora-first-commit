@@ -294,6 +294,9 @@ export interface TelemedicineStartPayload {
 }
 
 /** backend: schemas/telemedicine.TelemedicineRead */
+/** backend: enumModel.ConsultationTrigger */
+export type ConsultationTrigger = 'auto_escalation' | 'manual_booking';
+
 export interface TelemedicineConsultationRecord {
   id: string;
   patient_id: string;
@@ -301,9 +304,60 @@ export interface TelemedicineConsultationRecord {
   doctor_profile_id: string | null;
   reason: string;
   status: ConsultationStatus;
+  trigger: ConsultationTrigger;
+  symptom_check_id: string | null;
   patient_name: string | null;
   doctor_name: string | null;
   doctor_specialization: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ------------------------------------------------------------------ messages
+
+/** backend: schemas/message.MessageRead */
+export interface MessageRecord {
+  id: string;
+  appointment_id: string | null;
+  consultation_id: string | null;
+  sender_id: string;
+  sender_name: string | null;
+  body: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// -------------------------------------------------------------- prescriptions
+
+export interface Medication {
+  name: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  instructions?: string | null;
+}
+
+export interface PrescriptionCreatePayload {
+  appointment_id?: string | null;
+  consultation_id?: string | null;
+  medications: Medication[];
+  notes?: string | null;
+}
+
+/** backend: schemas/prescription.PrescriptionRead */
+export interface PrescriptionRecord {
+  id: string;
+  appointment_id: string | null;
+  consultation_id: string | null;
+  doctor_profile_id: string;
+  patient_id: string;
+  family_member_id: string | null;
+  medications: Medication[];
+  notes: string | null;
+  synced_to_medplum: boolean;
+  doctor_name: string | null;
+  doctor_specialization: string | null;
+  patient_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -394,6 +448,9 @@ export interface PredictionResult {
   disclaimer: string;
   /** Id of the saved history entry. */
   check_id?: string | null;
+  /** Set when urgency is "high" — an instant consultation was auto-created
+   * and every available doctor notified; join its waiting room right away. */
+  escalated_consultation_id?: string | null;
 }
 
 /** backend: schemas/prediction.SymptomCheckRead — one saved check. */

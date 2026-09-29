@@ -14,18 +14,28 @@ import {
   fetchDoctorAppointments,
   fetchDoctorAvailability,
   fetchHandledConsultations,
+  fetchIssuedPrescriptions,
+  fetchMessages,
   fetchMyConsultations,
+  fetchMyPrescriptions,
   fetchNotifications,
   fetchPatientAppointments,
   fetchPendingConsultations,
   fetchSpecialties,
   fetchSymptoms,
+  issuePrescription,
   parseSymptoms,
   predictDisease,
+  sendMessage,
   startConsultation,
 } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
-import type { AppointmentCreatePayload, PatientDetails, TelemedicineStartPayload } from '@/types';
+import type {
+  AppointmentCreatePayload,
+  PatientDetails,
+  PrescriptionCreatePayload,
+  TelemedicineStartPayload,
+} from '@/types';
 
 // Family members come from useFamilyStore. Symptom-checker history is on the
 // server (useChecks); questionnaire Health Checks stay in useHealthCheckStore.
@@ -187,5 +197,45 @@ export function useCancelConsultation() {
   return useMutation({
     mutationFn: (consultationId: string) => cancelConsultationApi(accessToken!, consultationId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['consultations'] }),
+  });
+}
+
+// ----------------------------------------------------------------- messages
+
+export function useMessages(kind: 'appointment' | 'telemedicine', id: string | null) {
+  const accessToken = useAuthStore((state) => state.accessToken);
+  return useQuery({
+    queryKey: ['messages', kind, id],
+    queryFn: () => fetchMessages(accessToken!, kind, id!),
+    enabled: Boolean(accessToken && id),
+    refetchInterval: 4000,
+  });
+}
+
+export function useSendMessage(kind: 'appointment' | 'telemedicine', id: string | null) {
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: string) => sendMessage(accessToken!, kind, id!, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['messages', kind, id] }),
+  });
+}
+
+// ------------------------------------------------------------ prescriptions
+
+export function useMyPrescriptions() {
+  return useQuery({ queryKey: ['prescriptions', 'mine'], queryFn: fetchMyPrescriptions });
+}
+
+export function useIssuedPrescriptions() {
+  return useQuery({ queryKey: ['prescriptions', 'issued'], queryFn: fetchIssuedPrescriptions });
+}
+
+export function useIssuePrescription() {
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: PrescriptionCreatePayload) => issuePrescription(accessToken!, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['prescriptions'] }),
   });
 }

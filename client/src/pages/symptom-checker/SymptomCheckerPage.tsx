@@ -1,6 +1,6 @@
 import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, Info, Plus, Search, Sparkles, Stethoscope, UserRound, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ApiError,
   GENDERS,
@@ -59,6 +59,7 @@ const chipClass = (selected: boolean) =>
   }`
 
 export function SymptomCheckerPage() {
+  const navigate = useNavigate()
   const token = useAuthStore((state) => state.token)
   const user = useAuthStore((state) => state.user)
   const members = useFamilyStore((state) => state.members)
@@ -533,18 +534,35 @@ export function SymptomCheckerPage() {
             ))}
           </div>
 
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link to="/telemedicine" className="btn-raised gap-2">
-              <Stethoscope className="h-4 w-4" />
-              Talk to a doctor
-            </Link>
-            <Link
-              to="/appointments"
-              className="inline-flex items-center rounded-xl border border-ink/15 px-5 py-3 text-sm font-semibold text-ink hover:bg-ink/5"
-            >
-              Book an appointment
-            </Link>
-          </div>
+          {result.escalated_consultation_id ? (
+            <div className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-danger/30 bg-danger/5 p-4">
+              <Stethoscope className="h-5 w-5 shrink-0 text-danger" />
+              <p className="flex-1 text-sm font-semibold text-danger">
+                High risk result — we've already notified every available doctor. Join the video call as soon as
+                one accepts.
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate(`/telemedicine/waiting/${result.escalated_consultation_id}`)}
+                className="btn-raised shrink-0"
+              >
+                Join now
+              </button>
+            </div>
+          ) : (
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link to="/telemedicine" className="btn-raised gap-2">
+                <Stethoscope className="h-4 w-4" />
+                Talk to a doctor
+              </Link>
+              <Link
+                to="/appointments"
+                className="inline-flex items-center rounded-xl border border-ink/15 px-5 py-3 text-sm font-semibold text-ink hover:bg-ink/5"
+              >
+                Book an appointment
+              </Link>
+            </div>
+          )}
 
           <p className="mt-6 flex items-start gap-2 rounded-xl bg-primary/5 p-4 text-xs text-ink/70">
             <Info className="mt-px h-4 w-4 shrink-0 text-primary" />

@@ -30,9 +30,12 @@ import type {
   FamilyMemberCreatePayload,
   FamilyMemberRecord,
   Gender,
+  MessageRecord,
   ParsedSymptoms,
   PatientDetails,
   PredictionResult,
+  PrescriptionCreatePayload,
+  PrescriptionRecord,
   PublicClinic,
   Symptom,
   SymptomCheck,
@@ -609,6 +612,48 @@ export function telemedicinePatientSocketUrl(consultationId: string, token: stri
  * staying connected is what makes them "available" for instant consultations. */
 export function telemedicineDoctorSocketUrl(token: string): string {
   return `${wsBaseUrl()}${API_PREFIX}/ws/telemedicine/doctor?token=${encodeURIComponent(token)}`;
+}
+
+// ---------------------------------------------------------------- messages
+
+export async function fetchMessages(
+  token: string,
+  kind: 'appointment' | 'telemedicine',
+  id: string,
+): Promise<MessageRecord[]> {
+  return request<MessageRecord[]>(`/messages/${kind}/${id}`, { token });
+}
+
+export async function sendMessage(
+  token: string,
+  kind: 'appointment' | 'telemedicine',
+  id: string,
+  body: string,
+): Promise<MessageRecord> {
+  return request<MessageRecord>(`/messages/${kind}/${id}`, { method: 'POST', body: { body }, token });
+}
+
+// ------------------------------------------------------------ prescriptions
+
+/** POST /prescriptions — the treating doctor issues an e-prescription;
+ * best-effort synced to Medplum as FHIR MedicationRequests. */
+export async function issuePrescription(
+  token: string,
+  payload: PrescriptionCreatePayload,
+): Promise<PrescriptionRecord> {
+  return request<PrescriptionRecord>('/prescriptions', { method: 'POST', body: payload, token });
+}
+
+export async function fetchMyPrescriptions(): Promise<PrescriptionRecord[]> {
+  const token = useAuthStore.getState().accessToken;
+  if (!token) return [];
+  return request<PrescriptionRecord[]>('/prescriptions/me', { token });
+}
+
+export async function fetchIssuedPrescriptions(): Promise<PrescriptionRecord[]> {
+  const token = useAuthStore.getState().accessToken;
+  if (!token) return [];
+  return request<PrescriptionRecord[]>('/prescriptions/doctor/me', { token });
 }
 
 /** backend schemas/blog.BlogPostRead — posts admins write on the website. */

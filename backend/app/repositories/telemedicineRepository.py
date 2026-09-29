@@ -1,6 +1,7 @@
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 
-from app.models.enumModel import ConsultationStatus
+from app.models.enumModel import ConsultationStatus, ConsultationTrigger
 from app.models.telemedicineModel import TelemedicineConsultationModel
 from app.schemas.telemedicine import TelemedicineStart
 
@@ -21,6 +22,23 @@ class TelemedicineRepository:
         self.db.refresh(consultation)
         return consultation
 
+    def create_escalated(
+        self, patient_id: str, family_member_id: str | None, reason: str, symptom_check_id: str
+    ) -> TelemedicineConsultationModel:
+        """Auto-created from a High risk symptom check — same queue as a
+        manually started consultation, just tagged with its trigger."""
+        consultation = TelemedicineConsultationModel(
+            patient_id=patient_id,
+            family_member_id=family_member_id,
+            reason=reason,
+            trigger=ConsultationTrigger.AUTO_ESCALATION,
+            symptom_check_id=symptom_check_id,
+        )
+        self.db.add(consultation)
+        self.db.commit()
+        self.db.refresh(consultation)
+        return consultation
+
     def get_by_id(self, consultation_id: str) -> TelemedicineConsultationModel | None:
         return (
             self.db.query(TelemedicineConsultationModel)
@@ -29,10 +47,15 @@ class TelemedicineRepository:
         )
 
     def list_pending(self) -> list[TelemedicineConsultationModel]:
+        """Escalated (High risk check) requests surface first; FIFO within
+        each group."""
+        escalated_first = case(
+            (TelemedicineConsultationModel.trigger == ConsultationTrigger.AUTO_ESCALATION, 0), else_=1
+        )
         return (
             self.db.query(TelemedicineConsultationModel)
             .filter(TelemedicineConsultationModel.status == ConsultationStatus.PENDING)
-            .order_by(TelemedicineConsultationModel.created_at.asc())
+            .order_by(escalated_first, TelemedicineConsultationModel.created_at.asc())
             .all()
         )
 

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarDays, CheckCircle2, Clock, Stethoscope, UsersRound, Video } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Clock, FileText, MessageCircle, Stethoscope, UsersRound, Video } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -12,9 +12,11 @@ import {
   listChecks,
   listMyAppointments,
   listMyConsultations,
+  listMyPrescriptions,
   type SymptomCheck,
   type TelemedicineConsultation,
 } from '@/lib/api'
+import { ChatThreadModal } from '@/components/telemedicine/ChatThreadModal'
 import { useAuthStore } from '@/store/authStore'
 import { relationLabel, useFamilyStore } from '@/store/familyStore'
 import { MyClinicsCard } from './MyClinicsCard'
@@ -81,6 +83,8 @@ export function DashboardPage() {
 
       <MyConsultationsSection token={token} />
 
+      <MyPrescriptionsSection token={token} />
+
       <RecentChecks checks={checks} />
 
       <div className="mt-10">
@@ -118,9 +122,11 @@ const appointmentStatusBadge: Record<Appointment['status'], string> = {
 /** Your own upcoming and past bookings, with a cancel action while they're
  * still live. */
 function MyAppointmentsSection({ token }: { token: string | null }) {
+  const user = useAuthStore((state) => state.user)
   const queryClient = useQueryClient()
   const [cancelling, setCancelling] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [chatId, setChatId] = useState<string | null>(null)
 
   const { data: appointments = [] } = useQuery({
     queryKey: ['my-appointments'],
@@ -188,6 +194,13 @@ function MyAppointmentsSection({ token }: { token: string | null }) {
                   <Video className="h-3.5 w-3.5" /> Video call
                 </Link>
               )}
+              <button
+                type="button"
+                onClick={() => setChatId(a.id)}
+                className="flex items-center gap-1 text-xs font-semibold text-ink/60 hover:text-primary"
+              >
+                <MessageCircle className="h-3.5 w-3.5" /> Messages
+              </button>
               {(a.status === 'scheduled' || a.status === 'rescheduled') && (
                 <button
                   type="button"
@@ -202,6 +215,16 @@ function MyAppointmentsSection({ token }: { token: string | null }) {
           </div>
         ))}
       </div>
+
+      {chatId && token && user && (
+        <ChatThreadModal
+          kind="appointment"
+          id={chatId}
+          token={token}
+          currentUserId={user.id}
+          onClose={() => setChatId(null)}
+        />
+      )}
     </div>
   )
 }
@@ -215,8 +238,10 @@ const consultationStatusBadge: Record<TelemedicineConsultation['status'], string
 
 /** Instant video consultations you've started, most recent first. */
 function MyConsultationsSection({ token }: { token: string | null }) {
+  const user = useAuthStore((state) => state.user)
   const queryClient = useQueryClient()
   const [cancelling, setCancelling] = useState<string | null>(null)
+  const [chatId, setChatId] = useState<string | null>(null)
 
   const { data: consultations = [] } = useQuery({
     queryKey: ['my-consultations'],
@@ -273,6 +298,15 @@ function MyConsultationsSection({ token }: { token: string | null }) {
                   View
                 </Link>
               )}
+              {c.status !== 'pending' && (
+                <button
+                  type="button"
+                  onClick={() => setChatId(c.id)}
+                  className="flex items-center gap-1 text-xs font-semibold text-ink/60 hover:text-primary"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" /> Messages
+                </button>
+              )}
               {c.status === 'pending' && (
                 <button
                   type="button"
@@ -284,6 +318,61 @@ function MyConsultationsSection({ token }: { token: string | null }) {
                 </button>
               )}
             </div>
+          </div>
+        ))}
+      </div>
+
+      {chatId && token && user && (
+        <ChatThreadModal
+          kind="telemedicine"
+          id={chatId}
+          token={token}
+          currentUserId={user.id}
+          onClose={() => setChatId(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+/** E-prescriptions your doctors have issued, most recent first. */
+function MyPrescriptionsSection({ token }: { token: string | null }) {
+  const { data: prescriptions = [] } = useQuery({
+    queryKey: ['my-prescriptions'],
+    queryFn: () => listMyPrescriptions(token!),
+    enabled: Boolean(token),
+  })
+
+  if (prescriptions.length === 0) return null
+
+  return (
+    <div className="mt-10">
+      <h2 className="flex items-center gap-2 text-lg font-bold text-ink">
+        <FileText className="h-5 w-5 text-primary-600" /> Prescriptions
+      </h2>
+      <div className="mt-4 space-y-3">
+        {prescriptions.map((p) => (
+          <div key={p.id} className="card-raised p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-ink">
+                {p.doctor_name ?? 'Doctor'}
+                {p.doctor_specialization ? ` · ${p.doctor_specialization}` : ''}
+              </p>
+              <p className="text-xs text-ink/40">{new Date(p.created_at).toLocaleDateString()}</p>
+            </div>
+            <ul className="mt-2 space-y-1.5">
+              {p.medications.map((med, i) => (
+                <li key={i} className="text-sm text-ink/80">
+                  <span className="font-semibold text-ink">{med.name}</span> — {med.dosage}, {med.frequency},{' '}
+                  {med.duration}
+                  {med.instructions && <span className="text-ink/50"> ({med.instructions})</span>}
+                </li>
+              ))}
+            </ul>
+            {p.notes && <p className="mt-2 text-xs italic text-ink/50">{p.notes}</p>}
+            {p.synced_to_medplum && (
+              <p className="mt-2 text-[11px] font-medium text-success">Synced to your Medplum record</p>
+            )}
           </div>
         ))}
       </div>

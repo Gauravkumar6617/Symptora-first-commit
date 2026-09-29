@@ -6,8 +6,11 @@ import { AppointmentCard } from '@/components/ui/appointment-card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { ChatThreadModal } from '@/components/ui/chat-thread-modal';
 import { Chip } from '@/components/ui/chip';
 import { EmptyState } from '@/components/ui/empty-state';
+import { IconButton } from '@/components/ui/icon-button';
+import { PrescriptionFormModal } from '@/components/ui/prescription-form-modal';
 import { Screen } from '@/components/ui/screen';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { SkeletonList } from '@/components/ui/skeleton';
@@ -21,6 +24,7 @@ import {
   useCancelAppointment,
   useDoctorAppointments,
   useHandledConsultations,
+  useIssuedPrescriptions,
   usePendingConsultations,
 } from '@/hooks/use-queries';
 import { useTheme } from '@/hooks/use-theme';
@@ -40,6 +44,8 @@ export default function DoctorScheduleScreen() {
   const [activeDate, setActiveDate] = useState<string | null>(null);
   const accessToken = useAuthStore((state) => state.accessToken);
   const cancelAppointment = useCancelAppointment();
+  const [chatId, setChatId] = useState<string | null>(null);
+  const [prescribeId, setPrescribeId] = useState<string | null>(null);
 
   const dates = useMemo(() => {
     const unique = Array.from(new Set((appointments ?? []).map((item) => item.date)));
@@ -95,8 +101,8 @@ export default function DoctorScheduleScreen() {
               appointment={appointment}
               primaryLabel={appointment.patientName}
               footer={
-                appointment.status === 'scheduled' || appointment.status === 'rescheduled' ? (
-                  <View style={styles.footerRow}>
+                <View style={styles.footerRow}>
+                  {appointment.status === 'scheduled' || appointment.status === 'rescheduled' ? (
                     <Button
                       label="Join video call"
                       icon="videocam"
@@ -104,14 +110,23 @@ export default function DoctorScheduleScreen() {
                       style={{ flex: 1 }}
                       onPress={() => openVideoCall('appointment', appointment.id, accessToken!)}
                     />
-                    <Button
-                      label="Cancel"
-                      variant="ghost"
-                      size="sm"
-                      onPress={() => confirmCancel(appointment.id)}
+                  ) : null}
+                  <IconButton
+                    icon="chatbubble-outline"
+                    accessibilityLabel="Messages"
+                    onPress={() => setChatId(appointment.id)}
+                  />
+                  {appointment.status !== 'cancelled' ? (
+                    <IconButton
+                      icon="medkit-outline"
+                      accessibilityLabel="Prescribe"
+                      onPress={() => setPrescribeId(appointment.id)}
                     />
-                  </View>
-                ) : undefined
+                  ) : null}
+                  {appointment.status === 'scheduled' || appointment.status === 'rescheduled' ? (
+                    <Button label="Cancel" variant="ghost" size="sm" onPress={() => confirmCancel(appointment.id)} />
+                  ) : null}
+                </View>
               }
             />
           ))}
@@ -119,13 +134,24 @@ export default function DoctorScheduleScreen() {
       )}
 
       <ConsultationHistorySection />
+      <IssuedPrescriptionsSection />
+
+      <ChatThreadModal visible={chatId != null} kind="appointment" id={chatId} onClose={() => setChatId(null)} />
+      <PrescriptionFormModal
+        visible={prescribeId != null}
+        kind="appointment"
+        id={prescribeId}
+        onClose={() => setPrescribeId(null)}
+        onIssued={() => setPrescribeId(null)}
+      />
     </Screen>
   );
 }
 
 /** Live queue of instant, patient-started consultations — connects to the
  * doctor notification socket only once approved; staying connected is what
- * makes this doctor "available" for them. */
+ * makes this doctor "available" for them. Escalated (High risk check)
+ * requests surface first with an Urgent badge. */
 function InstantConsultationSection() {
   const theme = useTheme();
   const user = useAuthStore((state) => state.user);
@@ -143,7 +169,10 @@ function InstantConsultationSection() {
   const pending = useMemo(() => {
     const base = (initial ?? []).filter((c) => !removedIds.has(c.id));
     const extra = added.filter((c) => !removedIds.has(c.id) && !base.some((b) => b.id === c.id));
-    return [...base, ...extra];
+    const merged = [...base, ...extra];
+    return merged.sort((a, b) =>
+      a.trigger === b.trigger ? 0 : a.trigger === 'auto_escalation' ? -1 : 1,
+    );
   }, [initial, added, removedIds]);
 
   useEffect(() => {
@@ -189,9 +218,17 @@ function InstantConsultationSection() {
       </View>
       <View style={{ gap: Spacing.three }}>
         {pending.map((c) => (
-          <Card key={c.id} style={styles.requestCard}>
+          <Card
+            key={c.id}
+            style={[
+              styles.requestCard,
+              c.trigger === 'auto_escalation' ? { borderWidth: 1.5, borderColor: theme.danger } : undefined,
+            ]}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.optionTitle, { color: theme.text }]}>{c.patient_name ?? 'Patient'}</Text>
+              <View style={styles.requestHeaderRow}>
+                <Text style={[styles.optionTitle, { color: theme.text }]}>{c.patient_name ?? 'Patient'}</Text>
+                {c.trigger === 'auto_escalation' ? <Badge label="Urgent" tone="danger" /> : null}
+              </View>
               <Text style={[styles.optionMeta, { color: theme.textSecondary }]} numberOfLines={2}>
                 {c.reason}
               </Text>
@@ -215,6 +252,8 @@ function ConsultationHistorySection() {
   const theme = useTheme();
   const accessToken = useAuthStore((state) => state.accessToken);
   const { data: consultations } = useHandledConsultations();
+  const [chatId, setChatId] = useState<string | null>(null);
+  const [prescribeId, setPrescribeId] = useState<string | null>(null);
 
   if (!consultations || consultations.length === 0) return null;
 
@@ -236,15 +275,63 @@ function ConsultationHistorySection() {
               </View>
               <Badge label={c.status.replace('_', ' ')} tone={consultationStatusTone[c.status]} />
             </View>
-            {c.status === 'in_progress' ? (
-              <Button
-                label="Rejoin call"
-                icon="videocam"
-                size="sm"
-                variant="outline"
-                onPress={() => openVideoCall('telemedicine', c.id, accessToken!)}
-              />
-            ) : null}
+            <View style={styles.footerRow}>
+              {c.status === 'in_progress' ? (
+                <Button
+                  label="Rejoin call"
+                  icon="videocam"
+                  size="sm"
+                  variant="outline"
+                  onPress={() => openVideoCall('telemedicine', c.id, accessToken!)}
+                />
+              ) : null}
+              <IconButton icon="chatbubble-outline" accessibilityLabel="Messages" onPress={() => setChatId(c.id)} />
+              {c.status === 'in_progress' || c.status === 'completed' ? (
+                <IconButton
+                  icon="medkit-outline"
+                  accessibilityLabel="Prescribe"
+                  onPress={() => setPrescribeId(c.id)}
+                />
+              ) : null}
+            </View>
+          </Card>
+        ))}
+      </View>
+
+      <ChatThreadModal visible={chatId != null} kind="telemedicine" id={chatId} onClose={() => setChatId(null)} />
+      <PrescriptionFormModal
+        visible={prescribeId != null}
+        kind="telemedicine"
+        id={prescribeId}
+        onClose={() => setPrescribeId(null)}
+        onIssued={() => setPrescribeId(null)}
+      />
+    </View>
+  );
+}
+
+/** Prescriptions this doctor has issued, most recent first. */
+function IssuedPrescriptionsSection() {
+  const theme = useTheme();
+  const { data: prescriptions } = useIssuedPrescriptions();
+
+  if (!prescriptions || prescriptions.length === 0) return null;
+
+  return (
+    <View style={{ marginTop: Spacing.five }}>
+      <Text style={[styles.heading, { color: theme.text }]}>Prescriptions issued</Text>
+      <View style={{ gap: Spacing.three }}>
+        {prescriptions.map((p) => (
+          <Card key={p.id} style={{ gap: 4 }}>
+            <View style={styles.historyRow}>
+              <Ionicons name="person" size={15} color={theme.textSecondary} />
+              <Text style={[styles.optionTitle, { color: theme.text }]}>{p.patient_name ?? 'Patient'}</Text>
+            </View>
+            {p.medications.map((med, i) => (
+              <Text key={i} style={[styles.optionMeta, { color: theme.text }]}>
+                {med.name} — {med.dosage}, {med.frequency}, {med.duration}
+              </Text>
+            ))}
           </Card>
         ))}
       </View>
@@ -266,6 +353,7 @@ const styles = StyleSheet.create({
   },
   footerRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.two,
   },
   sectionHeaderRow: {
@@ -277,6 +365,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.three - 4,
+  },
+  requestHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two - 4,
   },
   historyCard: {
     gap: Spacing.two,

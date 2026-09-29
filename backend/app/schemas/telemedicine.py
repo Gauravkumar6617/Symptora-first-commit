@@ -21,6 +21,7 @@ class TelemedicineRead(ORMReadBase):
     reason: str
     status: ConsultationStatus
     trigger: ConsultationTrigger
+    symptom_check_id: Optional[str] = None
 
     patient_name: Optional[str] = None
     doctor_name: Optional[str] = None

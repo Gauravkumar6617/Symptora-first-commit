@@ -4,14 +4,22 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 
 import { AppointmentCard } from '@/components/ui/appointment-card';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { ChatThreadModal } from '@/components/ui/chat-thread-modal';
 import { EmptyState } from '@/components/ui/empty-state';
+import { IconButton } from '@/components/ui/icon-button';
 import { Screen } from '@/components/ui/screen';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { SkeletonList } from '@/components/ui/skeleton';
 import { Spacing, Typography } from '@/constants/theme';
 import { openVideoCall } from '@/lib/call';
-import { useCancelAppointment, usePatientAppointments } from '@/hooks/use-queries';
+import {
+  useCancelAppointment,
+  useMyConsultations,
+  useMyPrescriptions,
+  usePatientAppointments,
+} from '@/hooks/use-queries';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuthStore } from '@/store/authStore';
 
@@ -22,8 +30,17 @@ export default function PatientAppointmentsScreen() {
   const router = useRouter();
   const accessToken = useAuthStore((state) => state.accessToken);
   const { data: appointments, isLoading, refetch, isRefetching } = usePatientAppointments();
+  const { data: consultations } = useMyConsultations();
+  const { data: prescriptions } = useMyPrescriptions();
   const cancelAppointment = useCancelAppointment();
   const [filter, setFilter] = useState<Filter>('upcoming');
+  const [chatId, setChatId] = useState<string | null>(null);
+  const [chatKind, setChatKind] = useState<'appointment' | 'telemedicine'>('appointment');
+
+  function openChat(kind: 'appointment' | 'telemedicine', id: string) {
+    setChatKind(kind);
+    setChatId(id);
+  }
 
   const { upcoming, past } = useMemo(() => {
     const list = appointments ?? [];
@@ -81,8 +98,8 @@ export default function PatientAppointmentsScreen() {
               appointment={appointment}
               primaryLabel={appointment.doctorName}
               footer={
-                appointment.status === 'scheduled' || appointment.status === 'rescheduled' ? (
-                  <View style={styles.footerRow}>
+                <View style={styles.footerRow}>
+                  {appointment.status === 'scheduled' || appointment.status === 'rescheduled' ? (
                     <Button
                       label="Join video call"
                       icon="videocam"
@@ -90,14 +107,16 @@ export default function PatientAppointmentsScreen() {
                       style={{ flex: 1 }}
                       onPress={() => openVideoCall('appointment', appointment.id, accessToken!)}
                     />
-                    <Button
-                      label="Cancel"
-                      variant="ghost"
-                      size="sm"
-                      onPress={() => confirmCancel(appointment.id)}
-                    />
-                  </View>
-                ) : undefined
+                  ) : null}
+                  <IconButton
+                    icon="chatbubble-outline"
+                    accessibilityLabel="Messages"
+                    onPress={() => openChat('appointment', appointment.id)}
+                  />
+                  {appointment.status === 'scheduled' || appointment.status === 'rescheduled' ? (
+                    <Button label="Cancel" variant="ghost" size="sm" onPress={() => confirmCancel(appointment.id)} />
+                  ) : null}
+                </View>
               }
             />
           ))
@@ -118,6 +137,61 @@ export default function PatientAppointmentsScreen() {
           </Text>
         </>
       ) : null}
+
+      {consultations && consultations.length > 0 ? (
+        <View style={styles.prescriptionsBlock}>
+          <Text style={[styles.heading, { color: theme.text }]}>Video consultations</Text>
+          {consultations.map((c) => (
+            <Card key={c.id} style={styles.footerRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.doctorName, { color: theme.text }]}>
+                  {c.doctor_name ?? (c.status === 'pending' ? 'Waiting for a doctor…' : 'Doctor')}
+                </Text>
+                <Text style={[styles.note, { color: theme.textMuted, textAlign: 'left', marginTop: 2 }]}>
+                  {c.reason}
+                </Text>
+              </View>
+              {c.status !== 'pending' ? (
+                <IconButton
+                  icon="chatbubble-outline"
+                  accessibilityLabel="Messages"
+                  onPress={() => openChat('telemedicine', c.id)}
+                />
+              ) : null}
+            </Card>
+          ))}
+        </View>
+      ) : null}
+
+      {prescriptions && prescriptions.length > 0 ? (
+        <View style={styles.prescriptionsBlock}>
+          <Text style={[styles.heading, { color: theme.text }]}>Prescriptions</Text>
+          {prescriptions.map((p) => (
+            <Card key={p.id} style={{ gap: 4 }}>
+              <View style={styles.prescriptionHeader}>
+                <Text style={[styles.doctorName, { color: theme.text }]}>
+                  {p.doctor_name ?? 'Doctor'}
+                  {p.doctor_specialization ? ` · ${p.doctor_specialization}` : ''}
+                </Text>
+                <Text style={[styles.note, { color: theme.textMuted, marginTop: 0 }]}>
+                  {new Date(p.created_at).toLocaleDateString()}
+                </Text>
+              </View>
+              {p.medications.map((med, i) => (
+                <Text key={i} style={[styles.medicationLine, { color: theme.text }]}>
+                  <Text style={{ fontWeight: '700' }}>{med.name}</Text> — {med.dosage}, {med.frequency},{' '}
+                  {med.duration}
+                </Text>
+              ))}
+              {p.synced_to_medplum ? (
+                <Text style={[styles.synced, { color: theme.success }]}>Synced to your Medplum record</Text>
+              ) : null}
+            </Card>
+          ))}
+        </View>
+      ) : null}
+
+      <ChatThreadModal visible={chatId != null} kind={chatKind} id={chatId} onClose={() => setChatId(null)} />
     </Screen>
   );
 }
@@ -129,11 +203,34 @@ const styles = StyleSheet.create({
   },
   footerRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.two,
   },
   note: {
     ...Typography.caption,
     textAlign: 'center',
     marginTop: Spacing.three,
+  },
+  prescriptionsBlock: {
+    marginTop: Spacing.five,
+    gap: Spacing.three,
+  },
+  heading: {
+    ...Typography.section,
+  },
+  prescriptionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  doctorName: {
+    ...Typography.smallStrong,
+  },
+  medicationLine: {
+    ...Typography.body,
+  },
+  synced: {
+    ...Typography.caption,
+    fontWeight: '600',
   },
 });

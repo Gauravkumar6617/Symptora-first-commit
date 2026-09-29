@@ -30,6 +30,16 @@ class TelemedicineService:
             raise ValueError("Family member not found")
         return self._label(self.repo.create(patient.id, data))
 
+    def escalate(self, patient, family_member, reason: str, symptom_check_id: str) -> TelemedicineConsultationModel:
+        """Auto-create a consultation for a High risk symptom check —
+        skips the manual "start" form; the patient just gets a live queue
+        entry every available doctor is immediately notified about."""
+        if patient.is_admin or self.doctor_repo.get_by_user_id(patient.id):
+            raise PermissionError("Only patients can be escalated to an instant consultation")
+        return self._label(
+            self.repo.create_escalated(patient.id, family_member.id if family_member else None, reason, symptom_check_id)
+        )
+
     def accept(self, doctor_user, consultation_id: str) -> TelemedicineConsultationModel:
         doctor = self.doctor_repo.get_by_user_id(doctor_user.id)
         if not doctor or doctor.status != Status.APPROVED:

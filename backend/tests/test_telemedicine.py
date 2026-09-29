@@ -16,7 +16,8 @@ from app.core.database import Base
 from app.models import *  # noqa: F401,F403 — register every table
 from app.models.clinicModel import CliniModel
 from app.models.doctorModel import DoctorProfile
-from app.models.enumModel import ConsultationStatus, Status
+from app.models.enumModel import ConsultationStatus, ConsultationTrigger, Status
+from app.models.symptomCheckModel import SymptomCheckModel
 from app.models.userModel import UserModel
 from app.routers.callRouter import can_join_consultation_call
 from app.schemas.telemedicine import TelemedicineStart
@@ -119,3 +120,41 @@ def test_patient_and_treating_doctor_history_lists(db, setup):
 
     # a doctor who never handled anything gets an empty list, not an error
     assert service.list_for_current_doctor(other_doc_user) == []
+
+
+def _make_check(db, patient) -> SymptomCheckModel:
+    check = SymptomCheckModel(
+        created_by_id=patient.id, subject_name="Pat Ient", symptoms=["high_fever"],
+        predictions=[{"disease": "flu", "label": "Flu", "probability": 0.8}],
+        urgency="high", urgency_reasons=["High fever with red flags"],
+    )
+    db.add(check)
+    db.commit()
+    return check
+
+
+def test_a_high_risk_check_escalates_to_the_top_of_the_queue(db, setup):
+    patient, doc_user, _other_doc_user, _admin, _doctor, _other = setup
+    service = TelemedicineService(db)
+    check = _make_check(db, patient)
+
+    # an older, manually started request already exists
+    manual = service.start(patient, TelemedicineStart(reason="Follow-up question"))
+
+    escalated = service.escalate(patient, None, "Auto-escalated (High risk): Flu", check.id)
+    assert escalated.trigger == ConsultationTrigger.AUTO_ESCALATION
+    assert escalated.symptom_check_id == check.id
+    assert escalated.status == ConsultationStatus.PENDING
+
+    queue = service.list_pending_for_doctor(doc_user)
+    assert queue[0].id == escalated.id
+    assert queue[1].id == manual.id
+
+
+def test_a_doctor_cannot_be_escalated(db, setup):
+    _patient, doc_user, _other_doc_user, _admin, _doctor, _other = setup
+    service = TelemedicineService(db)
+    check = _make_check(db, doc_user)
+
+    with pytest.raises(PermissionError):
+        service.escalate(doc_user, None, "reason", check.id)

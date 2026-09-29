@@ -24,6 +24,8 @@ class TelemedicineConsultationModel(BaseModel):
     doctor_profile_id = Column(UUID(as_uuid=False), ForeignKey("doctor_profiles.id"), nullable=True, index=True)
 
     reason = Column(String(255), nullable=False)
+    # Set when this was auto-created from a High risk symptom check.
+    symptom_check_id = Column(UUID(as_uuid=False), ForeignKey("symptom_checks.id"), nullable=True, index=True)
 
     status = Column(
         SAEnum(ConsultationStatus, name="consultation_status"),

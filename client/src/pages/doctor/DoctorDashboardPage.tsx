@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarClock, Mail, Phone, PhoneIncoming, User, Video } from 'lucide-react'
+import { CalendarClock, FileText, Mail, MessageCircle, Phone, PhoneIncoming, Stethoscope, User, Video } from 'lucide-react'
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import {
@@ -11,6 +11,7 @@ import {
   type DoctorApplication,
   getMyDoctorApplication,
   listMyHandledConsultations,
+  listMyIssuedPrescriptions,
   listMyPatientAppointments,
   listPendingConsultations,
   type TelemedicineConsultation,
@@ -18,6 +19,8 @@ import {
   updateMyDoctorProfile,
 } from '@/lib/api'
 import { AvailabilityGrid } from '@/components/AvailabilityGrid'
+import { ChatThreadModal } from '@/components/telemedicine/ChatThreadModal'
+import { PrescriptionFormModal } from '@/components/telemedicine/PrescriptionFormModal'
 import { useAuthStore } from '@/store/authStore'
 
 const inputClass =
@@ -47,6 +50,7 @@ export function DoctorDashboardPage() {
       <InstantConsultationSection token={token} />
       <MyAppointmentsSection token={token} />
       <ConsultationHistorySection token={token} />
+      <IssuedPrescriptionsSection token={token} />
       <MyProfileSection token={token} />
     </div>
   )
@@ -121,6 +125,10 @@ function InstantConsultationSection({ token }: { token: string | null }) {
 
   if (!approved || pending.length === 0) return null
 
+  const sorted = [...pending].sort((a, b) =>
+    a.trigger === b.trigger ? 0 : a.trigger === 'auto_escalation' ? -1 : 1,
+  )
+
   return (
     <div className="mt-10">
       <h2 className="flex items-center gap-2 text-lg font-bold text-ink">
@@ -128,11 +136,21 @@ function InstantConsultationSection({ token }: { token: string | null }) {
       </h2>
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
       <div className="mt-4 space-y-3">
-        {pending.map((c) => (
-          <div key={c.id} className="card-raised flex flex-wrap items-center justify-between gap-3 p-4">
+        {sorted.map((c) => (
+          <div
+            key={c.id}
+            className={`card-raised flex flex-wrap items-center justify-between gap-3 p-4 ${
+              c.trigger === 'auto_escalation' ? 'border border-danger/40' : ''
+            }`}
+          >
             <div className="min-w-0">
               <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
                 <User className="h-3.5 w-3.5 shrink-0" /> {c.patient_name ?? 'Patient'}
+                {c.trigger === 'auto_escalation' && (
+                  <span className="rounded-full bg-danger/10 px-2 py-0.5 text-[10px] font-bold uppercase text-danger">
+                    Urgent
+                  </span>
+                )}
               </p>
               <p className="mt-1 text-xs text-ink/70">{c.reason}</p>
             </div>
@@ -160,11 +178,14 @@ const consultationStatusBadge: Record<TelemedicineConsultation['status'], string
 
 /** Instant consultations this doctor has accepted, most recent first. */
 function ConsultationHistorySection({ token }: { token: string | null }) {
+  const user = useAuthStore((state) => state.user)
   const { data: consultations = [] } = useQuery({
     queryKey: ['my-handled-consultations'],
     queryFn: () => listMyHandledConsultations(token!),
     enabled: Boolean(token),
   })
+  const [chatId, setChatId] = useState<string | null>(null)
+  const [prescribeId, setPrescribeId] = useState<string | null>(null)
 
   if (consultations.length === 0) return null
 
@@ -195,18 +216,56 @@ function ConsultationHistorySection({ token }: { token: string | null }) {
                   <Video className="h-3.5 w-3.5" /> Rejoin
                 </Link>
               )}
+              <button
+                type="button"
+                onClick={() => setChatId(c.id)}
+                className="flex items-center gap-1 text-xs font-semibold text-ink/60 hover:text-primary"
+              >
+                <MessageCircle className="h-3.5 w-3.5" /> Messages
+              </button>
+              {(c.status === 'in_progress' || c.status === 'completed') && (
+                <button
+                  type="button"
+                  onClick={() => setPrescribeId(c.id)}
+                  className="flex items-center gap-1 text-xs font-semibold text-ink/60 hover:text-primary"
+                >
+                  <Stethoscope className="h-3.5 w-3.5" /> Prescribe
+                </button>
+              )}
             </div>
           </div>
         ))}
       </div>
+
+      {chatId && token && user && (
+        <ChatThreadModal
+          kind="telemedicine"
+          id={chatId}
+          token={token}
+          currentUserId={user.id}
+          onClose={() => setChatId(null)}
+        />
+      )}
+      {prescribeId && token && (
+        <PrescriptionFormModal
+          kind="telemedicine"
+          id={prescribeId}
+          token={token}
+          onClose={() => setPrescribeId(null)}
+          onIssued={() => setPrescribeId(null)}
+        />
+      )}
     </div>
   )
 }
 
 function MyAppointmentsSection({ token }: { token: string | null }) {
+  const user = useAuthStore((state) => state.user)
   const queryClient = useQueryClient()
   const [cancelling, setCancelling] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [chatId, setChatId] = useState<string | null>(null)
+  const [prescribeId, setPrescribeId] = useState<string | null>(null)
 
   const { data: appointments = [], isLoading } = useQuery({
     queryKey: ['my-patient-appointments'],
@@ -282,6 +341,22 @@ function MyAppointmentsSection({ token }: { token: string | null }) {
                     <Video className="h-3.5 w-3.5" /> Video call
                   </Link>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setChatId(a.id)}
+                  className="flex items-center gap-1 text-xs font-semibold text-ink/60 hover:text-primary"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" /> Messages
+                </button>
+                {a.status !== 'cancelled' && (
+                  <button
+                    type="button"
+                    onClick={() => setPrescribeId(a.id)}
+                    className="flex items-center gap-1 text-xs font-semibold text-ink/60 hover:text-primary"
+                  >
+                    <Stethoscope className="h-3.5 w-3.5" /> Prescribe
+                  </button>
+                )}
                 {(a.status === 'scheduled' || a.status === 'rescheduled') && (
                   <button
                     type="button"
@@ -297,6 +372,64 @@ function MyAppointmentsSection({ token }: { token: string | null }) {
           ))}
         </div>
       )}
+
+      {chatId && token && user && (
+        <ChatThreadModal
+          kind="appointment"
+          id={chatId}
+          token={token}
+          currentUserId={user.id}
+          onClose={() => setChatId(null)}
+        />
+      )}
+      {prescribeId && token && (
+        <PrescriptionFormModal
+          kind="appointment"
+          id={prescribeId}
+          token={token}
+          onClose={() => setPrescribeId(null)}
+          onIssued={() => setPrescribeId(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+/** Prescriptions this doctor has issued, most recent first. */
+function IssuedPrescriptionsSection({ token }: { token: string | null }) {
+  const { data: prescriptions = [] } = useQuery({
+    queryKey: ['my-issued-prescriptions'],
+    queryFn: () => listMyIssuedPrescriptions(token!),
+    enabled: Boolean(token),
+  })
+
+  if (prescriptions.length === 0) return null
+
+  return (
+    <div className="mt-10">
+      <h2 className="flex items-center gap-2 text-lg font-bold text-ink">
+        <FileText className="h-5 w-5 text-primary-600" /> Prescriptions issued
+      </h2>
+      <div className="mt-4 space-y-3">
+        {prescriptions.map((p) => (
+          <div key={p.id} className="card-raised p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+                <User className="h-3.5 w-3.5 shrink-0" /> {p.patient_name ?? 'Patient'}
+              </p>
+              <p className="text-xs text-ink/40">{new Date(p.created_at).toLocaleDateString()}</p>
+            </div>
+            <ul className="mt-2 space-y-1.5">
+              {p.medications.map((med, i) => (
+                <li key={i} className="text-sm text-ink/80">
+                  <span className="font-semibold text-ink">{med.name}</span> — {med.dosage}, {med.frequency},{' '}
+                  {med.duration}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

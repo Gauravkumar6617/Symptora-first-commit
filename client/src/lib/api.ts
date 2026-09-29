@@ -958,6 +958,9 @@ export interface PredictionResult {
   disclaimer: string
   /** Id of the saved history entry. */
   check_id: string | null
+  /** Set when urgency is "high" — an instant consultation was auto-created
+   * and every available doctor notified; join its waiting room right away. */
+  escalated_consultation_id: string | null
 }
 
 /** backend schemas/prediction.SymptomCheckRead — one saved check. */
@@ -1128,6 +1131,8 @@ export interface TelemedicineStartPayload {
 }
 
 /** backend TelemedicineRead. */
+export type TelemedicineTrigger = 'auto_escalation' | 'manual_booking'
+
 export interface TelemedicineConsultation {
   id: string
   patient_id: string
@@ -1135,6 +1140,8 @@ export interface TelemedicineConsultation {
   doctor_profile_id: string | null
   reason: string
   status: TelemedicineStatus
+  trigger: TelemedicineTrigger
+  symptom_check_id: string | null
   patient_name: string | null
   doctor_name: string | null
   doctor_specialization: string | null
@@ -1182,6 +1189,87 @@ export function telemedicinePatientSocketUrl(consultationId: string, token: stri
  * "removed" pushes — staying connected is what makes them "available". */
 export function telemedicineDoctorSocketUrl(token: string): string {
   return `${wsBaseUrl()}${API_PREFIX}/ws/telemedicine/doctor?token=${encodeURIComponent(token)}`
+}
+
+// ----------------------------------------------------------------- messages
+
+export interface Message {
+  id: string
+  appointment_id: string | null
+  consultation_id: string | null
+  sender_id: string
+  sender_name: string | null
+  body: string
+  created_at: string
+  updated_at: string
+}
+
+export async function listMessages(
+  token: string,
+  kind: 'appointment' | 'telemedicine',
+  id: string,
+): Promise<Message[]> {
+  return request<Message[]>(`/messages/${kind}/${id}`, { token })
+}
+
+export async function sendMessage(
+  token: string,
+  kind: 'appointment' | 'telemedicine',
+  id: string,
+  body: string,
+): Promise<Message> {
+  return request<Message>(`/messages/${kind}/${id}`, { method: 'POST', body: { body }, token })
+}
+
+// ------------------------------------------------------------- prescriptions
+
+export interface Medication {
+  name: string
+  dosage: string
+  frequency: string
+  duration: string
+  instructions?: string | null
+}
+
+export interface PrescriptionPayload {
+  appointment_id?: string | null
+  consultation_id?: string | null
+  medications: Medication[]
+  notes?: string | null
+}
+
+/** backend: schemas/prescription.PrescriptionRead */
+export interface Prescription {
+  id: string
+  appointment_id: string | null
+  consultation_id: string | null
+  doctor_profile_id: string
+  patient_id: string
+  family_member_id: string | null
+  medications: Medication[]
+  notes: string | null
+  synced_to_medplum: boolean
+  doctor_name: string | null
+  doctor_specialization: string | null
+  patient_name: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** POST /prescriptions — the treating doctor issues an e-prescription;
+ * best-effort synced to Medplum as FHIR MedicationRequests. */
+export async function issuePrescription(token: string, payload: PrescriptionPayload): Promise<Prescription> {
+  return request<Prescription>('/prescriptions', { method: 'POST', body: payload, token })
+}
+
+/** GET /prescriptions/me */
+export async function listMyPrescriptions(token: string): Promise<Prescription[]> {
+  return request<Prescription[]>('/prescriptions/me', { token })
+}
+
+/** GET /prescriptions/doctor/me */
+export async function listMyIssuedPrescriptions(token: string): Promise<Prescription[]> {
+  return request<Prescription[]>('/prescriptions/doctor/me', { token })
 }
 
 /** GET /telemedicine/me — the caller's own instant consultations, pending through completed. */
