@@ -8,19 +8,8 @@ import {
   type DoctorApplication,
   getMyDoctorApplication,
 } from '@/lib/api'
-import { APP_NAME } from '@/lib/constants'
+import { APP_NAME, SPECIALTIES as specialties } from '@/lib/constants'
 import { useAuthStore } from '@/store/authStore'
-
-const specialties = [
-  'General Physician',
-  'Pediatrician',
-  'Dermatologist',
-  'Gynecologist',
-  'ENT Specialist',
-  'Psychiatrist',
-  'Dentist',
-  'Other',
-]
 
 const perks = [
   {
@@ -160,7 +149,7 @@ export function ApplyDoctorPage() {
 }
 
 function ApplicationStatusCard({ application }: { application: DoctorApplication }) {
-  if (application.status === 'APPROVED') {
+  if (application.status === 'approved') {
     return (
       <AuthSplitLayout title="You're a verified doctor" subtitle="Your application was approved">
         <div className="card-raised flex flex-col items-center p-8 text-center">
@@ -177,7 +166,7 @@ function ApplicationStatusCard({ application }: { application: DoctorApplication
     )
   }
 
-  if (application.status === 'REJECTED') {
+  if (application.status === 'rejected') {
     return (
       <AuthSplitLayout title="Application not approved" subtitle="Here's what happened">
         <div className="card-raised flex flex-col items-center p-8 text-center">

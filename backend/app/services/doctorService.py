@@ -1,10 +1,11 @@
 from sqlalchemy.orm import Session
 from app.repositories.doctorRepositories import DoctorRepository
 from app.repositories.userRepositories import UserRepository
-from app.schemas.doctor import DoctorProfileCreate
+from app.schemas.doctor import DoctorProfileCreate, DoctorSelfUpdate
 from app.models.doctorModel import DoctorProfile
 from app.models.enumModel import Status
 from app.utils.integration.medplum.index import MedplumIntegration
+from app.utils.integration.cloudflarR2.index import file_url
 from app.core.config import settings
 
 
@@ -40,6 +41,43 @@ class DoctorService:
 
     def get_my_application(self, user_id: str) -> DoctorProfile | None:
         return self.doctor_repo.get_by_user_id(user_id)
+
+    def update_my_profile(self, user_id: str, data: DoctorSelfUpdate) -> DoctorProfile:
+        """An approved doctor editing their own contact info, fee, daily
+        quota and weekly availability."""
+        doctor = self.doctor_repo.get_by_user_id(user_id)
+        if not doctor or doctor.status != Status.APPROVED:
+            raise ValueError("Approved doctor profile not found")
+
+        changes = {k: v for k, v in data.model_dump(exclude_unset=True).items()}
+        availability_slots = changes.pop("availability_slots", None)
+        for clearable in ("contact_person_name", "contact_email", "contact_phone", "languages"):
+            if changes.get(clearable) == "":
+                changes[clearable] = None
+        if changes:
+            doctor = self.doctor_repo.update(doctor, changes)
+        if availability_slots is not None:
+            doctor = self.doctor_repo.replace_availability(doctor, availability_slots)
+        return doctor
+
+    def get_public_profile(self, doctor_profile_id: str) -> dict:
+        """An approved doctor's public profile, with their weekly availability
+        — what a patient sees on the booking page."""
+        doctor = self.doctor_repo.get_by_id(doctor_profile_id)
+        if not doctor or doctor.status != Status.APPROVED:
+            raise ValueError("Doctor not found")
+
+        return {
+            "id": doctor.id,
+            "name": f"Dr. {doctor.user.first_name} {doctor.user.last_name}",
+            "specialization": doctor.specialization,
+            "fee": float(doctor.fee) if doctor.fee is not None else None,
+            "avatar_url": file_url(doctor.user.avatar) if doctor.user.avatar else None,
+            "years_of_practice": doctor.years_of_practice,
+            "languages": doctor.languages,
+            "availability_slots": doctor.effective_availability_slots,
+            "clinics": [link.clinic for link in doctor.clinic_links],
+        }
 
     def list_pending_applications(self, admin_user) -> list[DoctorProfile]:
         if not admin_user.is_admin:

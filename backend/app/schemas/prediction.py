@@ -59,6 +59,9 @@ class PredictResponse(BaseModel):
     urgency_reasons: List[str]  # why the urgency is what it is, for the UI
     disclaimer: str
     check_id: Optional[str] = None  # the saved history entry
+    # Set when urgency is "high" and an instant consultation was
+    # auto-created for it — the patient can join its waiting room right away.
+    escalated_consultation_id: Optional[str] = None
 
 
 class CheckPrediction(BaseModel):

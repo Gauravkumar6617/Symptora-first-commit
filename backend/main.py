@@ -11,7 +11,13 @@ from app.routers.clinicRouter import router as ClinicRouter
 from app.routers.adminRouter import router as AdminRouter
 from app.routers.familyMemberRouter import router as FamilyMemberRouter
 from app.routers.predictionRouter import router as PredictionRouter
+from app.routers.appointmentRouter import router as AppointmentRouter
+from app.routers.callRouter import router as CallRouter
+from app.routers.telemedicineRouter import router as TelemedicineRouter
+from app.routers.messageRouter import router as MessageRouter
+from app.routers.prescriptionRouter import router as PrescriptionRouter
 from app.routers.blogRouter import router as BlogRouter, admin_router as AdminBlogRouter
+from app.routers.serviceRouter import router as ServiceRouter
 from app.services.predictionService import get_prediction_service
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -61,8 +67,14 @@ app.include_router(ClinicRouter,prefix="/api/v1")
 app.include_router(AdminRouter,prefix="/api/v1")
 app.include_router(FamilyMemberRouter,prefix="/api/v1")
 app.include_router(PredictionRouter,prefix="/api/v1")
+app.include_router(AppointmentRouter,prefix="/api/v1")
+app.include_router(CallRouter,prefix="/api/v1")
+app.include_router(TelemedicineRouter,prefix="/api/v1")
+app.include_router(MessageRouter,prefix="/api/v1")
+app.include_router(PrescriptionRouter,prefix="/api/v1")
 app.include_router(BlogRouter,prefix="/api/v1")
 app.include_router(AdminBlogRouter,prefix="/api/v1")
+app.include_router(ServiceRouter,prefix="/api/v1")
 
 
 

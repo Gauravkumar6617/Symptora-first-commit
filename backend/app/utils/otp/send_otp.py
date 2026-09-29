@@ -98,6 +98,45 @@ def send_family_invite_email(to_email: str, otp: str, owner_name: str, member_na
     )
 
 
+def _appointment_confirmation_html(
+    patient_name: str, doctor_name: str, clinic_name: str, when: str, meet_link: str | None
+) -> str:
+    meet_html = (
+        f'<p><a href="{escape(meet_link)}" style="color:#1967d2">Join video consultation</a></p>'
+        if meet_link
+        else ""
+    )
+    return f"""<!doctype html>
+<html><body style=\"margin:0;background:#f4f7fb;font-family:Arial,sans-serif;color:#172033\">
+  <div style=\"max-width:560px;margin:32px auto;background:#ffffff;border-radius:12px;overflow:hidden\">
+    <div style=\"padding:24px 32px;background:#1967d2;color:#ffffff\"><h1 style=\"margin:0;font-size:24px\">Symptora</h1></div>
+    <div style=\"padding:32px\"><h2 style=\"margin-top:0\">Appointment confirmed</h2>
+      <p>Hi {escape(patient_name)}, your appointment is booked:</p>
+      <p style=\"margin:20px 0;padding:16px;background:#f4f7fb;border-radius:8px\">
+        <b>{escape(doctor_name)}</b><br>{escape(clinic_name)}<br>{escape(when)}
+      </p>
+      {meet_html}
+      <p style=\"color:#667085;font-size:13px\">You can view or cancel this appointment from your Symptora dashboard.</p>
+    </div>
+  </div>
+</body></html>"""
+
+
+def send_appointment_confirmation_email(
+    to_email: str, patient_name: str, doctor_name: str, clinic_name: str, when: str, meet_link: str | None = None
+) -> None:
+    text = f"Your appointment with {doctor_name} at {clinic_name} on {when} is confirmed."
+    if meet_link:
+        text += f" Join: {meet_link}"
+    _send(
+        to_email,
+        "Your Symptora appointment is confirmed",
+        text,
+        _appointment_confirmation_html(patient_name, doctor_name, clinic_name, when, meet_link),
+        settings.FROM_EMAIL,
+    )
+
+
 def _send(to_email: str, subject: str, text: str, html: str, sender: str, reply_to: str | None = None) -> None:
     if not settings.SMTP_USER or not settings.SMTP_PASSWORD or not sender:
         raise RuntimeError("SMTP credentials are not configured.")

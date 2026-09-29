@@ -415,12 +415,31 @@ export default function SymptomCheckerScreen() {
             );
           })}
 
-          <Button
-            label="Talk to a doctor"
-            icon="videocam"
-            variant="secondary"
-            onPress={() => router.push('/(patient)/telemedicine')}
-          />
+          {result.escalated_consultation_id ? (
+            <Card style={[styles.urgency, { borderColor: RiskTone.high.color }]}>
+              <Text style={[styles.caption, { color: RiskTone.high.color, fontWeight: '700' }]}>
+                High risk result — every available doctor has been notified. Join the call as soon as one
+                accepts.
+              </Text>
+              <Button
+                label="Join now"
+                icon="videocam"
+                onPress={() =>
+                  router.push({
+                    pathname: '/(patient)/telemedicine-waiting/[id]',
+                    params: { id: result.escalated_consultation_id! },
+                  })
+                }
+              />
+            </Card>
+          ) : (
+            <Button
+              label="Talk to a doctor"
+              icon="videocam"
+              variant="secondary"
+              onPress={() => router.push('/(patient)/telemedicine')}
+            />
+          )}
 
           <Card variant="muted" style={styles.note}>
             <Ionicons name="information-circle-outline" size={16} color={theme.primary} />

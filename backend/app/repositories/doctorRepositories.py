@@ -1,7 +1,9 @@
 from sqlalchemy.orm import Session
+from app.models.doctorAvailabilityModel import doctorAvailabilityModel
 from app.models.doctorModel import DoctorProfile
 from app.models.enumModel import Status
 from app.schemas.doctor import DoctorProfileCreate
+from app.schemas.doctor_availability import DoctorAvailabilityCreate
 
 
 class DoctorRepository:
@@ -45,3 +47,23 @@ class DoctorRepository:
         self.db.commit()
         self.db.refresh(doctor_profile)
         return doctor_profile
+
+    def update(self, doctor: DoctorProfile, changes: dict) -> DoctorProfile:
+        for field, value in changes.items():
+            setattr(doctor, field, value)
+        self.db.commit()
+        self.db.refresh(doctor)
+        return doctor
+
+    def replace_availability(
+        self, doctor: DoctorProfile, slots: list[DoctorAvailabilityCreate | dict]
+    ) -> DoctorProfile:
+        self.db.query(doctorAvailabilityModel).filter(
+            doctorAvailabilityModel.doctor_profile_id == doctor.id
+        ).delete()
+        for slot in slots:
+            days, slot_value = (slot["days"], slot["slot"]) if isinstance(slot, dict) else (slot.days, slot.slot)
+            self.db.add(doctorAvailabilityModel(doctor_profile_id=doctor.id, days=days, slot=slot_value))
+        self.db.commit()
+        self.db.refresh(doctor)
+        return doctor

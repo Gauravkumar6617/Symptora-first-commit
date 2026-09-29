@@ -5,16 +5,30 @@ import {
   MapPin,
   Phone,
   ShieldCheck,
-  Star,
+  Stethoscope,
   UserRound,
+  Video,
+  X,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
-import { clinics } from '@/data/clinics'
-import { type Doctor, doctors, timeSlots } from '@/data/doctors'
+import { useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  type Appointment,
+  ApiError,
+  bookAppointment,
+  bookAppointmentByService,
+  type ClinicDoctor,
+  type DoctorAvailability,
+  type PublicClinic,
+  type Service,
+  getDoctorPublicProfile,
+  listClinicDirectory,
+  listServices,
+} from '@/lib/api'
 import { APP_NAME } from '@/lib/constants'
+import { useAuthStore } from '@/store/authStore'
 import { relationLabel, useFamilyStore } from '@/store/familyStore'
-
-const specialties = Array.from(new Set(doctors.map((d) => d.specialty)))
 
 const visitPurposes = [
   'New consultation',
@@ -24,6 +38,47 @@ const visitPurposes = [
   'Prescription renewal',
   'Other',
 ]
+
+const WEEKDAY_NAMES = [
+  'sunday',
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+] as const
+
+interface OpenSlot {
+  date: string // YYYY-MM-DD
+  slot: 'am' | 'pm'
+  label: string
+}
+
+/** Availability is a recurring weekly day + AM/PM slot; turn that into the
+ * next few actual bookable calendar dates. */
+function upcomingSlots(
+  availability: { days: DoctorAvailability['days']; slot: DoctorAvailability['slot'] }[],
+  daysAhead = 21,
+): OpenSlot[] {
+  const slots: OpenSlot[] = []
+  const today = new Date()
+  for (let i = 0; i < daysAhead; i++) {
+    const date = new Date(today)
+    date.setDate(today.getDate() + i)
+    const weekday = WEEKDAY_NAMES[date.getDay()]
+    for (const slot of ['am', 'pm'] as const) {
+      if (availability.some((a) => a.days === weekday && a.slot === slot)) {
+        slots.push({
+          date: date.toISOString().slice(0, 10),
+          slot,
+          label: `${date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · ${slot.toUpperCase()}`,
+        })
+      }
+    }
+  }
+  return slots
+}
 
 function BookingSidePanel() {
   return (
@@ -58,9 +113,9 @@ function BookingSidePanel() {
           </p>
         </div>
         <div className="flex items-center gap-3 rounded-2xl bg-white/10 p-4">
-          <Star className="h-5 w-5 shrink-0 fill-warning text-warning" />
+          <Video className="h-5 w-5 shrink-0" />
           <p className="text-sm text-white/85">
-            4.8 average rating across 25k+ consultations.
+            Confirmed bookings come with a Google Meet link for video visits.
           </p>
         </div>
         <div className="flex items-center gap-3 rounded-2xl bg-white/10 p-4">
@@ -75,47 +130,183 @@ function BookingSidePanel() {
 }
 
 export function AppointmentsPage() {
-  const members = useFamilyStore((state) => state.members)
+  const { user, token } = useAuthStore()
+  const { members, loadMembers } = useFamilyStore()
+  const navigate = useNavigate()
+
+  // Booking needs an account; browsing doctors/services doesn't, so the page
+  // stays open and just nudges logged-out visitors to log in.
+  const [showLoginNotice, setShowLoginNotice] = useState(!token)
+
+  const {
+    data: clinicsList = [] as PublicClinic[],
+    isLoading: loadingClinics,
+    isError: clinicsFailed,
+  } = useQuery({ queryKey: ['clinics-directory'], queryFn: listClinicDirectory })
+  const loadError = clinicsFailed ? 'Could not load clinics right now. Please try again shortly.' : null
+
+  const { data: services = [] as Service[] } = useQuery({ queryKey: ['public-services'], queryFn: listServices })
+  const [selectedService, setSelectedService] = useState<Service | null>(null)
+
+  /** 'doctor': pick a specific doctor. 'service': pick a clinic + service and
+   * let the backend assign any doctor there who's free. */
+  const [mode, setMode] = useState<'doctor' | 'service'>('doctor')
+
   const [specialty, setSpecialty] = useState<string>('All')
   const [clinicId, setClinicId] = useState<string>('All')
-  const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null)
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
-  const [selectedFor, setSelectedFor] = useState<string>('self')
-  const [visitPurpose, setVisitPurpose] = useState(visitPurposes[0])
-  const [phone, setPhone] = useState('')
-  const [notes, setNotes] = useState('')
-  const [confirmed, setConfirmed] = useState(false)
+  const [selectedDoctor, setSelectedDoctor] = useState<
+    (ClinicDoctor & { clinicId: string; clinicName: string }) | null
+  >(null)
+  const { data: availability = [] as DoctorAvailability[], isFetching: loadingAvailability } = useQuery({
+    queryKey: ['doctor-availability', selectedDoctor?.id],
+    queryFn: () => getDoctorPublicProfile(selectedDoctor!.id).then((profile) => profile.availability_slots),
+    enabled: Boolean(selectedDoctor),
+  })
+  const [selectedSlot, setSelectedSlot] = useState<OpenSlot | null>(null)
 
+  const [selectedFor, setSelectedFor] = useState<string>('self')
+  const [reason, setReason] = useState('')
+  const [phone, setPhone] = useState(user?.phone ?? '')
+  const [notes, setNotes] = useState('')
+
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [confirmed, setConfirmed] = useState<Appointment | null>(null)
+  const [confirming, setConfirming] = useState(false)
+
+  // Bottom sheet shown right after picking a doctor or service, with its
+  // photo (doctor only) and full details.
+  const [detailSheet, setDetailSheet] = useState<
+    | { type: 'doctor'; data: ClinicDoctor & { clinicId: string; clinicName: string } }
+    | { type: 'service'; data: Service }
+    | null
+  >(null)
+
+  useEffect(() => {
+    loadMembers().catch(() => {})
+  }, [loadMembers])
+
+  const doctorRows = useMemo(
+    () =>
+      clinicsList.flatMap((clinic) =>
+        clinic.doctors.map((doctor) => ({ ...doctor, clinicId: clinic.id, clinicName: clinic.name })),
+      ),
+    [clinicsList],
+  )
+  const specialties = useMemo(
+    () => Array.from(new Set(doctorRows.map((d) => d.specialization))),
+    [doctorRows],
+  )
   const filteredDoctors = useMemo(
     () =>
-      doctors.filter(
+      doctorRows.filter(
         (doctor) =>
-          (specialty === 'All' || doctor.specialty === specialty) &&
+          (specialty === 'All' || doctor.specialization === specialty) &&
           (clinicId === 'All' || doctor.clinicId === clinicId),
       ),
-    [specialty, clinicId],
+    [doctorRows, specialty, clinicId],
   )
+  const serviceModeClinic = useMemo(
+    () => clinicsList.find((c) => c.id === clinicId) ?? null,
+    [clinicsList, clinicId],
+  )
+  const openSlots = useMemo(
+    () => (mode === 'service' ? upcomingSlots(serviceModeClinic?.availability_slots ?? []) : upcomingSlots(availability)),
+    [mode, availability, serviceModeClinic],
+  )
+  const displayFee = mode === 'doctor' ? (selectedDoctor?.fee ?? null) : (selectedService?.fee ?? null)
 
-  function handleConfirm() {
-    if (!selectedDoctor || !selectedSlot) return
-    setConfirmed(true)
+  function pickService(service: Service | null) {
+    setSelectedService(service)
+    setSelectedDoctor(null)
+    if (service) {
+      setSpecialty(service.specialization)
+      setReason((current) => current || service.name)
+    } else {
+      setSpecialty('All')
+    }
+  }
+
+  function pickDoctor(doctor: ClinicDoctor & { clinicId: string; clinicName: string }) {
+    setSelectedDoctor(doctor)
+    setSelectedSlot(null)
+  }
+
+  function canBook() {
+    if (!selectedSlot || reason.trim().length < 3) return false
+    if (mode === 'doctor') return Boolean(selectedDoctor)
+    return Boolean(selectedService && serviceModeClinic)
+  }
+
+  /** "Confirm appointment" opens the review dialog; the actual booking only
+   * happens once the patient confirms there too. */
+  function handleConfirmClick() {
+    if (!token) {
+      setShowLoginNotice(true)
+      return
+    }
+    if (!canBook()) return
+    setConfirming(true)
+  }
+
+  async function submitBooking() {
+    if (!token || !canBook()) return
+    setSubmitting(true)
+    setSubmitError(null)
+    try {
+      const bookedMember = selectedFor !== 'self' ? members.find((m) => m.id === selectedFor) : null
+      const shared = {
+        family_member_id: bookedMember?.id ?? null,
+        patient_name: bookedMember?.name ?? user?.name ?? '',
+        patient_email: bookedMember?.email ?? user?.email ?? '',
+        patient_phone: phone || user?.phone || '',
+        reason: reason.trim(),
+        notes: notes || undefined,
+        appointment_date: selectedSlot!.date,
+        slot: selectedSlot!.slot,
+      }
+      const appointment =
+        mode === 'doctor'
+          ? await bookAppointment(token, {
+              doctor_profile_id: selectedDoctor!.id,
+              clinic_id: selectedDoctor!.clinicId,
+              ...shared,
+            })
+          : await bookAppointmentByService(token, {
+              clinic_id: serviceModeClinic!.id,
+              service_id: selectedService!.id,
+              ...shared,
+            })
+      setConfirming(false)
+      setConfirmed(appointment)
+    } catch (err) {
+      setConfirming(false)
+      setSubmitError(err instanceof ApiError ? err.message : 'Could not book the appointment.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   function resetBooking() {
     setSelectedDoctor(null)
     setSelectedSlot(null)
-    setVisitPurpose(visitPurposes[0])
-    setPhone('')
+    setSelectedService(null)
+    setSpecialty('All')
+    setReason('')
     setNotes('')
-    setConfirmed(false)
+    setSubmitError(null)
+    setConfirming(false)
+    setConfirmed(null)
   }
 
-  if (confirmed && selectedDoctor && selectedSlot) {
+  if (confirmed) {
     const bookedFor =
-      selectedFor === 'self'
-        ? 'you'
-        : members.find((m) => m.id === selectedFor)?.name ?? 'you'
-    const clinic = clinics.find((c) => c.id === selectedDoctor.clinicId)
+      selectedFor === 'self' ? 'you' : (members.find((m) => m.id === selectedFor)?.name ?? 'you')
+    const when = new Date(confirmed.appointment_date).toLocaleDateString(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    })
 
     return (
       <div className="flex min-h-[calc(100vh-72px)] flex-col lg:flex-row">
@@ -129,16 +320,16 @@ export function AppointmentsPage() {
               Appointment confirmed
             </h1>
             <p className="mt-2 text-sm text-ink/60">
-              {selectedDoctor.name} · {selectedDoctor.specialty} for{' '}
-              {bookedFor}
+              {confirmed.doctor_name ?? 'A doctor'}
+              {confirmed.doctor_specialization ? ` · ${confirmed.doctor_specialization}` : ''} for {bookedFor}
             </p>
             <p className="mt-1 text-sm text-ink/60">
-              {selectedSlot} · {clinic?.name}
+              {when} · {confirmed.slot.toUpperCase()} · {confirmed.clinic_name}
             </p>
             <div className="mt-4 space-y-1.5 rounded-xl border border-ink/10 bg-surface/60 p-4 text-left text-sm text-ink/70">
               <p>
                 <span className="font-semibold text-ink">Purpose:</span>{' '}
-                {visitPurpose}
+                {confirmed.reason}
               </p>
               {phone && (
                 <p>
@@ -153,10 +344,24 @@ export function AppointmentsPage() {
                 </p>
               )}
             </div>
+            {confirmed.meet_link ? (
+              <a
+                href={confirmed.meet_link}
+                target="_blank"
+                rel="noreferrer"
+                className="btn-raised mt-6 inline-flex items-center gap-2"
+              >
+                <Video className="h-4 w-4" /> Join Google Meet
+              </a>
+            ) : (
+              <p className="mt-4 text-xs text-ink/40">
+                A video link will be shared before your visit.
+              </p>
+            )}
             <button
               type="button"
               onClick={resetBooking}
-              className="btn-raised mt-6"
+              className="mt-3 block w-full rounded-xl border border-ink/15 px-5 py-3 text-sm font-semibold text-ink hover:bg-ink/5"
             >
               Book another appointment
             </button>
@@ -176,27 +381,102 @@ export function AppointmentsPage() {
           Pick a specialty, choose a doctor, and lock in a time slot.
         </p>
 
+        <div className="mt-4 inline-flex rounded-lg border border-ink/15 bg-white p-1 text-sm">
+          <button
+            type="button"
+            onClick={() => {
+              setMode('doctor')
+              setSelectedSlot(null)
+            }}
+            className={`rounded-md px-3 py-1.5 font-medium ${
+              mode === 'doctor' ? 'bg-primary text-white' : 'text-ink/60 hover:text-ink'
+            }`}
+          >
+            Choose a doctor
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMode('service')
+              setSelectedDoctor(null)
+              setSelectedSlot(null)
+            }}
+            className={`rounded-md px-3 py-1.5 font-medium ${
+              mode === 'service' ? 'bg-primary text-white' : 'text-ink/60 hover:text-ink'
+            }`}
+          >
+            Any doctor for a service
+          </button>
+        </div>
+
+        {loadError && (
+          <p className="mt-6 rounded-xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">
+            {loadError}
+          </p>
+        )}
+
         <div className="mt-8 grid gap-6 xl:grid-cols-3">
           <div className="xl:col-span-2">
-            <div className="flex flex-wrap gap-2">
-              {['All', ...specialties].map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => {
-                    setSpecialty(item)
-                    setSelectedDoctor(null)
-                  }}
-                  className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                    specialty === item
-                      ? 'bg-primary text-white shadow-[0_6px_14px_-6px_rgba(37,99,235,0.6)]'
-                      : 'border border-ink/15 bg-white text-ink/70 hover:border-primary/40'
-                  }`}
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
+            {services.length > 0 && (
+              <div className="mb-4">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/40">
+                  What do you need?
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => pickService(null)}
+                    className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                      selectedService === null
+                        ? 'bg-primary text-white shadow-[0_6px_14px_-6px_rgba(37,99,235,0.6)]'
+                        : 'border border-ink/15 bg-white text-ink/70 hover:border-primary/40'
+                    }`}
+                  >
+                    Any service
+                  </button>
+                  {services.map((svc) => (
+                    <button
+                      key={svc.id}
+                      type="button"
+                      title={svc.description ?? undefined}
+                      onClick={() => {
+                        pickService(svc)
+                        setDetailSheet({ type: 'service', data: svc })
+                      }}
+                      className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                        selectedService?.id === svc.id
+                          ? 'bg-primary text-white shadow-[0_6px_14px_-6px_rgba(37,99,235,0.6)]'
+                          : 'border border-ink/15 bg-white text-ink/70 hover:border-primary/40'
+                      }`}
+                    >
+                      {svc.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {mode === 'doctor' && (
+              <div className="flex flex-wrap gap-2">
+                {['All', ...specialties].map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => {
+                      setSpecialty(item)
+                      setSelectedService(null)
+                      setSelectedDoctor(null)
+                    }}
+                    className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                      specialty === item
+                        ? 'bg-primary text-white shadow-[0_6px_14px_-6px_rgba(37,99,235,0.6)]'
+                        : 'border border-ink/15 bg-white text-ink/70 hover:border-primary/40'
+                    }`}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="mt-3 flex items-center gap-2">
               <MapPin className="h-4 w-4 shrink-0 text-ink/40" />
@@ -205,11 +485,12 @@ export function AppointmentsPage() {
                 onChange={(e) => {
                   setClinicId(e.target.value)
                   setSelectedDoctor(null)
+                  setSelectedSlot(null)
                 }}
                 className="w-full max-w-xs rounded-lg border border-ink/15 bg-white px-3 py-2 text-sm outline-none focus:border-primary"
               >
-                <option value="All">Any clinic</option>
-                {clinics.map((clinic) => (
+                <option value="All">{mode === 'service' ? 'Pick a clinic' : 'Any clinic'}</option>
+                {clinicsList.map((clinic) => (
                   <option key={clinic.id} value={clinic.id}>
                     {clinic.name}
                   </option>
@@ -217,61 +498,82 @@ export function AppointmentsPage() {
               </select>
             </div>
 
+            {mode === 'service' ? (
+              <div className="mt-6">
+                {!serviceModeClinic || !selectedService ? (
+                  <p className="text-sm text-ink/50">
+                    Pick a clinic above and a service below to see open slots — we'll assign any
+                    doctor there who offers it and is free.
+                  </p>
+                ) : (
+                  <div className="card-raised flex items-center gap-3 p-4">
+                    <span className="icon-badge h-11 w-11">
+                      <UserRound className="h-5 w-5 text-primary-600" />
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-ink">
+                        {selectedService.name} · {serviceModeClinic.name}
+                      </p>
+                      <p className="text-xs text-ink/50">Any available doctor will be assigned</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              {filteredDoctors.length === 0 && (
+              {loadingClinics && (
+                <p className="text-sm text-ink/50 sm:col-span-2">Loading doctors…</p>
+              )}
+              {!loadingClinics && filteredDoctors.length === 0 && (
                 <p className="text-sm text-ink/50 sm:col-span-2">
                   No doctors match that specialty and clinic combination —
                   try "Any clinic".
                 </p>
               )}
               {filteredDoctors.map((doctor) => {
-                const clinic = clinics.find((c) => c.id === doctor.clinicId)
                 const isSelected = selectedDoctor?.id === doctor.id
                 return (
                   <button
-                    key={doctor.id}
+                    key={`${doctor.clinicId}-${doctor.id}`}
                     type="button"
                     onClick={() => {
-                      setSelectedDoctor(doctor)
-                      setSelectedSlot(null)
+                      pickDoctor(doctor)
+                      setDetailSheet({ type: 'doctor', data: doctor })
                     }}
                     className={`card-raised flex flex-col gap-2 p-4 text-left ${
                       isSelected ? 'ring-2 ring-primary' : ''
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <span className="icon-badge h-11 w-11">
-                        <UserRound className="h-5 w-5 text-primary-600" />
-                      </span>
+                      {doctor.avatar_url ? (
+                        <img
+                          src={doctor.avatar_url}
+                          alt={doctor.name}
+                          className="h-11 w-11 shrink-0 rounded-full object-cover"
+                        />
+                      ) : (
+                        <span className="icon-badge h-11 w-11">
+                          <UserRound className="h-5 w-5 text-primary-600" />
+                        </span>
+                      )}
                       <div>
                         <p className="text-sm font-semibold text-ink">
                           {doctor.name}
                         </p>
                         <p className="text-xs text-ink/50">
-                          {doctor.specialty} · {doctor.experienceYears} yrs
+                          {doctor.specialization}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center justify-between text-xs text-ink/60">
-                      <span className="flex items-center gap-1">
-                        <Star className="h-3.5 w-3.5 fill-warning text-warning" />
-                        {doctor.rating} ({doctor.consults})
-                      </span>
-                      <span>₹{doctor.fee}</span>
-                    </div>
                     <p className="flex items-center gap-1 text-xs text-ink/50">
                       <MapPin className="h-3 w-3 shrink-0" />
-                      {clinic?.name}
+                      {doctor.clinicName}
                     </p>
-                    {doctor.availableToday && (
-                      <span className="w-fit rounded-full bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">
-                        Available today
-                      </span>
-                    )}
                   </button>
                 )
               })}
             </div>
+            )}
           </div>
 
           <div className="card-raised h-fit space-y-5 p-5">
@@ -293,19 +595,28 @@ export function AppointmentsPage() {
 
             <div>
               <h3 className="text-sm font-semibold text-ink">
-                Purpose of visit
+                Reason for visit <span className="font-normal text-danger">*</span>
               </h3>
-              <select
-                value={visitPurpose}
-                onChange={(e) => setVisitPurpose(e.target.value)}
+              <input
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="e.g. Recurring headaches for the past week"
+                maxLength={255}
+                required
                 className="mt-2 w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-primary"
-              >
+              />
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {visitPurposes.map((purpose) => (
-                  <option key={purpose} value={purpose}>
+                  <button
+                    key={purpose}
+                    type="button"
+                    onClick={() => setReason(purpose)}
+                    className="rounded-full border border-ink/15 px-2.5 py-0.5 text-xs text-ink/60 hover:border-primary/40 hover:text-primary"
+                  >
                     {purpose}
-                  </option>
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
 
             <div>
@@ -340,39 +651,227 @@ export function AppointmentsPage() {
 
             <div>
               <h3 className="text-sm font-semibold text-ink">
-                {selectedDoctor
-                  ? `Available slots · ${selectedDoctor.name}`
-                  : 'Select a doctor to see slots'}
+                {mode === 'doctor'
+                  ? selectedDoctor
+                    ? `Available slots · ${selectedDoctor.name}`
+                    : 'Select a doctor to see slots'
+                  : serviceModeClinic && selectedService
+                    ? `Available slots · ${serviceModeClinic.name}`
+                    : 'Pick a clinic and service to see slots'}
               </h3>
               <div className="mt-2 grid grid-cols-2 gap-2">
-                {(selectedDoctor ? timeSlots : []).map((slot) => (
-                  <button
-                    key={slot}
-                    type="button"
-                    onClick={() => setSelectedSlot(slot)}
-                    className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-                      selectedSlot === slot
-                        ? 'bg-primary text-white'
-                        : 'pill-well text-ink/70 hover:text-primary'
-                    }`}
-                  >
-                    {slot}
-                  </button>
-                ))}
+                {mode === 'doctor' && loadingAvailability && (
+                  <p className="col-span-2 text-xs text-ink/40">Checking availability…</p>
+                )}
+                {mode === 'doctor' && !loadingAvailability && selectedDoctor && openSlots.length === 0 && (
+                  <p className="col-span-2 text-xs text-ink/40">
+                    No open slots in the next 3 weeks.
+                  </p>
+                )}
+                {mode === 'service' && serviceModeClinic && selectedService && openSlots.length === 0 && (
+                  <p className="col-span-2 text-xs text-ink/40">
+                    No open slots in the next 3 weeks.
+                  </p>
+                )}
+                {!loadingAvailability &&
+                  openSlots.map((slot) => (
+                    <button
+                      key={`${slot.date}-${slot.slot}`}
+                      type="button"
+                      onClick={() => setSelectedSlot(slot)}
+                      className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+                        selectedSlot?.date === slot.date && selectedSlot?.slot === slot.slot
+                          ? 'bg-primary text-white'
+                          : 'pill-well text-ink/70 hover:text-primary'
+                      }`}
+                    >
+                      {slot.label}
+                    </button>
+                  ))}
               </div>
             </div>
 
+            {displayFee != null && (
+              <p className="rounded-lg bg-primary/5 px-3 py-2 text-sm font-semibold text-primary">
+                Consultation fee: {displayFee}
+              </p>
+            )}
+
+            {submitError && (
+              <p className="text-sm text-danger">{submitError}</p>
+            )}
+
             <button
               type="button"
-              disabled={!selectedDoctor || !selectedSlot}
-              onClick={handleConfirm}
+              disabled={!canBook() || submitting}
+              onClick={handleConfirmClick}
               className="btn-raised w-full disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Confirm appointment
+              {submitting ? 'Booking…' : 'Confirm appointment'}
             </button>
           </div>
         </div>
       </div>
+
+      {detailSheet && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:px-4"
+          onClick={() => setDetailSheet(null)}
+        >
+          <div
+            className="card-raised w-full max-w-sm rounded-b-none p-6 sm:rounded-b-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                {detailSheet.type === 'doctor' && detailSheet.data.avatar_url ? (
+                  <img
+                    src={detailSheet.data.avatar_url}
+                    alt={detailSheet.data.name}
+                    className="h-14 w-14 shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="icon-badge h-14 w-14 shrink-0">
+                    {detailSheet.type === 'doctor' ? (
+                      <UserRound className="h-6 w-6 text-primary-600" />
+                    ) : (
+                      <Stethoscope className="h-6 w-6 text-primary-600" />
+                    )}
+                  </span>
+                )}
+                <div>
+                  <h2 className="text-lg font-bold text-ink">{detailSheet.data.name}</h2>
+                  <p className="text-sm text-ink/50">{detailSheet.data.specialization}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailSheet(null)}
+                className="shrink-0 text-ink/40 hover:text-ink"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-1.5 rounded-xl border border-ink/10 bg-surface/60 p-4 text-sm text-ink/70">
+              {detailSheet.type === 'doctor' ? (
+                <>
+                  <p className="flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 shrink-0" /> {detailSheet.data.clinicName}
+                  </p>
+                  {detailSheet.data.years_of_practice != null && (
+                    <p>
+                      <span className="font-semibold text-ink">Experience:</span>{' '}
+                      {detailSheet.data.years_of_practice}{' '}
+                      {detailSheet.data.years_of_practice === 1 ? 'year' : 'years'}
+                    </p>
+                  )}
+                  {detailSheet.data.languages && (
+                    <p>
+                      <span className="font-semibold text-ink">Languages:</span> {detailSheet.data.languages}
+                    </p>
+                  )}
+                </>
+              ) : (
+                detailSheet.data.description && <p>{detailSheet.data.description}</p>
+              )}
+              {detailSheet.data.fee != null && (
+                <p>
+                  <span className="font-semibold text-ink">Consultation fee:</span> {detailSheet.data.fee}
+                </p>
+              )}
+            </div>
+
+            <button type="button" onClick={() => setDetailSheet(null)} className="btn-raised mt-5 w-full">
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
+
+      {confirming && selectedSlot && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="card-raised w-full max-w-sm p-6">
+            <h2 className="text-lg font-bold text-ink">Confirm your appointment</h2>
+            <div className="mt-4 space-y-1.5 rounded-xl border border-ink/10 bg-surface/60 p-4 text-sm text-ink/70">
+              <p>
+                <span className="font-semibold text-ink">
+                  {mode === 'doctor'
+                    ? `${selectedDoctor!.name} · ${selectedDoctor!.clinicName}`
+                    : `${serviceModeClinic!.name} · any available doctor`}
+                </span>
+              </p>
+              <p>{selectedSlot.label}</p>
+              <p>
+                <span className="font-semibold text-ink">Reason:</span> {reason}
+              </p>
+              {displayFee != null && (
+                <p>
+                  <span className="font-semibold text-ink">Fee:</span> {displayFee}
+                </p>
+              )}
+            </div>
+            {submitError && <p className="mt-3 text-sm text-danger">{submitError}</p>}
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={submitBooking}
+                disabled={submitting}
+                className="btn-raised flex-1 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {submitting ? 'Booking…' : 'Confirm booking'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                disabled={submitting}
+                className="rounded-xl border border-ink/15 px-4 py-3 text-sm font-semibold text-ink hover:bg-ink/5"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLoginNotice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="card-raised w-full max-w-sm p-6 text-center">
+            <span className="icon-badge mx-auto h-12 w-12">
+              <ShieldCheck className="h-6 w-6 text-primary-600" />
+            </span>
+            <h2 className="mt-4 text-lg font-bold text-ink">Please log in to book</h2>
+            <p className="mt-2 text-sm text-ink/60">
+              An account is required to book an appointment. You can still browse doctors and
+              services below, or log in now to continue.
+            </p>
+            <div className="mt-5 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/login', { state: { from: '/appointments' } })}
+                className="btn-raised w-full"
+              >
+                Log in
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/signup', { state: { from: '/appointments' } })}
+                className="rounded-xl border border-ink/15 px-4 py-3 text-sm font-semibold text-ink hover:bg-ink/5"
+              >
+                Create an account
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowLoginNotice(false)}
+                className="mt-1 text-xs font-medium text-ink/50 hover:text-ink"
+              >
+                Continue browsing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

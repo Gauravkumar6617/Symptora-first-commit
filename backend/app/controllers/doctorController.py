@@ -1,6 +1,6 @@
 from fastapi import HTTPException, status
 from app.services.doctorService import DoctorService
-from app.schemas.doctor import DoctorProfileCreate
+from app.schemas.doctor import DoctorProfileCreate, DoctorSelfUpdate
 from app.models.userModel import UserModel
 
 
@@ -35,6 +35,20 @@ class DoctorController:
     @staticmethod
     def get_my_application(current_user: UserModel, service: DoctorService):
         return service.get_my_application(str(current_user.id))
+
+    @staticmethod
+    def update_my_profile(data: DoctorSelfUpdate, current_user: UserModel, service: DoctorService):
+        try:
+            return service.update_my_profile(str(current_user.id), data)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    @staticmethod
+    def get_public_profile(doctor_id: str, service: DoctorService):
+        try:
+            return service.get_public_profile(doctor_id)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
     @staticmethod
     def list_pending_applications(current_admin: UserModel, service: DoctorService):

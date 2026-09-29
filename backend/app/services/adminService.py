@@ -9,11 +9,14 @@ from app.models.enumModel import Status
 from app.repositories.clinicRepositories import ClinicRepository
 from app.repositories.doctorClinicRepository import DoctorClinicRepository
 from app.repositories.doctorRepositories import DoctorRepository
+from app.repositories.serviceRepository import ServiceRepository
 from app.repositories.userRepositories import UserRepository
 from app.models.clinicModel import CliniModel
 from app.models.doctorModel import DoctorProfile
+from app.models.serviceModel import ServiceModel
 from app.schemas.clinic import AdminClinicRead, ClinicBase, ClinicCreate, ClinicRead, ClinicUpdate
-from app.schemas.doctor import AdminDoctorRead
+from app.schemas.doctor import AdminDoctorRead, DoctorProfileUpdate
+from app.schemas.service import ServiceCreate, ServiceUpdate
 from app.utils.integration.cloudflarR2.index import delete_key, file_url, upload_image
 from app.utils.integration.medplum.index import MedplumIntegration
 
@@ -21,6 +24,14 @@ logger = logging.getLogger(__name__)
 
 
 class ClinicNotFoundError(Exception):
+    pass
+
+
+class DoctorNotFoundError(Exception):
+    pass
+
+
+class ServiceNotFoundError(Exception):
     pass
 
 
@@ -35,8 +46,16 @@ def clinic_doctors(clinic: CliniModel) -> list[dict]:
             "id": profile.id,
             "name": f"Dr. {profile.user.first_name} {profile.user.last_name}".strip(),
             "specialization": profile.specialization,
+            "fee": float(profile.fee) if profile.fee is not None else None,
+            "avatar_url": file_url(profile.user.avatar) if profile.user.avatar else None,
+            "years_of_practice": profile.years_of_practice,
+            "languages": profile.languages,
+            "_display_order": profile.display_order or 0,
         })
-    return sorted(doctors, key=lambda d: d["name"])
+    doctors.sort(key=lambda d: (d["_display_order"], d["name"]))
+    for d in doctors:
+        del d["_display_order"]
+    return doctors
 
 
 class AdminService:
@@ -50,6 +69,7 @@ class AdminService:
         self.doctor_repo = DoctorRepository(db)
         self.clinic_repo = ClinicRepository(db)
         self.doctor_clinic_repo = DoctorClinicRepository(db)
+        self.service_repo = ServiceRepository(db)
         self.medplum = MedplumIntegration(
             base_url=settings.MEDPLUM_BASE_URL,
             client_id=settings.MEDPLUM_CLIENT_ID,
@@ -86,6 +106,15 @@ class AdminService:
                     medplum_practitioner_id=doctor.medplum_practitioner_id,
                     clinic_id=doctor.clinic_id,
                     status=doctor.status,
+                    contact_person_name=doctor.contact_person_name,
+                    contact_email=doctor.contact_email,
+                    contact_phone=doctor.contact_phone,
+                    max_appointments_per_day=doctor.max_appointments_per_day,
+                    fee=float(doctor.fee) if doctor.fee is not None else None,
+                    years_of_practice=doctor.years_of_practice,
+                    languages=doctor.languages,
+                    display_order=doctor.display_order,
+                    availability_slots=doctor.availability_slots,
                     first_name=user.first_name if user else "",
                     last_name=user.last_name if user else "",
                     email=user.email if user else "",
@@ -93,6 +122,21 @@ class AdminService:
                 )
             )
         return out
+
+    def update_doctor(self, doctor_id: str, data: DoctorProfileUpdate) -> DoctorProfile:
+        doctor = self._get_doctor(doctor_id)
+        changes = {k: v for k, v in data.model_dump(exclude_unset=True).items()}
+        if not changes:
+            return doctor
+        availability_slots = changes.pop("availability_slots", None)
+        for clearable in ("contact_person_name", "contact_email", "contact_phone", "medplum_practitioner_id", "languages"):
+            if changes.get(clearable) == "":
+                changes[clearable] = None
+        if changes:
+            doctor = self.doctor_repo.update(doctor, changes)
+        if availability_slots is not None:
+            doctor = self.doctor_repo.replace_availability(doctor, availability_slots)
+        return doctor
 
     def list_clinics(self) -> list[AdminClinicRead]:
         return [
@@ -123,7 +167,11 @@ class AdminService:
         changes = {k: v for k, v in data.model_dump(exclude_unset=True).items()}
         if not changes:
             return clinic
-        for clearable in ("description", "address", "phone"):
+        availability_slots = changes.pop("availability_slots", None)
+        for clearable in (
+            "description", "address", "phone", "opening_hours",
+            "contact_person_name", "contact_email", "contact_phone",
+        ):
             if changes.get(clearable) == "":
                 changes[clearable] = None
         if "name" in changes:
@@ -132,10 +180,14 @@ class AdminService:
                 raise ValueError("A clinic with this name already exists.")
         old_picture = clinic.picture
 
-        # Medplum first, like create: if it refuses, nothing changes locally.
-        merged = ClinicBase.model_validate({**ClinicRead.model_validate(clinic).model_dump(), **changes})
-        self.medplum.update_organisation(clinic.medplum_organisation_id, merged)
-        clinic = self.clinic_repo.update(clinic, changes)
+        if changes:
+            # Medplum first, like create: if it refuses, nothing changes locally.
+            merged = ClinicBase.model_validate({**ClinicRead.model_validate(clinic).model_dump(), **changes})
+            self.medplum.update_organisation(clinic.medplum_organisation_id, merged)
+            clinic = self.clinic_repo.update(clinic, changes)
+
+        if availability_slots is not None:
+            clinic = self.clinic_repo.replace_availability(clinic, availability_slots)
 
         if "picture" in changes and old_picture != clinic.picture:
             self._delete_picture(old_picture)
@@ -161,6 +213,50 @@ class AdminService:
         except Exception:
             logger.exception("Organization %s not deleted in Medplum", organisation_id)
         self._delete_picture(picture)
+
+    def list_services(self) -> list[ServiceModel]:
+        return self.service_repo.list_all()
+
+    def create_service(self, data: ServiceCreate) -> ServiceModel:
+        if self.service_repo.get_by_name(data.name):
+            raise ValueError("A service with this name already exists.")
+        return self.service_repo.create(data)
+
+    def update_service(self, service_id: str, data: ServiceUpdate) -> ServiceModel:
+        service = self._get_service(service_id)
+        changes = {k: v for k, v in data.model_dump(exclude_unset=True).items()}
+        if not changes:
+            return service
+        if changes.get("description") == "":
+            changes["description"] = None
+        if "name" in changes:
+            clash = self.service_repo.get_by_name(changes["name"])
+            if clash and clash.id != service.id:
+                raise ValueError("A service with this name already exists.")
+        return self.service_repo.update(service, changes)
+
+    def delete_service(self, service_id: str) -> None:
+        self.service_repo.delete(self._get_service(service_id))
+
+    def _get_service(self, service_id: str) -> ServiceModel:
+        try:
+            UUID(service_id)
+        except ValueError:
+            raise ServiceNotFoundError()
+        service = self.service_repo.get_by_id(service_id)
+        if service is None:
+            raise ServiceNotFoundError()
+        return service
+
+    def _get_doctor(self, doctor_id: str) -> DoctorProfile:
+        try:
+            UUID(doctor_id)
+        except ValueError:
+            raise DoctorNotFoundError()
+        doctor = self.doctor_repo.get_by_id(doctor_id)
+        if doctor is None:
+            raise DoctorNotFoundError()
+        return doctor
 
     def _get(self, clinic_id: str) -> CliniModel:
         try:

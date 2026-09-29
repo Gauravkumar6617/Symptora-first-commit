@@ -33,7 +33,7 @@ class GoogleCalenderIntegration:
             "client_secret": self.client_secret,
             "refresh_token": self.refresh_token,
             "grant_type": "refresh_token",
-        }    
+        }
 
         response = httpx.post(url,data=data)
         if response.status_code==200:
@@ -48,19 +48,21 @@ class GoogleCalenderIntegration:
 
 
     def create_event(self,event_data:dict):
-        acces_token=self.access_token
+        # a fresh access_token per call, calendar api tokens expire ~1hr
+        access_token=self.get_access_token()
         url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
-        header={
-            "Authorisation":f"Bearer {acces_token}",
+        headers={
+            "Authorization":f"Bearer {access_token}",
             "Content-Type": "application/json",
         }
-
-        params={"conferenceDataVersion",1}
-        response = httpx.post(json=event_data,acces_token=acces_token,params=params)
+        # conferenceDataVersion=1 tells Google to actually create the Meet
+        # link from event_data["conferenceData"], not just store the request.
+        params={"conferenceDataVersion":1,"sendUpdates":"all"}
+        response = httpx.post(url,json=event_data,headers=headers,params=params,timeout=15)
         if response.status_code in (200, 201):
             return response.json()
         else:
             raise HTTPException(
                 status_code=response.status_code,
-                detail="Failed to create calendar event.",
+                detail=f"Failed to create calendar event: {response.text}",
             )

@@ -158,7 +158,7 @@ export interface TokenResponse {
 
 // -------------------------------------------------------------- doctors
 
-export type DoctorApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+export type DoctorApplicationStatus = 'pending' | 'approved' | 'rejected'
 
 /** backend DoctorProfileCreate. */
 export interface DoctorApplicationPayload {
@@ -176,11 +176,65 @@ export interface DoctorApplication {
   clinic_id: string | null
   medplum_practitioner_id: string | null
   status: DoctorApplicationStatus
+  contact_person_name: string | null
+  contact_email: string | null
+  contact_phone: string | null
+  max_appointments_per_day: number | null
+  fee: number | null
+  years_of_practice: number | null
+  languages: string | null
+  display_order: number
+  availability_slots: DoctorAvailability[]
   created_at: string
   updated_at: string
 }
 
+/** PATCH /doctor/me request body — what an approved doctor may edit about
+ * their own profile. */
+export interface DoctorSelfUpdatePayload {
+  contact_person_name?: string
+  contact_email?: string
+  contact_phone?: string
+  max_appointments_per_day?: number | null
+  fee?: number | null
+  years_of_practice?: number | null
+  languages?: string
+  availability_slots?: AvailabilitySlotPayload[]
+}
+
+/** PATCH /doctor/me */
+export async function updateMyDoctorProfile(
+  token: string,
+  payload: DoctorSelfUpdatePayload,
+): Promise<DoctorApplication> {
+  return request<DoctorApplication>('/doctor/me', { method: 'PATCH', body: payload, token })
+}
+
 // ---------------------------------------------------------------- clinics
+
+export type DayOfWeek =
+  | 'monday'
+  | 'tuesday'
+  | 'wednesday'
+  | 'thursday'
+  | 'friday'
+  | 'saturday'
+  | 'sunday'
+export type TimeSlot = 'am' | 'pm'
+
+/** backend ClinicAvailabilityRead. */
+export interface ClinicAvailability {
+  id: string
+  clinic_id: string
+  days: DayOfWeek
+  slot: TimeSlot
+}
+
+/** One (day, slot) pair sent when saving availability. */
+export interface AvailabilitySlotPayload {
+  days: DayOfWeek
+  slot: TimeSlot
+}
 
 /** backend ClinicRead. */
 export interface Clinic {
@@ -190,9 +244,14 @@ export interface Clinic {
   description: string | null
   address: string | null
   phone: string | null
+  opening_hours: string | null
+  contact_person_name: string | null
+  contact_email: string | null
+  contact_phone: string | null
   medplum_organisation_id: string
   /** Presigned url for `picture` (an R2 key or absolute url). */
   picture_url: string | null
+  availability_slots: ClinicAvailability[]
   created_at: string
   updated_at: string
 }
@@ -202,6 +261,10 @@ export interface ClinicDoctor {
   id: string
   name: string
   specialization: string
+  fee: number | null
+  avatar_url: string | null
+  years_of_practice: number | null
+  languages: string | null
 }
 
 /** backend AdminClinicRead — a clinic plus its linked doctors. */
@@ -217,6 +280,8 @@ export interface PublicClinic {
   description: string | null
   address: string | null
   phone: string | null
+  opening_hours: string | null
+  availability_slots: ClinicAvailability[]
   doctors: ClinicDoctor[]
 }
 
@@ -238,6 +303,60 @@ export interface ClinicCreatePayload {
   description?: string
   address?: string
   phone?: string
+  opening_hours?: string
+  contact_person_name?: string
+  contact_email?: string
+  contact_phone?: string
+  availability_slots?: AvailabilitySlotPayload[]
+}
+
+// ---------------------------------------------------------------- services
+
+/** backend ServiceRead — a bookable service tagged to a specialty. */
+export interface Service {
+  id: string
+  name: string
+  specialization: string
+  description: string | null
+  fee: number | null
+  display_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ServicePayload {
+  name: string
+  specialization: string
+  description?: string
+  fee?: number | null
+  display_order?: number
+}
+
+/** GET /services — public list, for the appointment booking page. */
+export async function listServices(): Promise<Service[]> {
+  return request<Service[]>('/services')
+}
+
+/** GET /admin/services — every bookable service. */
+export async function listAdminServices(token: string): Promise<Service[]> {
+  return request<Service[]>('/admin/services', { token })
+}
+
+export async function createService(token: string, payload: ServicePayload): Promise<Service> {
+  return request<Service>('/admin/services', { method: 'POST', body: payload, token })
+}
+
+/** PATCH /admin/services/{id} — only the fields sent change; "" clears description. */
+export async function updateService(
+  token: string,
+  serviceId: string,
+  payload: Partial<ServicePayload>,
+): Promise<Service> {
+  return request<Service>(`/admin/services/${serviceId}`, { method: 'PATCH', body: payload, token })
+}
+
+export async function deleteService(token: string, serviceId: string): Promise<void> {
+  await request(`/admin/services/${serviceId}`, { method: 'DELETE', token })
 }
 
 // ----------------------------------------------------------------- admin
@@ -259,12 +378,34 @@ export interface AdminDoctor {
   clinic_id: string | null
   medplum_practitioner_id: string | null
   status: DoctorApplicationStatus
+  contact_person_name: string | null
+  contact_email: string | null
+  contact_phone: string | null
+  max_appointments_per_day: number | null
+  fee: number | null
+  years_of_practice: number | null
+  languages: string | null
+  display_order: number
+  availability_slots: DoctorAvailability[]
   first_name: string
   last_name: string
   email: string
   clinics: Clinic[]
   created_at: string
   updated_at: string
+}
+
+/** PATCH /admin/doctors/{id} request body. */
+export interface DoctorUpdatePayload {
+  contact_person_name?: string
+  contact_email?: string
+  contact_phone?: string
+  max_appointments_per_day?: number | null
+  fee?: number | null
+  years_of_practice?: number | null
+  languages?: string
+  display_order?: number
+  availability_slots?: AvailabilitySlotPayload[]
 }
 
 // ---------------------------------------------------------------- auth
@@ -453,6 +594,15 @@ export async function fetchAdminDoctors(token: string): Promise<AdminDoctor[]> {
   return request<AdminDoctor[]>('/admin/doctors', { token })
 }
 
+/** PATCH /admin/doctors/{id} — edit a doctor's contact info and weekly availability. */
+export async function updateDoctorAdmin(
+  token: string,
+  doctorId: string,
+  payload: DoctorUpdatePayload,
+): Promise<AdminDoctor> {
+  return request<AdminDoctor>(`/admin/doctors/${doctorId}`, { method: 'PATCH', body: payload, token })
+}
+
 /**
  * POST /admin/clinics — creates the clinic's Organization in Medplum, then
  * the local row; `medplum_organisation_id` is derived server-side.
@@ -460,6 +610,33 @@ export async function fetchAdminDoctors(token: string): Promise<AdminDoctor[]> {
 /** GET /admin/clinics — every clinic with its linked doctors. */
 export async function listAdminClinics(token: string): Promise<AdminClinic[]> {
   return request<AdminClinic[]>('/admin/clinics', { token })
+}
+
+/** backend DoctorAvailabilityRead. */
+export interface DoctorAvailability {
+  id: string
+  doctor_profile_id: string
+  days: DayOfWeek
+  slot: TimeSlot
+}
+
+/** backend PublicDoctorRead — GET /doctor/{id}/public, no login needed. */
+export interface PublicDoctor {
+  id: string
+  name: string
+  specialization: string
+  fee: number | null
+  avatar_url: string | null
+  years_of_practice: number | null
+  languages: string | null
+  availability_slots: DoctorAvailability[]
+  clinics: Clinic[]
+}
+
+/** GET /doctor/{id}/public — a doctor's name, specialty, clinics and weekly
+ * availability, for the appointment booking page. */
+export async function getDoctorPublicProfile(doctorId: string): Promise<PublicDoctor> {
+  return request<PublicDoctor>(`/doctor/${doctorId}/public`)
 }
 
 /** GET /clinics/directory — public partner-clinic list for "Find a clinic". */
@@ -500,6 +677,28 @@ export async function createClinic(
     body: payload,
     token,
   })
+}
+
+/** POST /admin/clinics/{clinic_id}/doctors/{doctor_id} — links an approved
+ * doctor to a clinic, creating a PractitionerRole in Medplum. */
+export async function assignDoctorToClinicAdmin(
+  token: string,
+  clinicId: string,
+  doctorId: string,
+): Promise<DoctorClinic> {
+  return request<DoctorClinic>(`/admin/clinics/${clinicId}/doctors/${doctorId}`, {
+    method: 'POST',
+    token,
+  })
+}
+
+/** DELETE /admin/clinics/{clinic_id}/doctors/{doctor_id} — unlinks a doctor from a clinic. */
+export async function unassignDoctorFromClinicAdmin(
+  token: string,
+  clinicId: string,
+  doctorId: string,
+): Promise<void> {
+  await request(`/admin/clinics/${clinicId}/doctors/${doctorId}`, { method: 'DELETE', token })
 }
 
 // ---------------------------------------------------------- family members
@@ -759,6 +958,9 @@ export interface PredictionResult {
   disclaimer: string
   /** Id of the saved history entry. */
   check_id: string | null
+  /** Set when urgency is "high" — an instant consultation was auto-created
+   * and every available doctor notified; join its waiting room right away. */
+  escalated_consultation_id: string | null
 }
 
 /** backend schemas/prediction.SymptomCheckRead — one saved check. */
@@ -814,6 +1016,270 @@ export async function predictDisease(
     body: { symptoms, ...patient, family_member_id: familyMemberId },
     token,
   })
+}
+
+// ----------------------------------------------------------- appointments
+
+export type AppointmentStatus = 'scheduled' | 'rescheduled' | 'cancelled' | 'completed'
+
+/** backend AppointmentCreate. */
+export interface AppointmentPayload {
+  doctor_profile_id: string
+  clinic_id: string
+  family_member_id?: string | null
+  patient_name: string
+  patient_email: string
+  patient_phone: string
+  reason: string
+  notes?: string
+  appointment_date: string // YYYY-MM-DD
+  slot: TimeSlot
+}
+
+/** backend AppointmentRead. */
+export interface Appointment {
+  id: string
+  patient_id: string
+  family_member_id: string | null
+  doctor_profile_id: string
+  clinic_id: string
+  patient_name: string
+  patient_email: string
+  patient_phone: string
+  reason: string
+  notes: string | null
+  appointment_date: string
+  slot: TimeSlot
+  status: AppointmentStatus
+  meet_link: string | null
+  fee: number | null
+  doctor_name: string | null
+  doctor_specialization: string | null
+  clinic_name: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** POST /appointments — books a clinic appointment for the caller or a
+ * family member; best-effort creates a Google Meet invite for the slot. */
+export async function bookAppointment(
+  token: string,
+  payload: AppointmentPayload,
+): Promise<Appointment> {
+  return request<Appointment>('/appointments', { method: 'POST', body: payload, token })
+}
+
+/** backend AppointmentCreateByService — clinic + service, no doctor chosen;
+ * the backend assigns any doctor there who offers it and is free. */
+export interface AppointmentByServicePayload {
+  clinic_id: string
+  service_id: string
+  family_member_id?: string | null
+  patient_name: string
+  patient_email: string
+  patient_phone: string
+  reason: string
+  notes?: string
+  appointment_date: string // YYYY-MM-DD
+  slot: TimeSlot
+}
+
+/** POST /appointments/by-service — books a clinic + service without picking
+ * a doctor; the first eligible, free doctor there gets the appointment. */
+export async function bookAppointmentByService(
+  token: string,
+  payload: AppointmentByServicePayload,
+): Promise<Appointment> {
+  return request<Appointment>('/appointments/by-service', { method: 'POST', body: payload, token })
+}
+
+/** GET /appointments/me — the caller's own bookings. */
+export async function listMyAppointments(token: string): Promise<Appointment[]> {
+  return request<Appointment[]>('/appointments/me', { token })
+}
+
+/** GET /appointments/doctor/me — appointments booked with the calling
+ * (approved) doctor. */
+export async function listMyPatientAppointments(token: string): Promise<Appointment[]> {
+  return request<Appointment[]>('/appointments/doctor/me', { token })
+}
+
+/** PATCH /appointments/{id}/cancel */
+export async function cancelAppointment(token: string, appointmentId: string): Promise<Appointment> {
+  return request<Appointment>(`/appointments/${appointmentId}/cancel`, { method: 'PATCH', token })
+}
+
+function wsBaseUrl(): string {
+  const base = API_BASE_URL || window.location.origin
+  return base.replace(/^http/, 'ws')
+}
+
+/** wss://... URL for the in-app video call's WebRTC signaling socket, for
+ * either a scheduled appointment or an accepted instant consultation. */
+export function callSocketUrl(kind: 'appointment' | 'telemedicine', id: string, token: string): string {
+  const path = kind === 'appointment' ? `/ws/call/${id}` : `/ws/call/telemedicine/${id}`
+  return `${wsBaseUrl()}${API_PREFIX}${path}?token=${encodeURIComponent(token)}`
+}
+
+// ----------------------------------------------------------- telemedicine
+
+export type TelemedicineStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
+
+export interface TelemedicineStartPayload {
+  family_member_id?: string | null
+  reason: string
+}
+
+/** backend TelemedicineRead. */
+export type TelemedicineTrigger = 'auto_escalation' | 'manual_booking'
+
+export interface TelemedicineConsultation {
+  id: string
+  patient_id: string
+  family_member_id: string | null
+  doctor_profile_id: string | null
+  reason: string
+  status: TelemedicineStatus
+  trigger: TelemedicineTrigger
+  symptom_check_id: string | null
+  patient_name: string | null
+  doctor_name: string | null
+  doctor_specialization: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** POST /telemedicine — patients only. Starts an instant consultation and
+ * notifies every doctor currently watching the queue. */
+export async function startTelemedicineConsultation(
+  token: string,
+  payload: TelemedicineStartPayload,
+): Promise<TelemedicineConsultation> {
+  return request<TelemedicineConsultation>('/telemedicine', { method: 'POST', body: payload, token })
+}
+
+export async function getTelemedicineConsultation(token: string, id: string): Promise<TelemedicineConsultation> {
+  return request<TelemedicineConsultation>(`/telemedicine/${id}`, { token })
+}
+
+/** GET /telemedicine/pending — approved doctors only; the current queue. */
+export async function listPendingConsultations(token: string): Promise<TelemedicineConsultation[]> {
+  return request<TelemedicineConsultation[]>('/telemedicine/pending', { token })
+}
+
+/** POST /telemedicine/{id}/accept — first approved doctor to call it wins. */
+export async function acceptConsultation(token: string, id: string): Promise<TelemedicineConsultation> {
+  return request<TelemedicineConsultation>(`/telemedicine/${id}/accept`, { method: 'POST', token })
+}
+
+export async function cancelConsultation(token: string, id: string): Promise<TelemedicineConsultation> {
+  return request<TelemedicineConsultation>(`/telemedicine/${id}/cancel`, { method: 'PATCH', token })
+}
+
+export async function completeConsultation(token: string, id: string): Promise<TelemedicineConsultation> {
+  return request<TelemedicineConsultation>(`/telemedicine/${id}/complete`, { method: 'PATCH', token })
+}
+
+/** wss://... socket a waiting patient listens on for the "accepted" push. */
+export function telemedicinePatientSocketUrl(consultationId: string, token: string): string {
+  return `${wsBaseUrl()}${API_PREFIX}/ws/telemedicine/patient/${consultationId}?token=${encodeURIComponent(token)}`
+}
+
+/** wss://... socket an approved doctor listens on for "new-consultation" /
+ * "removed" pushes — staying connected is what makes them "available". */
+export function telemedicineDoctorSocketUrl(token: string): string {
+  return `${wsBaseUrl()}${API_PREFIX}/ws/telemedicine/doctor?token=${encodeURIComponent(token)}`
+}
+
+// ----------------------------------------------------------------- messages
+
+export interface Message {
+  id: string
+  appointment_id: string | null
+  consultation_id: string | null
+  sender_id: string
+  sender_name: string | null
+  body: string
+  created_at: string
+  updated_at: string
+}
+
+export async function listMessages(
+  token: string,
+  kind: 'appointment' | 'telemedicine',
+  id: string,
+): Promise<Message[]> {
+  return request<Message[]>(`/messages/${kind}/${id}`, { token })
+}
+
+export async function sendMessage(
+  token: string,
+  kind: 'appointment' | 'telemedicine',
+  id: string,
+  body: string,
+): Promise<Message> {
+  return request<Message>(`/messages/${kind}/${id}`, { method: 'POST', body: { body }, token })
+}
+
+// ------------------------------------------------------------- prescriptions
+
+export interface Medication {
+  name: string
+  dosage: string
+  frequency: string
+  duration: string
+  instructions?: string | null
+}
+
+export interface PrescriptionPayload {
+  appointment_id?: string | null
+  consultation_id?: string | null
+  medications: Medication[]
+  notes?: string | null
+}
+
+/** backend: schemas/prescription.PrescriptionRead */
+export interface Prescription {
+  id: string
+  appointment_id: string | null
+  consultation_id: string | null
+  doctor_profile_id: string
+  patient_id: string
+  family_member_id: string | null
+  medications: Medication[]
+  notes: string | null
+  synced_to_medplum: boolean
+  doctor_name: string | null
+  doctor_specialization: string | null
+  patient_name: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** POST /prescriptions — the treating doctor issues an e-prescription;
+ * best-effort synced to Medplum as FHIR MedicationRequests. */
+export async function issuePrescription(token: string, payload: PrescriptionPayload): Promise<Prescription> {
+  return request<Prescription>('/prescriptions', { method: 'POST', body: payload, token })
+}
+
+/** GET /prescriptions/me */
+export async function listMyPrescriptions(token: string): Promise<Prescription[]> {
+  return request<Prescription[]>('/prescriptions/me', { token })
+}
+
+/** GET /prescriptions/doctor/me */
+export async function listMyIssuedPrescriptions(token: string): Promise<Prescription[]> {
+  return request<Prescription[]>('/prescriptions/doctor/me', { token })
+}
+
+/** GET /telemedicine/me — the caller's own instant consultations, pending through completed. */
+export async function listMyConsultations(token: string): Promise<TelemedicineConsultation[]> {
+  return request<TelemedicineConsultation[]>('/telemedicine/me', { token })
+}
+
+/** GET /telemedicine/doctor/me — instant consultations the calling doctor has accepted. */
+export async function listMyHandledConsultations(token: string): Promise<TelemedicineConsultation[]> {
+  return request<TelemedicineConsultation[]>('/telemedicine/doctor/me', { token })
 }
 
 /** Turns the AvatarUpload data URL into a File for the multipart request. */
