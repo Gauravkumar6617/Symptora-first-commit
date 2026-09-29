@@ -4,7 +4,10 @@ from fastapi import WebSocket
 # app.routers.callRouter's room dict; move to Redis pub/sub if this ever
 # runs behind more than one worker/instance.
 _doctor_sockets: list[WebSocket] = []
-_patient_sockets: dict[str, WebSocket] = {}
+# list, not a single socket: a page can briefly hold two connections (e.g.
+# React StrictMode's double-effect in dev, or a stray reconnect), and
+# whichever one is actually still alive must still get the push.
+_patient_sockets: dict[str, list[WebSocket]] = {}
 
 
 def register_doctor(ws: WebSocket) -> None:
@@ -17,11 +20,17 @@ def unregister_doctor(ws: WebSocket) -> None:
 
 
 def register_patient(consultation_id: str, ws: WebSocket) -> None:
-    _patient_sockets[consultation_id] = ws
+    _patient_sockets.setdefault(consultation_id, []).append(ws)
 
 
-def unregister_patient(consultation_id: str) -> None:
-    _patient_sockets.pop(consultation_id, None)
+def unregister_patient(consultation_id: str, ws: WebSocket) -> None:
+    sockets = _patient_sockets.get(consultation_id)
+    if not sockets:
+        return
+    if ws in sockets:
+        sockets.remove(ws)
+    if not sockets:
+        _patient_sockets.pop(consultation_id, None)
 
 
 async def notify_doctors_new_consultation(payload: dict) -> None:
@@ -43,8 +52,7 @@ async def notify_doctors_removed(consultation_id: str) -> None:
 
 
 async def notify_patient(consultation_id: str, message: dict) -> None:
-    ws = _patient_sockets.get(consultation_id)
-    if ws:
+    for ws in list(_patient_sockets.get(consultation_id, [])):
         try:
             await ws.send_json(message)
         except Exception:

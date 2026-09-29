@@ -146,4 +146,4 @@ async def patient_consultation_updates(websocket: WebSocket, consultation_id: st
     except WebSocketDisconnect:
         pass
     finally:
-        notifier.unregister_patient(consultation_id)
+        notifier.unregister_patient(consultation_id, websocket)

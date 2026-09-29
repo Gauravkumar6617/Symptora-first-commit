@@ -51,8 +51,19 @@ export function TelemedicineWaitingPage() {
       if (message.type === 'cancelled') setStatus('cancelled')
     }
 
+    // Fallback in case the push is ever missed (dropped socket, etc.) — the
+    // socket is still the fast path, this just guarantees we don't get stuck.
+    const poll = setInterval(() => {
+      getTelemedicineConsultation(token, id).then((consultation) => {
+        if (cancelled) return
+        if (consultation.status === 'in_progress') navigate(`/call/telemedicine/${id}`, { replace: true })
+        else if (consultation.status !== 'pending') setStatus('cancelled')
+      }).catch(() => {})
+    }, 4000)
+
     return () => {
       cancelled = true
+      clearInterval(poll)
       ws.close()
     }
   }, [id, navigate, token])
