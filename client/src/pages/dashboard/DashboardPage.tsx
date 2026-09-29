@@ -175,15 +175,13 @@ function MyAppointmentsSection({ token }: { token: string | null }) {
               >
                 {a.status}
               </span>
-              {a.meet_link && (
-                <a
-                  href={a.meet_link}
-                  target="_blank"
-                  rel="noreferrer"
+              {(a.status === 'scheduled' || a.status === 'rescheduled') && (
+                <Link
+                  to={`/call/${a.id}`}
                   className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
                 >
-                  <Video className="h-3.5 w-3.5" /> Join
-                </a>
+                  <Video className="h-3.5 w-3.5" /> Video call
+                </Link>
               )}
               {(a.status === 'scheduled' || a.status === 'rescheduled') && (
                 <button

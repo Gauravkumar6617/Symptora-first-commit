@@ -1106,6 +1106,13 @@ export async function cancelAppointment(token: string, appointmentId: string): P
   return request<Appointment>(`/appointments/${appointmentId}/cancel`, { method: 'PATCH', token })
 }
 
+/** wss://... URL for the in-app video call's WebRTC signaling socket. */
+export function callSocketUrl(appointmentId: string, token: string): string {
+  const base = API_BASE_URL || window.location.origin
+  const wsBase = base.replace(/^http/, 'ws')
+  return `${wsBase}${API_PREFIX}/ws/call/${appointmentId}?token=${encodeURIComponent(token)}`
+}
+
 /** Turns the AvatarUpload data URL into a File for the multipart request. */
 export async function dataUrlToFile(
   dataUrl: string,

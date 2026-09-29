@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarClock, Mail, Phone, User, Video } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import {
   type Appointment,
   type AvailabilitySlotPayload,
@@ -116,15 +116,13 @@ function MyAppointmentsSection({ token }: { token: string | null }) {
                 <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${statusBadge[a.status]}`}>
                   {a.status}
                 </span>
-                {a.meet_link && (
-                  <a
-                    href={a.meet_link}
-                    target="_blank"
-                    rel="noreferrer"
+                {(a.status === 'scheduled' || a.status === 'rescheduled') && (
+                  <Link
+                    to={`/call/${a.id}`}
                     className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
                   >
-                    <Video className="h-3.5 w-3.5" /> Join
-                  </a>
+                    <Video className="h-3.5 w-3.5" /> Video call
+                  </Link>
                 )}
                 {(a.status === 'scheduled' || a.status === 'rescheduled') && (
                   <button
