@@ -1106,11 +1106,82 @@ export async function cancelAppointment(token: string, appointmentId: string): P
   return request<Appointment>(`/appointments/${appointmentId}/cancel`, { method: 'PATCH', token })
 }
 
-/** wss://... URL for the in-app video call's WebRTC signaling socket. */
-export function callSocketUrl(appointmentId: string, token: string): string {
+function wsBaseUrl(): string {
   const base = API_BASE_URL || window.location.origin
-  const wsBase = base.replace(/^http/, 'ws')
-  return `${wsBase}${API_PREFIX}/ws/call/${appointmentId}?token=${encodeURIComponent(token)}`
+  return base.replace(/^http/, 'ws')
+}
+
+/** wss://... URL for the in-app video call's WebRTC signaling socket, for
+ * either a scheduled appointment or an accepted instant consultation. */
+export function callSocketUrl(kind: 'appointment' | 'telemedicine', id: string, token: string): string {
+  const path = kind === 'appointment' ? `/ws/call/${id}` : `/ws/call/telemedicine/${id}`
+  return `${wsBaseUrl()}${API_PREFIX}${path}?token=${encodeURIComponent(token)}`
+}
+
+// ----------------------------------------------------------- telemedicine
+
+export type TelemedicineStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
+
+export interface TelemedicineStartPayload {
+  family_member_id?: string | null
+  reason: string
+}
+
+/** backend TelemedicineRead. */
+export interface TelemedicineConsultation {
+  id: string
+  patient_id: string
+  family_member_id: string | null
+  doctor_profile_id: string | null
+  reason: string
+  status: TelemedicineStatus
+  patient_name: string | null
+  doctor_name: string | null
+  doctor_specialization: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** POST /telemedicine — patients only. Starts an instant consultation and
+ * notifies every doctor currently watching the queue. */
+export async function startTelemedicineConsultation(
+  token: string,
+  payload: TelemedicineStartPayload,
+): Promise<TelemedicineConsultation> {
+  return request<TelemedicineConsultation>('/telemedicine', { method: 'POST', body: payload, token })
+}
+
+export async function getTelemedicineConsultation(token: string, id: string): Promise<TelemedicineConsultation> {
+  return request<TelemedicineConsultation>(`/telemedicine/${id}`, { token })
+}
+
+/** GET /telemedicine/pending — approved doctors only; the current queue. */
+export async function listPendingConsultations(token: string): Promise<TelemedicineConsultation[]> {
+  return request<TelemedicineConsultation[]>('/telemedicine/pending', { token })
+}
+
+/** POST /telemedicine/{id}/accept — first approved doctor to call it wins. */
+export async function acceptConsultation(token: string, id: string): Promise<TelemedicineConsultation> {
+  return request<TelemedicineConsultation>(`/telemedicine/${id}/accept`, { method: 'POST', token })
+}
+
+export async function cancelConsultation(token: string, id: string): Promise<TelemedicineConsultation> {
+  return request<TelemedicineConsultation>(`/telemedicine/${id}/cancel`, { method: 'PATCH', token })
+}
+
+export async function completeConsultation(token: string, id: string): Promise<TelemedicineConsultation> {
+  return request<TelemedicineConsultation>(`/telemedicine/${id}/complete`, { method: 'PATCH', token })
+}
+
+/** wss://... socket a waiting patient listens on for the "accepted" push. */
+export function telemedicinePatientSocketUrl(consultationId: string, token: string): string {
+  return `${wsBaseUrl()}${API_PREFIX}/ws/telemedicine/patient/${consultationId}?token=${encodeURIComponent(token)}`
+}
+
+/** wss://... socket an approved doctor listens on for "new-consultation" /
+ * "removed" pushes — staying connected is what makes them "available". */
+export function telemedicineDoctorSocketUrl(token: string): string {
+  return `${wsBaseUrl()}${API_PREFIX}/ws/telemedicine/doctor?token=${encodeURIComponent(token)}`
 }
 
 /** Turns the AvatarUpload data URL into a File for the multipart request. */

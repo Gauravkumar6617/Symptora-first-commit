@@ -10,6 +10,7 @@ from app.models.doctorModel import DoctorProfile
 from app.models.familyMemeberModel import FamilyMemberModel
 from app.models.serviceModel import ServiceModel
 from app.models.symptomCheckModel import SymptomCheckModel
+from app.models.telemedicineModel import TelemedicineConsultationModel
 from app.models.userModel import UserModel
 
 __all__ = [
@@ -23,6 +24,7 @@ __all__ = [
     "FamilyMemberModel",
     "ServiceModel",
     "SymptomCheckModel",
+    "TelemedicineConsultationModel",
     "UserModel",
     "doctorAvailabilityModel",
 ]

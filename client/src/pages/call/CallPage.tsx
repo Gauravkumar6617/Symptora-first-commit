@@ -1,7 +1,7 @@
 import { Mic, MicOff, PhoneOff, Video, VideoOff } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { callSocketUrl } from '@/lib/api'
+import { callSocketUrl, completeConsultation } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 
 // ponytail: public STUN only, no TURN — calls between peers on restrictive
@@ -11,7 +11,8 @@ const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }]
 type CallState = 'connecting' | 'waiting' | 'in-call' | 'ended'
 
 export function CallPage() {
-  const { appointmentId = '' } = useParams()
+  const { kind, id = '' } = useParams<{ kind: 'appointment' | 'telemedicine'; id: string }>()
+  const appointmentId = id
   const token = useAuthStore((state) => state.token)
   const navigate = useNavigate()
 
@@ -65,7 +66,7 @@ export function CallPage() {
         return
       }
 
-      const ws = new WebSocket(callSocketUrl(appointmentId, token!))
+      const ws = new WebSocket(callSocketUrl(kind === 'telemedicine' ? 'telemedicine' : 'appointment', appointmentId, token!))
       wsRef.current = ws
 
       ws.onopen = () => setState('waiting')
@@ -118,7 +119,7 @@ export function CallPage() {
       pcRef.current?.close()
       for (const track of localStreamRef.current?.getTracks() ?? []) track.stop()
     }
-  }, [appointmentId, token])
+  }, [appointmentId, kind, token])
 
   function toggleMic() {
     const track = localStreamRef.current?.getAudioTracks()[0]
@@ -139,6 +140,7 @@ export function CallPage() {
     pcRef.current?.close()
     for (const track of localStreamRef.current?.getTracks() ?? []) track.stop()
     setState('ended')
+    if (kind === 'telemedicine' && token) completeConsultation(token, appointmentId).catch(() => {})
     navigate(-1)
   }
 

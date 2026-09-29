@@ -45,6 +45,8 @@ class AppointmentModel(BaseModel):
     # invite is created (best-effort — booking still succeeds without it).
     meet_link = Column(String, nullable=True)
     google_event_id = Column(String, nullable=True)
+    # FHIR Appointment created in Medplum after booking — best effort.
+    medplum_appointment_id = Column(String, nullable=True)
 
     patient = relationship("UserModel", foreign_keys=[patient_id])
     family_member = relationship("FamilyMemberModel", foreign_keys=[family_member_id])

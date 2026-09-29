@@ -1,15 +1,19 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarClock, Mail, Phone, User, Video } from 'lucide-react'
-import { type FormEvent, useState } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { CalendarClock, Mail, Phone, PhoneIncoming, User, Video } from 'lucide-react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import {
   type Appointment,
   type AvailabilitySlotPayload,
   ApiError,
+  acceptConsultation,
   cancelAppointment,
   type DoctorApplication,
   getMyDoctorApplication,
   listMyPatientAppointments,
+  listPendingConsultations,
+  type TelemedicineConsultation,
+  telemedicineDoctorSocketUrl,
   updateMyDoctorProfile,
 } from '@/lib/api'
 import { AvailabilityGrid } from '@/components/AvailabilityGrid'
@@ -39,8 +43,108 @@ export function DoctorDashboardPage() {
         Your appointments and consultation profile.
       </p>
 
+      <InstantConsultationSection token={token} />
       <MyAppointmentsSection token={token} />
       <MyProfileSection token={token} />
+    </div>
+  )
+}
+
+/** Live queue of instant, patient-started consultations — connects to the
+ * doctor notification socket only once the doctor's application is approved;
+ * staying connected is what makes them "available" for these. */
+function InstantConsultationSection({ token }: { token: string | null }) {
+  const navigate = useNavigate()
+  const { data: profile } = useQuery({
+    queryKey: ['my-doctor-profile'],
+    queryFn: () => getMyDoctorApplication(token!),
+    enabled: Boolean(token),
+  })
+  const approved = profile?.status === 'APPROVED'
+
+  const [pending, setPending] = useState<TelemedicineConsultation[]>([])
+  const [accepting, setAccepting] = useState<string | null>(null)
+  const [error, setError] = useState('')
+  const wsRef = useRef<WebSocket | null>(null)
+
+  useEffect(() => {
+    if (!token || !approved) return
+    let cancelled = false
+
+    listPendingConsultations(token)
+      .then((list) => !cancelled && setPending(list))
+      .catch(() => {})
+
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {})
+    }
+
+    const ws = new WebSocket(telemedicineDoctorSocketUrl(token))
+    wsRef.current = ws
+    ws.onmessage = (event) => {
+      const message = JSON.parse(event.data)
+      if (message.type === 'new-consultation') {
+        const consultation = message.consultation as TelemedicineConsultation
+        setPending((current) => [...current.filter((c) => c.id !== consultation.id), consultation])
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('New instant consultation request', {
+            body: consultation.reason,
+          })
+        }
+      }
+      if (message.type === 'removed') {
+        setPending((current) => current.filter((c) => c.id !== message.id))
+      }
+    }
+
+    return () => {
+      cancelled = true
+      ws.close()
+    }
+  }, [token, approved])
+
+  async function handleAccept(id: string) {
+    if (!token) return
+    setError('')
+    setAccepting(id)
+    try {
+      await acceptConsultation(token, id)
+      navigate(`/call/telemedicine/${id}`)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not accept — it may already be taken.')
+      setPending((current) => current.filter((c) => c.id !== id))
+      setAccepting(null)
+    }
+  }
+
+  if (!approved || pending.length === 0) return null
+
+  return (
+    <div className="mt-10">
+      <h2 className="flex items-center gap-2 text-lg font-bold text-ink">
+        <PhoneIncoming className="h-5 w-5 text-primary-600" /> Instant consultation requests
+      </h2>
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      <div className="mt-4 space-y-3">
+        {pending.map((c) => (
+          <div key={c.id} className="card-raised flex flex-wrap items-center justify-between gap-3 p-4">
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+                <User className="h-3.5 w-3.5 shrink-0" /> {c.patient_name ?? 'Patient'}
+              </p>
+              <p className="mt-1 text-xs text-ink/70">{c.reason}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleAccept(c.id)}
+              disabled={accepting === c.id}
+              className="btn-raised inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Video className="h-4 w-4" /> {accepting === c.id ? 'Connecting…' : 'Accept'}
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -118,7 +222,7 @@ function MyAppointmentsSection({ token }: { token: string | null }) {
                 </span>
                 {(a.status === 'scheduled' || a.status === 'rescheduled') && (
                   <Link
-                    to={`/call/${a.id}`}
+                    to={`/call/appointment/${a.id}`}
                     className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
                   >
                     <Video className="h-3.5 w-3.5" /> Video call

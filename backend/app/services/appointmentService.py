@@ -1,8 +1,10 @@
+import logging
 from datetime import datetime, timedelta, date
 
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.database import SessionLocal
 from app.models.appointmentModel import AppointmentModel
 from app.models.enumModel import AppointmentStatus, DayOfWeek, Status
 from app.repositories.appointmentRepository import AppointmentRepository
@@ -12,8 +14,12 @@ from app.repositories.doctorRepositories import DoctorRepository
 from app.repositories.familyMemberRepository import FamilyMemberRepository
 from app.repositories.serviceRepository import ServiceRepository
 from app.schemas.appointment import AppointmentCreate, AppointmentCreateByService
+from app.services.familyMemberService import FamilyMemberService
 from app.utils.integration.google_calendar.index import GoogleCalenderIntegration
+from app.utils.integration.medplum.index import MedplumIntegration
 from app.utils.otp.send_otp import send_appointment_confirmation_email
+
+logger = logging.getLogger(__name__)
 
 # date.weekday(): Monday=0 ... Sunday=6
 _WEEKDAY_TO_DAY = {
@@ -215,3 +221,55 @@ class AppointmentService:
         if not doctor or not doctor.user:
             return None
         return f"Dr. {doctor.user.first_name} {doctor.user.last_name}"
+
+
+def appointment_fhir(appointment: AppointmentModel, patient_id: str, practitioner_id: str) -> dict:
+    """The booking as a FHIR Appointment."""
+    start_hour = _SLOT_HOUR[appointment.slot.value]
+    start = datetime.combine(appointment.appointment_date, datetime.min.time()).replace(hour=start_hour)
+    end = start + timedelta(minutes=30)
+    return {
+        "resourceType": "Appointment",
+        "status": "booked",
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "reasonCode": [{"text": appointment.reason}],
+        "participant": [
+            {"actor": {"reference": f"Patient/{patient_id}"}, "status": "accepted"},
+            {"actor": {"reference": f"Practitioner/{practitioner_id}"}, "status": "accepted"},
+        ],
+    }
+
+
+def sync_appointment_to_medplum(appointment_id: str, medplum: MedplumIntegration) -> None:
+    """Background task: record the booking as a FHIR Appointment.
+
+    Best effort — Medplum being down never blocks or unwinds the booking
+    itself, same as the calendar invite and confirmation email above."""
+    db = SessionLocal()
+    try:
+        appointment = db.get(AppointmentModel, appointment_id)
+        if appointment is None or appointment.doctor_profile is None:
+            return
+        practitioner_id = appointment.doctor_profile.medplum_practitioner_id
+        if not practitioner_id:
+            logger.warning("Appointment %s not sent to Medplum: doctor has no Medplum id", appointment_id)
+            return
+
+        if appointment.family_member is not None:
+            patient_id = FamilyMemberService(db, medplum).ensure_medplum_patient(
+                appointment.family_member, appointment.patient
+            )
+        else:
+            patient_id = appointment.patient.medplum_patient_id
+        if not patient_id:
+            logger.warning("Appointment %s not sent to Medplum: patient has no Medplum id", appointment_id)
+            return
+
+        created = medplum.create_resource(appointment_fhir(appointment, patient_id, practitioner_id))
+        appointment.medplum_appointment_id = created.get("id")
+        db.commit()
+    except Exception:
+        logger.exception("Appointment %s not sent to Medplum", appointment_id)
+    finally:
+        db.close()

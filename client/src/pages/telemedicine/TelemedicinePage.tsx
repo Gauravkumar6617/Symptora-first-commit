@@ -1,10 +1,13 @@
-import { MessageCircle, Pill, Star, UserRound, Video, Zap } from 'lucide-react'
+import { MessageCircle, Pill, Star, Stethoscope, UserRound, Video, Zap } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { PoweredByStrip } from '@/components/marketing/PoweredByStrip'
 import { ListRowSkeleton } from '@/components/ui/Skeleton'
 import { doctors } from '@/data/doctors'
 import { clinics } from '@/data/clinics'
+import { ApiError, startTelemedicineConsultation } from '@/lib/api'
+import { useAuthStore } from '@/store/authStore'
+import { relationLabel, useFamilyStore } from '@/store/familyStore'
 
 const capabilities = [
   {
@@ -36,11 +39,51 @@ const capabilities = [
 export function TelemedicinePage() {
   const availableNow = doctors.filter((doctor) => doctor.availableToday)
   const [loading, setLoading] = useState(true)
+  const { user, token } = useAuthStore()
+  const navigate = useNavigate()
+  const { members, loadMembers } = useFamilyStore()
+  const [starting, setStarting] = useState(false)
+  const [showStartForm, setShowStartForm] = useState(false)
+  const [reason, setReason] = useState('')
+  const [startFor, setStartFor] = useState('self')
+  const [startError, setStartError] = useState<string | null>(null)
+
+  // Only patients may start an instant consultation — not doctors, not admins.
+  const canStartInstant = Boolean(user) && !user?.isDoctor && !user?.isAdmin
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 500)
     return () => clearTimeout(timer)
   }, [])
+
+  useEffect(() => {
+    if (canStartInstant) loadMembers().catch(() => {})
+  }, [canStartInstant, loadMembers])
+
+  function openStart() {
+    if (!token) {
+      navigate('/login', { state: { from: '/telemedicine' } })
+      return
+    }
+    setShowStartForm(true)
+  }
+
+  async function submitStart() {
+    if (!token || reason.trim().length < 3) return
+    setStarting(true)
+    setStartError(null)
+    try {
+      const member = startFor !== 'self' ? members.find((m) => m.id === startFor) : null
+      const consultation = await startTelemedicineConsultation(token, {
+        family_member_id: member?.id ?? null,
+        reason: reason.trim(),
+      })
+      navigate(`/telemedicine/waiting/${consultation.id}`)
+    } catch (err) {
+      setStartError(err instanceof ApiError ? err.message : 'Could not start the consultation.')
+      setStarting(false)
+    }
+  }
 
   return (
     <div>
@@ -55,18 +98,24 @@ export function TelemedicinePage() {
                 See a doctor in minutes, from wherever you are
               </h1>
               <p className="mt-4 text-base text-ink/70">
-                No travel, no waiting room. Start with a Health Check or book a
-                video consult directly with a specialist.
+                No travel, no waiting room. Start an instant video consultation
+                and the next available doctor joins in real time.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
-                <Link to="/symptom-checker" className="btn-raised">
-                  Start a Health Check
-                </Link>
+                {canStartInstant || !token ? (
+                  <button type="button" onClick={openStart} className="btn-raised inline-flex items-center gap-2">
+                    <Video className="h-4 w-4" /> Start instant consultation
+                  </button>
+                ) : (
+                  <p className="rounded-xl border border-ink/15 bg-white px-5 py-3 text-sm text-ink/60">
+                    Instant consultations are for patients — use your doctor dashboard to accept requests.
+                  </p>
+                )}
                 <Link
                   to="/appointments"
                   className="rounded-xl border border-ink/15 bg-white px-5 py-3 text-sm font-semibold text-ink hover:bg-ink/5"
                 >
-                  Book a consult
+                  Book a scheduled consult
                 </Link>
               </div>
             </div>
@@ -147,6 +196,74 @@ export function TelemedicinePage() {
       <section className="border-t border-ink/10 bg-white">
         <PoweredByStrip />
       </section>
+
+      {showStartForm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          onClick={() => !starting && setShowStartForm(false)}
+        >
+          <div className="card-raised w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <span className="icon-badge mx-auto h-12 w-12">
+              <Stethoscope className="h-6 w-6 text-primary-600" />
+            </span>
+            <h2 className="mt-4 text-center text-lg font-bold text-ink">Start an instant consultation</h2>
+            <p className="mt-1 text-center text-sm text-ink/60">
+              The next available doctor is notified right away and joins your video call.
+            </p>
+
+            <div className="mt-5">
+              <h3 className="text-sm font-semibold text-ink">For</h3>
+              <select
+                value={startFor}
+                onChange={(e) => setStartFor(e.target.value)}
+                className="mt-2 w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-primary"
+              >
+                <option value="self">Myself</option>
+                {members.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.name} ({relationLabel(member.relation)})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="mt-4">
+              <h3 className="text-sm font-semibold text-ink">
+                What's going on? <span className="font-normal text-danger">*</span>
+              </h3>
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                maxLength={255}
+                placeholder="e.g. High fever and chills since this morning"
+                className="mt-2 w-full resize-none rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none placeholder:text-ink/40 focus:border-primary"
+              />
+            </div>
+
+            {startError && <p className="mt-3 text-sm text-danger">{startError}</p>}
+
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={submitStart}
+                disabled={starting || reason.trim().length < 3}
+                className="btn-raised flex-1 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {starting ? 'Connecting…' : 'Start consultation'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowStartForm(false)}
+                disabled={starting}
+                className="rounded-xl border border-ink/15 px-4 py-3 text-sm font-semibold text-ink hover:bg-ink/5"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

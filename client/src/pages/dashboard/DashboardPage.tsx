@@ -177,7 +177,7 @@ function MyAppointmentsSection({ token }: { token: string | null }) {
               </span>
               {(a.status === 'scheduled' || a.status === 'rescheduled') && (
                 <Link
-                  to={`/call/${a.id}`}
+                  to={`/call/appointment/${a.id}`}
                   className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
                 >
                   <Video className="h-3.5 w-3.5" /> Video call

@@ -1,37 +1,22 @@
-from uuid import UUID
-
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
-from app.core.security import decode_token
-from app.models.enumModel import AppointmentStatus, Status
+from app.deps.ws_auth import get_ws_user
+from app.models.enumModel import AppointmentStatus, ConsultationStatus, Status
 from app.repositories.appointmentRepository import AppointmentRepository
 from app.repositories.doctorRepositories import DoctorRepository
-from app.models.userModel import UserModel
+from app.repositories.telemedicineRepository import TelemedicineRepository
 
 router = APIRouter(tags=["Telemedicine"])
 
-# appointment_id -> connected sockets (patient + treating doctor, so at most 2).
+# room key -> connected sockets (at most 2: the patient + the treating doctor).
 # ponytail: in-memory, single-process only — move to Redis pub/sub if this
 # ever runs behind more than one worker/instance.
 _rooms: dict[str, list[WebSocket]] = {}
 
 
-def _authorized_user(db: Session, token: str) -> UserModel | None:
-    payload = decode_token(token)
-    if not payload or payload.get("type") != "access":
-        return None
-    user_id = payload.get("sub")
-    try:
-        UUID(user_id)
-    except (ValueError, TypeError):
-        return None
-    user = db.query(UserModel).filter(UserModel.id == user_id).first()
-    return user if user and user.is_active else None
-
-
-def can_join_call(db: Session, user: UserModel | None, appointment) -> bool:
+def can_join_appointment_call(db: Session, user, appointment) -> bool:
     """Only the booking patient or the treating (approved) doctor may join —
     and only while the appointment hasn't been cancelled."""
     if not user or not appointment or appointment.status == AppointmentStatus.CANCELLED:
@@ -42,22 +27,25 @@ def can_join_call(db: Session, user: UserModel | None, appointment) -> bool:
     return bool(doctor) and doctor.status == Status.APPROVED and doctor.id == appointment.doctor_profile_id
 
 
-@router.websocket("/ws/call/{appointment_id}")
-async def call_signaling(websocket: WebSocket, appointment_id: str, token: str):
-    """Relays WebRTC offer/answer/ICE messages between the two participants
-    (patient + treating doctor) of one appointment's video call. Does not
-    touch the media itself — just signaling."""
-    db = SessionLocal()
-    try:
-        user = _authorized_user(db, token)
-        appointment = AppointmentRepository(db).get_by_id(appointment_id)
-        if not can_join_call(db, user, appointment):
-            await websocket.close(code=4403)
-            return
-    finally:
-        db.close()
+# Kept for backwards compatibility with existing imports/tests.
+can_join_call = can_join_appointment_call
 
-    room = _rooms.setdefault(appointment_id, [])
+
+def can_join_consultation_call(db: Session, user, consultation) -> bool:
+    """Only the requesting patient or the doctor who accepted may join — and
+    only once a doctor has actually accepted (status IN_PROGRESS)."""
+    if not user or not consultation or consultation.status != ConsultationStatus.IN_PROGRESS:
+        return False
+    if consultation.patient_id == user.id:
+        return True
+    doctor = DoctorRepository(db).get_by_user_id(user.id)
+    return bool(doctor) and doctor.id == consultation.doctor_profile_id
+
+
+async def _run_call(websocket: WebSocket, room_key: str) -> None:
+    """Relays WebRTC offer/answer/ICE messages between the two participants
+    of one room. Does not touch the media itself — just signaling."""
+    room = _rooms.setdefault(room_key, [])
     if len(room) >= 2:
         await websocket.close(code=4409)  # call already has both participants
         return
@@ -81,4 +69,34 @@ async def call_signaling(websocket: WebSocket, appointment_id: str, token: str):
         for peer in room:
             await peer.send_json({"type": "peer-left"})
         if not room:
-            _rooms.pop(appointment_id, None)
+            _rooms.pop(room_key, None)
+
+
+@router.websocket("/ws/call/{appointment_id}")
+async def appointment_call_signaling(websocket: WebSocket, appointment_id: str, token: str):
+    db = SessionLocal()
+    try:
+        user = get_ws_user(db, token)
+        appointment = AppointmentRepository(db).get_by_id(appointment_id)
+        if not can_join_appointment_call(db, user, appointment):
+            await websocket.close(code=4403)
+            return
+    finally:
+        db.close()
+
+    await _run_call(websocket, f"appointment:{appointment_id}")
+
+
+@router.websocket("/ws/call/telemedicine/{consultation_id}")
+async def telemedicine_call_signaling(websocket: WebSocket, consultation_id: str, token: str):
+    db = SessionLocal()
+    try:
+        user = get_ws_user(db, token)
+        consultation = TelemedicineRepository(db).get_by_id(consultation_id)
+        if not can_join_consultation_call(db, user, consultation):
+            await websocket.close(code=4403)
+            return
+    finally:
+        db.close()
+
+    await _run_call(websocket, f"telemedicine:{consultation_id}")

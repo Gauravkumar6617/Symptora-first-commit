@@ -8,6 +8,7 @@ import { ApplyDoctorPage } from '@/pages/apply-doctor/ApplyDoctorPage'
 import { AppointmentsPage } from '@/pages/appointments/AppointmentsPage'
 import { ActivateFamilyPage } from '@/pages/auth/ActivateFamilyPage'
 import { CallPage } from '@/pages/call/CallPage'
+import { TelemedicineWaitingPage } from '@/pages/telemedicine/TelemedicineWaitingPage'
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage'
 import { LoginPage } from '@/pages/auth/LoginPage'
 import { SignupPage } from '@/pages/auth/SignupPage'
@@ -54,7 +55,8 @@ export const router = createBrowserRouter([
           { path: '/profile', element: <ProfilePage /> },
           { path: '/apply-doctor', element: <ApplyDoctorPage /> },
           { path: '/symptom-checker', element: <SymptomCheckerPage /> },
-          { path: '/call/:appointmentId', element: <CallPage /> },
+          { path: '/call/:kind/:id', element: <CallPage /> },
+          { path: '/telemedicine/waiting/:id', element: <TelemedicineWaitingPage /> },
         ],
       },
       {
