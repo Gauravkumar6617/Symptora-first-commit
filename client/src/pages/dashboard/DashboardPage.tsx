@@ -72,7 +72,7 @@ export function DashboardPage() {
       </div>
 
       {application !== undefined && <DoctorApplicationCard application={application} />}
-      {application?.status === 'APPROVED' && <MyClinicsCard />}
+      {application?.status === 'approved' && <MyClinicsCard />}
 
       <MyAppointmentsSection token={token} />
 
@@ -270,7 +270,7 @@ function DoctorApplicationCard({ application }: { application: DoctorApplication
     )
   }
 
-  if (application.status === 'PENDING') {
+  if (application.status === 'pending') {
     return (
       <div className="card-raised mt-10 flex items-center gap-4 p-5">
         <span className="icon-badge">
@@ -287,7 +287,7 @@ function DoctorApplicationCard({ application }: { application: DoctorApplication
     )
   }
 
-  if (application.status === 'APPROVED') {
+  if (application.status === 'approved') {
     return (
       <Link
         to="/doctor/dashboard"

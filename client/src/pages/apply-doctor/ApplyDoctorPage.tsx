@@ -149,7 +149,7 @@ export function ApplyDoctorPage() {
 }
 
 function ApplicationStatusCard({ application }: { application: DoctorApplication }) {
-  if (application.status === 'APPROVED') {
+  if (application.status === 'approved') {
     return (
       <AuthSplitLayout title="You're a verified doctor" subtitle="Your application was approved">
         <div className="card-raised flex flex-col items-center p-8 text-center">
@@ -166,7 +166,7 @@ function ApplicationStatusCard({ application }: { application: DoctorApplication
     )
   }
 
-  if (application.status === 'REJECTED') {
+  if (application.status === 'rejected') {
     return (
       <AuthSplitLayout title="Application not approved" subtitle="Here's what happened">
         <div className="card-raised flex flex-col items-center p-8 text-center">

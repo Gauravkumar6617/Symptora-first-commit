@@ -60,7 +60,7 @@ function InstantConsultationSection({ token }: { token: string | null }) {
     queryFn: () => getMyDoctorApplication(token!),
     enabled: Boolean(token),
   })
-  const approved = profile?.status === 'APPROVED'
+  const approved = profile?.status === 'approved'
 
   const [pending, setPending] = useState<TelemedicineConsultation[]>([])
   const [accepting, setAccepting] = useState<string | null>(null)

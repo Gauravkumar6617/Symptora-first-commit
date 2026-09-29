@@ -158,7 +158,7 @@ export interface TokenResponse {
 
 // -------------------------------------------------------------- doctors
 
-export type DoctorApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+export type DoctorApplicationStatus = 'pending' | 'approved' | 'rejected'
 
 /** backend DoctorProfileCreate. */
 export interface DoctorApplicationPayload {
