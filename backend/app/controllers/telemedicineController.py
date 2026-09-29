@@ -57,3 +57,14 @@ class TelemedicineController:
             return service.list_pending_for_doctor(current_user)
         except PermissionError as e:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+    @staticmethod
+    def list_mine(current_user, service: TelemedicineService):
+        return service.list_for_patient(current_user.id)
+
+    @staticmethod
+    def list_for_doctor(current_user, service: TelemedicineService):
+        try:
+            return service.list_for_current_doctor(current_user)
+        except PermissionError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))

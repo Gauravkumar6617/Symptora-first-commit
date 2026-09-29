@@ -1,5 +1,23 @@
-import { Building2, Clock, ImagePlus, MapPin, Pencil, Phone, PlusCircle, Search, Trash2, UserPlus, X } from 'lucide-react'
-import { type ChangeEvent, type FormEvent, useMemo, useRef, useState } from 'react'
+import {
+  Building2,
+  Clock,
+  ImagePlus,
+  MapPin,
+  Pencil,
+  Phone,
+  PlusCircle,
+  Search,
+  Trash2,
+  UserPlus,
+  X,
+} from "lucide-react";
+import {
+  type ChangeEvent,
+  type FormEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   type AdminClinic,
   type AdminDoctor,
@@ -11,15 +29,16 @@ import {
   unassignDoctorFromClinicAdmin,
   updateClinic,
   uploadClinicPicture,
-} from '@/lib/api'
-import { AvailabilityGrid } from '@/components/AvailabilityGrid'
+} from "@/lib/api";
+import { AvailabilityGrid } from "@/components/AvailabilityGrid";
 
 const inputClass =
-  'w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-primary'
+  "w-full rounded-lg border border-ink/15 px-3 py-2 text-sm outline-none focus:border-primary";
 
 function errorMessage(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.message : fallback
+  return error instanceof ApiError ? error.message : fallback;
 }
+``;
 
 /** Admin list of clinics: search, add, edit, delete. */
 export function ClinicsSection({
@@ -28,75 +47,86 @@ export function ClinicsSection({
   token,
   onChanged,
 }: {
-  clinics: AdminClinic[]
-  doctors: AdminDoctor[]
-  token: string | null
+  clinics: AdminClinic[];
+  doctors: AdminDoctor[];
+  token: string | null;
   /** Reload clinics (and stats) after a change. */
-  onChanged: () => Promise<void>
+  onChanged: () => Promise<void>;
 }) {
   // null = form closed, 'new' = adding, otherwise the clinic being edited.
-  const [editing, setEditing] = useState<AdminClinic | 'new' | null>(null)
-  const [query, setQuery] = useState('')
-  const [error, setError] = useState('')
-  const [deleting, setDeleting] = useState<string | null>(null)
-  const [linking, setLinking] = useState<string | null>(null)
-  const [pickingClinic, setPickingClinic] = useState<string | null>(null)
+  const [editing, setEditing] = useState<AdminClinic | "new" | null>(null);
+  const [query, setQuery] = useState("");
+  const [error, setError] = useState("");
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [linking, setLinking] = useState<string | null>(null);
+  const [pickingClinic, setPickingClinic] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase()
-    if (!needle) return clinics
+    const needle = query.trim().toLowerCase();
+    if (!needle) return clinics;
     return clinics.filter((c) =>
-      [c.name, c.address, c.phone, c.description, ...c.doctors.map((d) => `${d.name} ${d.specialization}`)]
+      [
+        c.name,
+        c.address,
+        c.phone,
+        c.description,
+        ...c.doctors.map((d) => `${d.name} ${d.specialization}`),
+      ]
         .filter(Boolean)
         .some((value) => value!.toLowerCase().includes(needle)),
-    )
-  }, [clinics, query])
+    );
+  }, [clinics, query]);
 
   async function handleDelete(clinic: AdminClinic) {
-    if (!token) return
+    if (!token) return;
     const doctorNote = clinic.doctors.length
-      ? ` ${clinic.doctors.length} doctor${clinic.doctors.length === 1 ? ' is' : 's are'} linked and will be unlinked.`
-      : ''
-    if (!window.confirm(`Delete ${clinic.name}?${doctorNote} This can't be undone.`)) return
-    setError('')
-    setDeleting(clinic.id)
+      ? ` ${clinic.doctors.length} doctor${clinic.doctors.length === 1 ? " is" : "s are"} linked and will be unlinked.`
+      : "";
+    if (
+      !window.confirm(
+        `Delete ${clinic.name}?${doctorNote} This can't be undone.`,
+      )
+    )
+      return;
+    setError("");
+    setDeleting(clinic.id);
     try {
-      await deleteClinic(token, clinic.id)
-      if (editing !== 'new' && editing?.id === clinic.id) setEditing(null)
-      await onChanged()
+      await deleteClinic(token, clinic.id);
+      if (editing !== "new" && editing?.id === clinic.id) setEditing(null);
+      await onChanged();
     } catch (err) {
-      setError(errorMessage(err, 'Could not delete that clinic.'))
+      setError(errorMessage(err, "Could not delete that clinic."));
     } finally {
-      setDeleting(null)
+      setDeleting(null);
     }
   }
 
   async function handleAssign(clinic: AdminClinic, doctorId: string) {
-    if (!token || !doctorId) return
-    setError('')
-    setLinking(doctorId)
+    if (!token || !doctorId) return;
+    setError("");
+    setLinking(doctorId);
     try {
-      await assignDoctorToClinicAdmin(token, clinic.id, doctorId)
-      setPickingClinic(null)
-      await onChanged()
+      await assignDoctorToClinicAdmin(token, clinic.id, doctorId);
+      setPickingClinic(null);
+      await onChanged();
     } catch (err) {
-      setError(errorMessage(err, 'Could not link that doctor.'))
+      setError(errorMessage(err, "Could not link that doctor."));
     } finally {
-      setLinking(null)
+      setLinking(null);
     }
   }
 
   async function handleUnassign(clinic: AdminClinic, doctorId: string) {
-    if (!token) return
-    setError('')
-    setLinking(doctorId)
+    if (!token) return;
+    setError("");
+    setLinking(doctorId);
     try {
-      await unassignDoctorFromClinicAdmin(token, clinic.id, doctorId)
-      await onChanged()
+      await unassignDoctorFromClinicAdmin(token, clinic.id, doctorId);
+      await onChanged();
     } catch (err) {
-      setError(errorMessage(err, 'Could not unlink that doctor.'))
+      setError(errorMessage(err, "Could not unlink that doctor."));
     } finally {
-      setLinking(null)
+      setLinking(null);
     }
   }
 
@@ -111,23 +141,23 @@ export function ClinicsSection({
         </div>
         <button
           type="button"
-          onClick={() => setEditing(editing === 'new' ? null : 'new')}
+          onClick={() => setEditing(editing === "new" ? null : "new")}
           className="flex items-center gap-1.5 rounded-lg border border-ink/15 px-3 py-1.5 text-sm font-medium text-ink hover:bg-ink/5"
         >
           <PlusCircle className="h-4 w-4" />
-          {editing === 'new' ? 'Cancel' : 'Add clinic'}
+          {editing === "new" ? "Cancel" : "Add clinic"}
         </button>
       </div>
 
       {editing && (
         <ClinicForm
-          key={editing === 'new' ? 'new' : editing.id}
-          clinic={editing === 'new' ? null : editing}
+          key={editing === "new" ? "new" : editing.id}
+          clinic={editing === "new" ? null : editing}
           token={token}
           onCancel={() => setEditing(null)}
           onSaved={async () => {
-            setEditing(null)
-            await onChanged()
+            setEditing(null);
+            await onChanged();
           }}
         />
       )}
@@ -147,22 +177,30 @@ export function ClinicsSection({
       {error && <p className="mt-3 text-sm text-danger">{error}</p>}
 
       {clinics.length === 0 ? (
-        <p className="mt-4 text-sm text-ink/50">No clinics yet. Add the first one above.</p>
+        <p className="mt-4 text-sm text-ink/50">
+          No clinics yet. Add the first one above.
+        </p>
       ) : filtered.length === 0 ? (
         <p className="mt-4 text-sm text-ink/50">No clinics match "{query}".</p>
       ) : (
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((clinic) => (
-            <div key={clinic.id} className="card-raised flex flex-col overflow-hidden">
+            <div
+              key={clinic.id}
+              className="card-raised flex flex-col overflow-hidden"
+            >
               <ClinicPicture url={clinic.picture_url} />
               <div className="flex flex-1 flex-col p-4">
                 <p className="text-sm font-semibold text-ink">{clinic.name}</p>
                 {clinic.description && (
-                  <p className="mt-1 line-clamp-2 text-xs text-ink/60">{clinic.description}</p>
+                  <p className="mt-1 line-clamp-2 text-xs text-ink/60">
+                    {clinic.description}
+                  </p>
                 )}
                 {clinic.address && (
                   <p className="mt-2 flex items-start gap-1.5 text-xs text-ink/60">
-                    <MapPin className="mt-px h-3.5 w-3.5 shrink-0" /> {clinic.address}
+                    <MapPin className="mt-px h-3.5 w-3.5 shrink-0" />{" "}
+                    {clinic.address}
                   </p>
                 )}
                 {clinic.phone && (
@@ -172,13 +210,17 @@ export function ClinicsSection({
                 )}
                 {clinic.opening_hours && (
                   <p className="mt-1 flex items-center gap-1.5 text-xs text-ink/60">
-                    <Clock className="h-3.5 w-3.5 shrink-0" /> {clinic.opening_hours}
+                    <Clock className="h-3.5 w-3.5 shrink-0" />{" "}
+                    {clinic.opening_hours}
                   </p>
                 )}
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  {clinic.doctors.length === 0 && pickingClinic !== clinic.id && (
-                    <span className="text-xs text-ink/40">No doctors linked yet</span>
-                  )}
+                  {clinic.doctors.length === 0 &&
+                    pickingClinic !== clinic.id && (
+                      <span className="text-xs text-ink/40">
+                        No doctors linked yet
+                      </span>
+                    )}
                   {clinic.doctors.map((doctor) => (
                     <span
                       key={doctor.id}
@@ -211,10 +253,16 @@ export function ClinicsSection({
                         Choose a doctor…
                       </option>
                       {doctors
-                        .filter((d) => !clinic.doctors.some((linked) => linked.id === d.id))
+                        .filter(
+                          (d) =>
+                            !clinic.doctors.some(
+                              (linked) => linked.id === d.id,
+                            ),
+                        )
                         .map((d) => (
                           <option key={d.id} value={d.id}>
-                            Dr. {d.first_name} {d.last_name} · {d.specialization}
+                            Dr. {d.first_name} {d.last_name} ·{" "}
+                            {d.specialization}
                           </option>
                         ))}
                     </select>
@@ -250,7 +298,7 @@ export function ClinicsSection({
                     className="flex items-center gap-1.5 rounded-lg border border-danger/20 px-3 py-1.5 text-xs font-semibold text-danger hover:bg-danger/5 disabled:opacity-60"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                    {deleting === clinic.id ? 'Deleting…' : 'Delete'}
+                    {deleting === clinic.id ? "Deleting…" : "Delete"}
                   </button>
                 </div>
               </div>
@@ -259,19 +307,26 @@ export function ClinicsSection({
         </div>
       )}
     </>
-  )
+  );
 }
 
 function ClinicPicture({ url }: { url: string | null }) {
-  const [broken, setBroken] = useState(false)
+  const [broken, setBroken] = useState(false);
   if (url && !broken) {
-    return <img src={url} alt="" onError={() => setBroken(true)} className="h-32 w-full object-cover" />
+    return (
+      <img
+        src={url}
+        alt=""
+        onError={() => setBroken(true)}
+        className="h-32 w-full object-cover"
+      />
+    );
   }
   return (
     <div className="flex h-32 w-full items-center justify-center bg-gradient-to-br from-primary-300 to-primary-600">
       <Building2 className="h-9 w-9 text-white/90" strokeWidth={1.75} />
     </div>
-  )
+  );
 }
 
 /** Add (clinic = null) or edit form. Photo uploads straight away; its key is saved with the form. */
@@ -281,59 +336,62 @@ function ClinicForm({
   onCancel,
   onSaved,
 }: {
-  clinic: AdminClinic | null
-  token: string | null
-  onCancel: () => void
-  onSaved: () => Promise<void>
+  clinic: AdminClinic | null;
+  token: string | null;
+  onCancel: () => void;
+  onSaved: () => Promise<void>;
 }) {
-  const [name, setName] = useState(clinic?.name ?? '')
-  const [picture, setPicture] = useState(clinic?.picture ?? '')
-  const [preview, setPreview] = useState(clinic?.picture_url ?? '')
-  const [address, setAddress] = useState(clinic?.address ?? '')
-  const [phone, setPhone] = useState(clinic?.phone ?? '')
-  const [openingHours, setOpeningHours] = useState(clinic?.opening_hours ?? '')
-  const [description, setDescription] = useState(clinic?.description ?? '')
-  const [contactPersonName, setContactPersonName] = useState(clinic?.contact_person_name ?? '')
-  const [contactEmail, setContactEmail] = useState(clinic?.contact_email ?? '')
-  const [contactPhone, setContactPhone] = useState(clinic?.contact_phone ?? '')
+  const [name, setName] = useState(clinic?.name ?? "");
+  const [picture, setPicture] = useState(clinic?.picture ?? "");
+  const [preview, setPreview] = useState(clinic?.picture_url ?? "");
+  const [address, setAddress] = useState(clinic?.address ?? "");
+  const [phone, setPhone] = useState(clinic?.phone ?? "");
+  const [openingHours, setOpeningHours] = useState(clinic?.opening_hours ?? "");
+  const [description, setDescription] = useState(clinic?.description ?? "");
+  const [contactPersonName, setContactPersonName] = useState(
+    clinic?.contact_person_name ?? "",
+  );
+  const [contactEmail, setContactEmail] = useState(clinic?.contact_email ?? "");
+  const [contactPhone, setContactPhone] = useState(clinic?.contact_phone ?? "");
   const [availability, setAvailability] = useState<AvailabilitySlotPayload[]>(
-    clinic?.availability_slots.map((s) => ({ days: s.days, slot: s.slot })) ?? [],
-  )
-  const [uploading, setUploading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const fileInput = useRef<HTMLInputElement>(null)
+    clinic?.availability_slots.map((s) => ({ days: s.days, slot: s.slot })) ??
+      [],
+  );
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
 
   async function handleFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    event.target.value = '' // picking the same file again still fires
-    if (!file || !token) return
-    setError('')
-    setUploading(true)
+    const file = event.target.files?.[0];
+    event.target.value = ""; // picking the same file again still fires
+    if (!file || !token) return;
+    setError("");
+    setUploading(true);
     try {
-      const uploaded = await uploadClinicPicture(token, file)
-      setPicture(uploaded.picture)
-      setPreview(uploaded.picture_url)
+      const uploaded = await uploadClinicPicture(token, file);
+      setPicture(uploaded.picture);
+      setPreview(uploaded.picture_url);
     } catch (err) {
-      setError(errorMessage(err, 'Could not upload that photo.'))
+      setError(errorMessage(err, "Could not upload that photo."));
     } finally {
-      setUploading(false)
+      setUploading(false);
     }
   }
 
   async function handleSubmit(event: FormEvent) {
-    event.preventDefault()
-    if (!token) return
+    event.preventDefault();
+    if (!token) return;
     if (name.trim().length < 2) {
-      setError('Enter the clinic name.')
-      return
+      setError("Enter the clinic name.");
+      return;
     }
     if (!picture.trim()) {
-      setError('Upload a photo or paste an image link.')
-      return
+      setError("Upload a photo or paste an image link.");
+      return;
     }
-    setError('')
-    setSaving(true)
+    setError("");
+    setSaving(true);
     const fields = {
       name: name.trim(),
       picture: picture.trim(),
@@ -344,19 +402,28 @@ function ClinicForm({
       contact_person_name: contactPersonName.trim(),
       contact_email: contactEmail.trim(),
       contact_phone: contactPhone.trim(),
-    }
+    };
     const availabilityChanged =
       !clinic ||
       JSON.stringify(availability) !==
-        JSON.stringify(clinic.availability_slots.map((s) => ({ days: s.days, slot: s.slot })))
+        JSON.stringify(
+          clinic.availability_slots.map((s) => ({
+            days: s.days,
+            slot: s.slot,
+          })),
+        );
     try {
       if (clinic) {
         // Send only what changed; "" clears an optional field.
         const changes: Record<string, unknown> = Object.fromEntries(
-          Object.entries(fields).filter(([key, value]) => value !== (clinic[key as keyof typeof fields] ?? '')),
-        )
-        if (availabilityChanged) changes.availability_slots = availability
-        if (Object.keys(changes).length > 0) await updateClinic(token, clinic.id, changes)
+          Object.entries(fields).filter(
+            ([key, value]) =>
+              value !== (clinic[key as keyof typeof fields] ?? ""),
+          ),
+        );
+        if (availabilityChanged) changes.availability_slots = availability;
+        if (Object.keys(changes).length > 0)
+          await updateClinic(token, clinic.id, changes);
       } else {
         await createClinic(token, {
           ...fields,
@@ -368,19 +435,28 @@ function ClinicForm({
           contact_email: fields.contact_email || undefined,
           contact_phone: fields.contact_phone || undefined,
           availability_slots: availability,
-        })
+        });
       }
-      await onSaved()
+      await onSaved();
     } catch (err) {
-      setError(errorMessage(err, clinic ? 'Could not save your changes.' : 'Could not create that clinic.'))
+      setError(
+        errorMessage(
+          err,
+          clinic
+            ? "Could not save your changes."
+            : "Could not create that clinic.",
+        ),
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   return (
     <form onSubmit={handleSubmit} className="card-raised mt-4 space-y-3 p-5">
-      <p className="text-sm font-semibold text-ink">{clinic ? `Edit ${clinic.name}` : 'New clinic'}</p>
+      <p className="text-sm font-semibold text-ink">
+        {clinic ? `Edit ${clinic.name}` : "New clinic"}
+      </p>
       <div className="flex flex-wrap items-center gap-4">
         <div className="h-20 w-32 overflow-hidden rounded-lg border border-ink/10 bg-ink/5">
           {preview ? (
@@ -406,13 +482,17 @@ function ClinicForm({
             className="flex items-center gap-2 rounded-lg border border-ink/15 px-3 py-1.5 text-sm font-semibold text-ink hover:bg-ink/5 disabled:opacity-60"
           >
             <ImagePlus className="h-4 w-4" />
-            {uploading ? 'Uploading…' : preview ? 'Replace photo' : 'Upload photo'}
+            {uploading
+              ? "Uploading…"
+              : preview
+                ? "Replace photo"
+                : "Upload photo"}
           </button>
           <input
-            value={picture.startsWith('http') ? picture : ''}
+            value={picture.startsWith("http") ? picture : ""}
             onChange={(e) => {
-              setPicture(e.target.value)
-              setPreview(e.target.value)
+              setPicture(e.target.value);
+              setPreview(e.target.value);
             }}
             placeholder="…or paste an image link (https://…)"
             className={inputClass}
@@ -420,8 +500,19 @@ function ClinicForm({
         </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Clinic name" maxLength={50} className={inputClass} />
-        <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone (optional)" className={inputClass} />
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Clinic name"
+          maxLength={50}
+          className={inputClass}
+        />
+        <input
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="Phone (optional)"
+          className={inputClass}
+        />
         <input
           value={openingHours}
           onChange={(e) => setOpeningHours(e.target.value)}
@@ -471,8 +562,12 @@ function ClinicForm({
       </div>
       {error && <p className="text-sm text-danger">{error}</p>}
       <div className="flex gap-2">
-        <button type="submit" className="btn-raised px-4 py-2 text-sm" disabled={saving || uploading}>
-          {saving ? 'Saving…' : clinic ? 'Save changes' : 'Create clinic'}
+        <button
+          type="submit"
+          className="btn-raised px-4 py-2 text-sm"
+          disabled={saving || uploading}
+        >
+          {saving ? "Saving…" : clinic ? "Save changes" : "Create clinic"}
         </button>
         <button
           type="button"
@@ -483,5 +578,5 @@ function ClinicForm({
         </button>
       </div>
     </form>
-  )
+  );
 }

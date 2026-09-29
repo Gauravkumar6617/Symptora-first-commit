@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 
 import { AppointmentCard } from '@/components/ui/appointment-card';
 import { Button } from '@/components/ui/button';
@@ -10,15 +10,19 @@ import { ScreenHeader } from '@/components/ui/screen-header';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { SkeletonList } from '@/components/ui/skeleton';
 import { Spacing, Typography } from '@/constants/theme';
-import { usePatientAppointments } from '@/hooks/use-queries';
+import { openVideoCall } from '@/lib/call';
+import { useCancelAppointment, usePatientAppointments } from '@/hooks/use-queries';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuthStore } from '@/store/authStore';
 
 type Filter = 'upcoming' | 'past';
 
 export default function PatientAppointmentsScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const accessToken = useAuthStore((state) => state.accessToken);
   const { data: appointments, isLoading, refetch, isRefetching } = usePatientAppointments();
+  const cancelAppointment = useCancelAppointment();
   const [filter, setFilter] = useState<Filter>('upcoming');
 
   const { upcoming, past } = useMemo(() => {
@@ -30,6 +34,17 @@ export default function PatientAppointmentsScreen() {
   }, [appointments]);
 
   const visible = filter === 'upcoming' ? upcoming : past;
+
+  function confirmCancel(id: string) {
+    Alert.alert('Cancel this appointment?', undefined, [
+      { text: 'Keep it', style: 'cancel' },
+      {
+        text: 'Cancel appointment',
+        style: 'destructive',
+        onPress: () => cancelAppointment.mutate(id, { onError: () => Alert.alert('Could not cancel it. Please try again.') }),
+      },
+    ]);
+  }
 
   return (
     <Screen tabBarInset topInset refreshing={isRefetching} onRefresh={refetch}>
@@ -57,7 +72,7 @@ export default function PatientAppointmentsScreen() {
                 : 'Completed and cancelled visits collect here for your records.'
             }
             actionLabel={filter === 'upcoming' ? 'Book a consult' : undefined}
-            onAction={filter === 'upcoming' ? () => router.push('/(patient)/telemedicine') : undefined}
+            onAction={filter === 'upcoming' ? () => router.push('/(patient)/book-appointment') : undefined}
           />
         ) : (
           visible.map((appointment) => (
@@ -65,15 +80,23 @@ export default function PatientAppointmentsScreen() {
               key={appointment.id}
               appointment={appointment}
               primaryLabel={appointment.doctorName}
-              onPress={() => router.push('/(patient)/telemedicine')}
               footer={
-                appointment.status === 'scheduled' && appointment.mode === 'video' ? (
-                  <Button
-                    label="Join video consult"
-                    icon="videocam"
-                    size="sm"
-                    onPress={() => router.push('/(patient)/telemedicine')}
-                  />
+                appointment.status === 'scheduled' || appointment.status === 'rescheduled' ? (
+                  <View style={styles.footerRow}>
+                    <Button
+                      label="Join video call"
+                      icon="videocam"
+                      size="sm"
+                      style={{ flex: 1 }}
+                      onPress={() => openVideoCall('appointment', appointment.id, accessToken!)}
+                    />
+                    <Button
+                      label="Cancel"
+                      variant="ghost"
+                      size="sm"
+                      onPress={() => confirmCancel(appointment.id)}
+                    />
+                  </View>
                 ) : undefined
               }
             />
@@ -87,7 +110,7 @@ export default function PatientAppointmentsScreen() {
             label="Book another consult"
             variant="outline"
             icon="add"
-            onPress={() => router.push('/(patient)/telemedicine')}
+            onPress={() => router.push('/(patient)/book-appointment')}
             style={{ marginTop: Spacing.four }}
           />
           <Text style={[styles.note, { color: theme.textMuted }]}>
@@ -103,6 +126,10 @@ const styles = StyleSheet.create({
   list: {
     gap: Spacing.three,
     marginTop: Spacing.four,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
   },
   note: {
     ...Typography.caption,

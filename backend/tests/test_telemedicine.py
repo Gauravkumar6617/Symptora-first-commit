@@ -103,3 +103,19 @@ def test_only_patient_or_accepted_doctor_may_join_the_call(db, setup):
     assert can_join_consultation_call(db, patient, accepted) is True
     assert can_join_consultation_call(db, doc_user, accepted) is True
     assert can_join_consultation_call(db, other_doc_user, accepted) is False
+
+
+def test_patient_and_treating_doctor_history_lists(db, setup):
+    patient, doc_user, other_doc_user, _admin, _doctor, _other = setup
+    service = TelemedicineService(db)
+    consultation = service.start(patient, TelemedicineStart(reason="Fever"))
+    service.accept(doc_user, consultation.id)
+
+    mine = service.list_for_patient(patient.id)
+    assert [c.id for c in mine] == [consultation.id]
+
+    handled = service.list_for_current_doctor(doc_user)
+    assert [c.id for c in handled] == [consultation.id]
+
+    # a doctor who never handled anything gets an empty list, not an error
+    assert service.list_for_current_doctor(other_doc_user) == []

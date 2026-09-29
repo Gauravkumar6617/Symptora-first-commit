@@ -1,12 +1,13 @@
 /**
  * API layer.
  *
- * Auth calls hit the real FastAPI backend when EXPO_PUBLIC_API_URL is set
- * (see backend/app/routers/userRouter.py). The signed-in user always comes
- * from GET /users/me — the same source the website uses. Catalog/appointment data is still
- * served from src/data/mock/* — each fetch* below is a one-line swap to a
- * request once those routes exist. `src/data/specialties.ts` is NOT mock;
- * it's real static content this app ships with.
+ * Auth, family members, clinics/doctors, appointments and telemedicine all
+ * hit the real FastAPI backend when EXPO_PUBLIC_API_URL is set (see
+ * backend/app/routers/*.py). The signed-in user always comes from
+ * GET /users/me — the same source the website uses. Only the blog/contact
+ * catalog and notifications still fall back to src/data/mock/* in demo mode.
+ * `src/data/specialties.ts` is NOT mock; it's real static content this app
+ * ships with.
  */
 
 import { type BlogPost, blogPosts, catalogDoctors, partnerClinics } from '@/data/mock/directory';
@@ -15,11 +16,15 @@ import { useAuthStore } from '@/store/authStore';
 import { specialties } from '@/data/specialties';
 import type {
   Appointment,
+  AppointmentCreatePayload,
+  AppointmentRecord,
   AppNotification,
   AuthSession,
   AuthUser,
+  ClinicDoctor,
   ClinicRecord,
   CurrentUserResponse,
+  DoctorAvailability,
   DoctorClinicLink,
   FamilyMember,
   FamilyMemberCreatePayload,
@@ -31,6 +36,8 @@ import type {
   PublicClinic,
   Symptom,
   SymptomCheck,
+  TelemedicineConsultationRecord,
+  TelemedicineStartPayload,
   UserCreatePayload,
   UserResponse,
   UserUpdatePayload,
@@ -42,6 +49,17 @@ export const API_PREFIX = '/api/v1';
 
 /** With no API URL configured the app runs against local mock data. */
 export const isDemoMode = !API_BASE_URL;
+
+/** Base URL of the deployed web client — the video call itself runs there
+ * (see client/src/pages/call/CallPage.tsx); the app hands off to it in the
+ * in-app browser instead of bundling a native WebRTC stack. */
+const WEB_APP_URL = (process.env.EXPO_PUBLIC_WEB_URL?.replace(/\/$/, '')) ?? 'https://symptora-ten.vercel.app';
+
+/** URL for the in-app browser handoff into a video call. `token` rides in
+ * the query string since the web page has no shared session with the app. */
+export function callHandoffUrl(kind: 'appointment' | 'telemedicine', id: string, token: string): string {
+  return `${WEB_APP_URL}/call/${kind}/${id}?token=${encodeURIComponent(token)}`;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -423,27 +441,11 @@ export async function deleteFamilyMember(token: string, memberId: string): Promi
   await request(`/family-members/${memberId}`, { method: 'DELETE', token });
 }
 
-// ------------------------------------------------------- mocked resources
-//
+// -------------------------------------------------------------------------
 // Health Check history is NOT fetched from here — the app reads/writes it
 // from useHealthCheckStore (backed by on-device AsyncStorage), which starts
 // empty for a new user. There is no fetchRiskChecks; don't add screens that
 // call one.
-//
-// Appointments start empty too — there is no booking flow or backend route
-// yet, so there is nothing real to seed a new user with. `mockAppointments`/
-// `mockDoctorAppointments` in src/data/mock/people.ts are kept only as
-// sample shapes for whoever wires up the real appointments endpoint.
-
-export async function fetchPatientAppointments(): Promise<Appointment[]> {
-  await delay();
-  return [];
-}
-
-export async function fetchDoctorAppointments(): Promise<Appointment[]> {
-  await delay();
-  return [];
-}
 
 export async function fetchNotifications(): Promise<AppNotification[]> {
   await delay();
@@ -469,6 +471,8 @@ export async function fetchClinics(): Promise<PublicClinic[]> {
       description: `${clinic.openHours} · ${clinic.services.join(', ')}`,
       address: `${clinic.address}, ${clinic.city}`,
       phone: null,
+      opening_hours: clinic.openHours,
+      availability_slots: [],
       doctors: [],
     }));
   }
@@ -478,6 +482,133 @@ export async function fetchClinics(): Promise<PublicClinic[]> {
 export async function fetchCatalogDoctors() {
   await delay();
   return catalogDoctors;
+}
+
+// ----------------------------------------------------------- appointments
+
+function toAppointmentCard(record: AppointmentRecord): Appointment {
+  return {
+    id: record.id,
+    patientName: record.patient_name,
+    doctorName: record.doctor_name ?? 'Doctor',
+    specialization: record.doctor_specialization ?? '',
+    date: record.appointment_date,
+    time: record.slot.toUpperCase(),
+    status: record.status,
+    mode: 'in-person',
+    clinic: record.clinic_name ?? undefined,
+    reason: record.reason,
+  };
+}
+
+/** GET /appointments/me — the caller's own bookings. */
+export async function fetchPatientAppointments(): Promise<Appointment[]> {
+  const token = useAuthStore.getState().accessToken;
+  if (!token) return [];
+  const records = await request<AppointmentRecord[]>('/appointments/me', { token });
+  return records.map(toAppointmentCard);
+}
+
+/** GET /appointments/doctor/me — appointments booked with the calling doctor. */
+export async function fetchDoctorAppointments(): Promise<Appointment[]> {
+  const token = useAuthStore.getState().accessToken;
+  if (!token) return [];
+  const records = await request<AppointmentRecord[]>('/appointments/doctor/me', { token });
+  return records.map((r) => ({ ...toAppointmentCard(r), doctorName: r.patient_name }));
+}
+
+/** Doctors bookable right now, flattened across every partner clinic — each
+ * tagged with the clinic it belongs to, for the booking wizard. */
+export async function fetchClinicDoctors(): Promise<
+  (ClinicDoctor & { clinicId: string; clinicName: string })[]
+> {
+  const clinics = await fetchClinics();
+  return clinics.flatMap((clinic) =>
+    clinic.doctors.map((doctor) => ({ ...doctor, clinicId: clinic.id, clinicName: clinic.name })),
+  );
+}
+
+/** GET /doctor/{id}/public — a doctor's weekly availability, for picking a slot. */
+export async function fetchDoctorAvailability(doctorId: string): Promise<DoctorAvailability[]> {
+  const profile = await request<{ availability_slots: DoctorAvailability[] }>(`/doctor/${doctorId}/public`);
+  return profile.availability_slots;
+}
+
+/** POST /appointments — books a clinic appointment; best-effort creates a
+ * video-call room and syncs the booking to Medplum. */
+export async function bookAppointment(
+  token: string,
+  payload: AppointmentCreatePayload,
+): Promise<Appointment> {
+  const record = await request<AppointmentRecord>('/appointments', { method: 'POST', body: payload, token });
+  return toAppointmentCard(record);
+}
+
+/** PATCH /appointments/{id}/cancel */
+export async function cancelAppointmentApi(token: string, appointmentId: string): Promise<void> {
+  await request(`/appointments/${appointmentId}/cancel`, { method: 'PATCH', token });
+}
+
+// ------------------------------------------------------------- telemedicine
+
+/** POST /telemedicine — patients only. Starts an instant consultation and
+ * notifies every doctor currently watching the queue. */
+export async function startConsultation(
+  token: string,
+  payload: TelemedicineStartPayload,
+): Promise<TelemedicineConsultationRecord> {
+  return request<TelemedicineConsultationRecord>('/telemedicine', { method: 'POST', body: payload, token });
+}
+
+export async function getConsultation(token: string, id: string): Promise<TelemedicineConsultationRecord> {
+  return request<TelemedicineConsultationRecord>(`/telemedicine/${id}`, { token });
+}
+
+/** GET /telemedicine/me — the caller's own instant consultations. */
+export async function fetchMyConsultations(): Promise<TelemedicineConsultationRecord[]> {
+  const token = useAuthStore.getState().accessToken;
+  if (!token) return [];
+  return request<TelemedicineConsultationRecord[]>('/telemedicine/me', { token });
+}
+
+/** GET /telemedicine/doctor/me — instant consultations the calling doctor has accepted. */
+export async function fetchHandledConsultations(): Promise<TelemedicineConsultationRecord[]> {
+  const token = useAuthStore.getState().accessToken;
+  if (!token) return [];
+  return request<TelemedicineConsultationRecord[]>('/telemedicine/doctor/me', { token });
+}
+
+/** GET /telemedicine/pending — approved doctors only; the current queue. */
+export async function fetchPendingConsultations(token: string): Promise<TelemedicineConsultationRecord[]> {
+  return request<TelemedicineConsultationRecord[]>('/telemedicine/pending', { token });
+}
+
+/** POST /telemedicine/{id}/accept — first approved doctor to call it wins. */
+export async function acceptConsultation(token: string, id: string): Promise<TelemedicineConsultationRecord> {
+  return request<TelemedicineConsultationRecord>(`/telemedicine/${id}/accept`, { method: 'POST', token });
+}
+
+export async function cancelConsultationApi(token: string, id: string): Promise<void> {
+  await request(`/telemedicine/${id}/cancel`, { method: 'PATCH', token });
+}
+
+export async function completeConsultationApi(token: string, id: string): Promise<void> {
+  await request(`/telemedicine/${id}/complete`, { method: 'PATCH', token });
+}
+
+function wsBaseUrl(): string {
+  return API_BASE_URL.replace(/^http/, 'ws');
+}
+
+/** wss://... socket a waiting patient listens on for the "accepted" push. */
+export function telemedicinePatientSocketUrl(consultationId: string, token: string): string {
+  return `${wsBaseUrl()}${API_PREFIX}/ws/telemedicine/patient/${consultationId}?token=${encodeURIComponent(token)}`;
+}
+
+/** wss://... socket an approved doctor listens on for live queue pushes —
+ * staying connected is what makes them "available" for instant consultations. */
+export function telemedicineDoctorSocketUrl(token: string): string {
+  return `${wsBaseUrl()}${API_PREFIX}/ws/telemedicine/doctor?token=${encodeURIComponent(token)}`;
 }
 
 /** backend schemas/blog.BlogPostRead — posts admins write on the website. */

@@ -1184,6 +1184,16 @@ export function telemedicineDoctorSocketUrl(token: string): string {
   return `${wsBaseUrl()}${API_PREFIX}/ws/telemedicine/doctor?token=${encodeURIComponent(token)}`
 }
 
+/** GET /telemedicine/me — the caller's own instant consultations, pending through completed. */
+export async function listMyConsultations(token: string): Promise<TelemedicineConsultation[]> {
+  return request<TelemedicineConsultation[]>('/telemedicine/me', { token })
+}
+
+/** GET /telemedicine/doctor/me — instant consultations the calling doctor has accepted. */
+export async function listMyHandledConsultations(token: string): Promise<TelemedicineConsultation[]> {
+  return request<TelemedicineConsultation[]>('/telemedicine/doctor/me', { token })
+}
+
 /** Turns the AvatarUpload data URL into a File for the multipart request. */
 export async function dataUrlToFile(
   dataUrl: string,

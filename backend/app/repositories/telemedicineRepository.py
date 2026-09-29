@@ -36,6 +36,22 @@ class TelemedicineRepository:
             .all()
         )
 
+    def list_for_patient(self, patient_id: str) -> list[TelemedicineConsultationModel]:
+        return (
+            self.db.query(TelemedicineConsultationModel)
+            .filter(TelemedicineConsultationModel.patient_id == patient_id)
+            .order_by(TelemedicineConsultationModel.created_at.desc())
+            .all()
+        )
+
+    def list_for_doctor(self, doctor_profile_id: str) -> list[TelemedicineConsultationModel]:
+        return (
+            self.db.query(TelemedicineConsultationModel)
+            .filter(TelemedicineConsultationModel.doctor_profile_id == doctor_profile_id)
+            .order_by(TelemedicineConsultationModel.created_at.desc())
+            .all()
+        )
+
     def claim(self, consultation_id: str, doctor_profile_id: str) -> bool:
         """Atomically assign a doctor — only if still pending, so two doctors
         accepting at once can't both win. True if this call won the claim."""

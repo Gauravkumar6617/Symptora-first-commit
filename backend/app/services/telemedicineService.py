@@ -84,6 +84,15 @@ class TelemedicineService:
             raise PermissionError("Only an approved doctor can view the consultation queue")
         return [self._label(c) for c in self.repo.list_pending()]
 
+    def list_for_patient(self, patient_id: str) -> list[TelemedicineConsultationModel]:
+        return [self._label(c) for c in self.repo.list_for_patient(patient_id)]
+
+    def list_for_current_doctor(self, current_user) -> list[TelemedicineConsultationModel]:
+        doctor = self.doctor_repo.get_by_user_id(current_user.id)
+        if not doctor:
+            raise PermissionError("No doctor application found for this account")
+        return [self._label(c) for c in self.repo.list_for_doctor(doctor.id)]
+
     def _label(self, consultation: TelemedicineConsultationModel) -> TelemedicineConsultationModel:
         doctor = consultation.doctor_profile
         consultation.doctor_name = self._doctor_display_name(doctor) if doctor else None

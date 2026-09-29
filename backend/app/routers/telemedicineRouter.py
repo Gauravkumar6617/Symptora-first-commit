@@ -49,6 +49,24 @@ def list_pending_consultations(
     return TelemedicineController.list_pending(current_user, service)
 
 
+@router.get("/telemedicine/me", response_model=List[TelemedicineRead])
+def list_my_consultations(
+    current_user: UserModel = Depends(get_current_user),
+    service: TelemedicineService = Depends(get_service),
+):
+    """The caller's own instant consultations, pending through completed."""
+    return TelemedicineController.list_mine(current_user, service)
+
+
+@router.get("/telemedicine/doctor/me", response_model=List[TelemedicineRead])
+def list_my_handled_consultations(
+    current_user: UserModel = Depends(get_current_user),
+    service: TelemedicineService = Depends(get_service),
+):
+    """Instant consultations the calling doctor has accepted, most recent first."""
+    return TelemedicineController.list_for_doctor(current_user, service)
+
+
 @router.get("/telemedicine/{consultation_id}", response_model=TelemedicineRead)
 def get_consultation(
     consultation_id: str,

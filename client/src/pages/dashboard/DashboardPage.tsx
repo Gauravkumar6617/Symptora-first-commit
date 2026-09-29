@@ -6,11 +6,14 @@ import {
   type Appointment,
   ApiError,
   cancelAppointment,
+  cancelConsultation,
   type DoctorApplication,
   getMyDoctorApplication,
   listChecks,
   listMyAppointments,
+  listMyConsultations,
   type SymptomCheck,
+  type TelemedicineConsultation,
 } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 import { relationLabel, useFamilyStore } from '@/store/familyStore'
@@ -75,6 +78,8 @@ export function DashboardPage() {
       {application?.status === 'approved' && <MyClinicsCard />}
 
       <MyAppointmentsSection token={token} />
+
+      <MyConsultationsSection token={token} />
 
       <RecentChecks checks={checks} />
 
@@ -191,6 +196,91 @@ function MyAppointmentsSection({ token }: { token: string | null }) {
                   className="rounded-lg border border-danger/20 px-3 py-1.5 text-xs font-semibold text-danger hover:bg-danger/5 disabled:opacity-60"
                 >
                   {cancelling === a.id ? 'Cancelling…' : 'Cancel'}
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const consultationStatusBadge: Record<TelemedicineConsultation['status'], string> = {
+  pending: 'bg-warning/10 text-warning',
+  in_progress: 'bg-primary/10 text-primary',
+  completed: 'bg-success/10 text-success',
+  cancelled: 'bg-ink/10 text-ink/50',
+}
+
+/** Instant video consultations you've started, most recent first. */
+function MyConsultationsSection({ token }: { token: string | null }) {
+  const queryClient = useQueryClient()
+  const [cancelling, setCancelling] = useState<string | null>(null)
+
+  const { data: consultations = [] } = useQuery({
+    queryKey: ['my-consultations'],
+    queryFn: () => listMyConsultations(token!),
+    enabled: Boolean(token),
+  })
+
+  async function handleCancel(id: string) {
+    if (!token) return
+    setCancelling(id)
+    try {
+      await cancelConsultation(token, id)
+      await queryClient.invalidateQueries({ queryKey: ['my-consultations'] })
+    } finally {
+      setCancelling(null)
+    }
+  }
+
+  if (consultations.length === 0) return null
+
+  return (
+    <div className="mt-10">
+      <h2 className="text-lg font-bold text-ink">My video consultations</h2>
+      <div className="mt-4 space-y-3">
+        {consultations.map((c) => (
+          <div key={c.id} className="card-raised flex flex-wrap items-center justify-between gap-3 p-4">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-ink">
+                {c.doctor_name ?? (c.status === 'pending' ? 'Waiting for a doctor…' : 'Doctor')}
+                {c.doctor_specialization ? ` · ${c.doctor_specialization}` : ''}
+              </p>
+              <p className="mt-1 text-xs text-ink/50">{c.reason}</p>
+              <p className="mt-0.5 text-xs text-ink/40">{new Date(c.created_at).toLocaleString()}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${consultationStatusBadge[c.status]}`}
+              >
+                {c.status.replace('_', ' ')}
+              </span>
+              {c.status === 'in_progress' && (
+                <Link
+                  to={`/call/telemedicine/${c.id}`}
+                  className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                >
+                  <Video className="h-3.5 w-3.5" /> Rejoin
+                </Link>
+              )}
+              {c.status === 'pending' && (
+                <Link
+                  to={`/telemedicine/waiting/${c.id}`}
+                  className="text-xs font-semibold text-primary hover:underline"
+                >
+                  View
+                </Link>
+              )}
+              {c.status === 'pending' && (
+                <button
+                  type="button"
+                  onClick={() => handleCancel(c.id)}
+                  disabled={cancelling === c.id}
+                  className="rounded-lg border border-danger/20 px-3 py-1.5 text-xs font-semibold text-danger hover:bg-danger/5 disabled:opacity-60"
+                >
+                  {cancelling === c.id ? 'Cancelling…' : 'Cancel'}
                 </button>
               )}
             </div>

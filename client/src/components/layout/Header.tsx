@@ -61,6 +61,12 @@ export function Header() {
                 </Link>
               )}
               <Link
+                to={user?.isDoctor ? '/doctor/dashboard' : '/dashboard'}
+                className="shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium text-ink hover:bg-ink/5"
+              >
+                Dashboard
+              </Link>
+              <Link
                 to="/profile"
                 className="flex max-w-[12rem] items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-ink hover:bg-ink/5"
               >
@@ -142,6 +148,13 @@ export function Header() {
                     Admin
                   </Link>
                 )}
+                <Link
+                  to={user?.isDoctor ? '/doctor/dashboard' : '/dashboard'}
+                  onClick={() => setMenuOpen(false)}
+                  className="rounded-lg px-3 py-1.5 text-sm font-medium text-ink"
+                >
+                  Dashboard
+                </Link>
                 <Link
                   to="/profile"
                   onClick={() => setMenuOpen(false)}

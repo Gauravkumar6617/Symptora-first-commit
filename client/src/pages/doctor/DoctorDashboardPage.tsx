@@ -10,6 +10,7 @@ import {
   cancelAppointment,
   type DoctorApplication,
   getMyDoctorApplication,
+  listMyHandledConsultations,
   listMyPatientAppointments,
   listPendingConsultations,
   type TelemedicineConsultation,
@@ -45,6 +46,7 @@ export function DoctorDashboardPage() {
 
       <InstantConsultationSection token={token} />
       <MyAppointmentsSection token={token} />
+      <ConsultationHistorySection token={token} />
       <MyProfileSection token={token} />
     </div>
   )
@@ -142,6 +144,58 @@ function InstantConsultationSection({ token }: { token: string | null }) {
             >
               <Video className="h-4 w-4" /> {accepting === c.id ? 'Connecting…' : 'Accept'}
             </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const consultationStatusBadge: Record<TelemedicineConsultation['status'], string> = {
+  pending: 'bg-warning/10 text-warning',
+  in_progress: 'bg-primary/10 text-primary',
+  completed: 'bg-success/10 text-success',
+  cancelled: 'bg-ink/10 text-ink/50',
+}
+
+/** Instant consultations this doctor has accepted, most recent first. */
+function ConsultationHistorySection({ token }: { token: string | null }) {
+  const { data: consultations = [] } = useQuery({
+    queryKey: ['my-handled-consultations'],
+    queryFn: () => listMyHandledConsultations(token!),
+    enabled: Boolean(token),
+  })
+
+  if (consultations.length === 0) return null
+
+  return (
+    <div className="mt-10">
+      <h2 className="text-lg font-bold text-ink">Consultation history</h2>
+      <div className="mt-4 space-y-3">
+        {consultations.map((c) => (
+          <div key={c.id} className="card-raised flex flex-wrap items-center justify-between gap-3 p-4">
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+                <User className="h-3.5 w-3.5 shrink-0" /> {c.patient_name ?? 'Patient'}
+              </p>
+              <p className="mt-1 text-xs text-ink/70">{c.reason}</p>
+              <p className="mt-0.5 text-xs text-ink/40">{new Date(c.created_at).toLocaleString()}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${consultationStatusBadge[c.status]}`}
+              >
+                {c.status.replace('_', ' ')}
+              </span>
+              {c.status === 'in_progress' && (
+                <Link
+                  to={`/call/telemedicine/${c.id}`}
+                  className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                >
+                  <Video className="h-3.5 w-3.5" /> Rejoin
+                </Link>
+              )}
+            </div>
           </div>
         ))}
       </div>

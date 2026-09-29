@@ -1,21 +1,31 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
+  acceptConsultation,
+  bookAppointment,
+  cancelAppointmentApi,
+  cancelConsultationApi,
   fetchBlogPost,
   fetchBlogPosts,
   fetchCatalogDoctors,
   fetchChecks,
+  fetchClinicDoctors,
   fetchClinics,
   fetchDoctorAppointments,
+  fetchDoctorAvailability,
+  fetchHandledConsultations,
+  fetchMyConsultations,
   fetchNotifications,
   fetchPatientAppointments,
+  fetchPendingConsultations,
   fetchSpecialties,
   fetchSymptoms,
   parseSymptoms,
   predictDisease,
+  startConsultation,
 } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
-import type { PatientDetails } from '@/types';
+import type { AppointmentCreatePayload, PatientDetails, TelemedicineStartPayload } from '@/types';
 
 // Family members come from useFamilyStore. Symptom-checker history is on the
 // server (useChecks); questionnaire Health Checks stay in useHealthCheckStore.
@@ -98,5 +108,84 @@ export function useChecks(memberId?: string) {
     queryKey: ['checks', accessToken, memberId ?? 'all'],
     queryFn: () => fetchChecks(accessToken, memberId),
     enabled: !!accessToken,
+  });
+}
+
+// ------------------------------------------------------------ appointments
+
+/** Doctors bookable right now, flattened across every partner clinic. */
+export function useClinicDoctors() {
+  return useQuery({ queryKey: ['clinic-doctors'], queryFn: fetchClinicDoctors });
+}
+
+export function useDoctorAvailability(doctorId: string | null) {
+  return useQuery({
+    queryKey: ['doctor-availability', doctorId],
+    queryFn: () => fetchDoctorAvailability(doctorId!),
+    enabled: Boolean(doctorId),
+  });
+}
+
+export function useBookAppointment() {
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: AppointmentCreatePayload) => bookAppointment(accessToken!, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['appointments'] }),
+  });
+}
+
+export function useCancelAppointment() {
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (appointmentId: string) => cancelAppointmentApi(accessToken!, appointmentId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['appointments'] }),
+  });
+}
+
+// ------------------------------------------------------------ telemedicine
+
+export function useMyConsultations() {
+  return useQuery({ queryKey: ['consultations', 'mine'], queryFn: fetchMyConsultations });
+}
+
+export function useHandledConsultations() {
+  return useQuery({ queryKey: ['consultations', 'handled'], queryFn: fetchHandledConsultations });
+}
+
+/** Initial page load for the doctor's live queue — the queue itself then
+ * updates over the /ws/telemedicine/doctor socket. */
+export function usePendingConsultations(enabled: boolean) {
+  const accessToken = useAuthStore((state) => state.accessToken);
+  return useQuery({
+    queryKey: ['consultations', 'pending'],
+    queryFn: () => fetchPendingConsultations(accessToken!),
+    enabled: enabled && Boolean(accessToken),
+  });
+}
+
+export function useStartConsultation() {
+  const accessToken = useAuthStore((state) => state.accessToken);
+  return useMutation({
+    mutationFn: (payload: TelemedicineStartPayload) => startConsultation(accessToken!, payload),
+  });
+}
+
+export function useAcceptConsultation() {
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (consultationId: string) => acceptConsultation(accessToken!, consultationId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['consultations'] }),
+  });
+}
+
+export function useCancelConsultation() {
+  const accessToken = useAuthStore((state) => state.accessToken);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (consultationId: string) => cancelConsultationApi(accessToken!, consultationId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['consultations'] }),
   });
 }

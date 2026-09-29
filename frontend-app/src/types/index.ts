@@ -131,17 +131,7 @@ export interface ClinicRecord {
   updated_at: string;
 }
 
-/** backend: schemas/clinic.PublicClinicRead — GET /clinics/directory. */
-export interface PublicClinic {
-  id: string;
-  name: string;
-  picture_url: string | null;
-  description: string | null;
-  address: string | null;
-  phone: string | null;
-  /** Approved doctors working there. */
-  doctors: { id: string; name: string; specialization: string }[];
-}
+// PublicClinic is defined further below, alongside the other real-appointment types.
 
 /** backend: DoctorClinicRead — the calling doctor's link to one clinic. */
 export interface DoctorClinicLink {
@@ -209,6 +199,113 @@ export interface Appointment {
   mode: 'in-person' | 'video';
   clinic?: string;
   reason?: string;
+}
+
+// -------------------------------------------------------- real appointments
+
+/** backend: enumModel.TimeSlot */
+export type TimeSlot = 'am' | 'pm';
+
+/** backend: enumModel.DayOfWeek */
+export const DAYS_OF_WEEK = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+] as const;
+export type DayOfWeek = (typeof DAYS_OF_WEEK)[number];
+
+export interface DoctorAvailability {
+  days: DayOfWeek;
+  slot: TimeSlot;
+}
+
+/** backend: schemas/clinic.ClinicDoctor */
+export interface ClinicDoctor {
+  id: string; // doctor profile id
+  name: string;
+  specialization: string;
+  fee?: number | null;
+  avatar_url?: string | null;
+  years_of_practice?: number | null;
+  languages?: string | null;
+}
+
+/** backend: schemas/clinic.PublicClinicRead — GET /clinics/directory. */
+export interface PublicClinic {
+  id: string;
+  name: string;
+  picture_url: string | null;
+  description: string | null;
+  address: string | null;
+  phone: string | null;
+  opening_hours?: string | null;
+  availability_slots: DoctorAvailability[];
+  doctors: ClinicDoctor[];
+}
+
+/** backend: schemas/appointment.AppointmentCreate */
+export interface AppointmentCreatePayload {
+  doctor_profile_id: string;
+  clinic_id: string;
+  family_member_id?: string | null;
+  patient_name: string;
+  patient_email: string;
+  patient_phone: string;
+  reason: string;
+  notes?: string;
+  appointment_date: string; // YYYY-MM-DD
+  slot: TimeSlot;
+}
+
+/** backend: schemas/appointment.AppointmentRead */
+export interface AppointmentRecord {
+  id: string;
+  patient_id: string;
+  family_member_id: string | null;
+  doctor_profile_id: string;
+  clinic_id: string;
+  patient_name: string;
+  patient_email: string;
+  patient_phone: string;
+  reason: string;
+  notes: string | null;
+  appointment_date: string;
+  slot: TimeSlot;
+  status: AppointmentStatus;
+  meet_link: string | null;
+  fee: number | null;
+  doctor_name: string | null;
+  doctor_specialization: string | null;
+  clinic_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// -------------------------------------------------------------- telemedicine
+
+/** backend: schemas/telemedicine.TelemedicineStart */
+export interface TelemedicineStartPayload {
+  family_member_id?: string | null;
+  reason: string;
+}
+
+/** backend: schemas/telemedicine.TelemedicineRead */
+export interface TelemedicineConsultationRecord {
+  id: string;
+  patient_id: string;
+  family_member_id: string | null;
+  doctor_profile_id: string | null;
+  reason: string;
+  status: ConsultationStatus;
+  patient_name: string | null;
+  doctor_name: string | null;
+  doctor_specialization: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 
