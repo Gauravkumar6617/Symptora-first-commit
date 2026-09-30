@@ -1,5 +1,6 @@
-import { ShieldCheck, Star, Stethoscope } from 'lucide-react'
+import { ShieldCheck, Star } from 'lucide-react'
 import type { ReactNode } from 'react'
+import symptoraLogo from '@/assets/symptora-logo.png'
 import { HeroIllustration } from '@/components/marketing/HeroIllustration'
 import { APP_NAME, APP_TAGLINE } from '@/lib/constants'
 
@@ -23,11 +24,8 @@ export function AuthSplitLayout({ title, subtitle, children }: AuthSplitLayoutPr
           aria-hidden
         />
 
-        <div className="relative flex items-center gap-2 text-lg font-bold">
-          <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white/15">
-            <Stethoscope className="h-5 w-5" />
-          </span>
-          {APP_NAME}
+        <div className="relative w-fit rounded-2xl bg-white px-4 py-2">
+          <img src={symptoraLogo} alt={APP_NAME} className="h-9 w-auto" />
         </div>
 
         <div className="relative mx-auto w-full max-w-sm">

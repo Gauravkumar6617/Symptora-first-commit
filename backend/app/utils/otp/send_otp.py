@@ -1,6 +1,8 @@
 """Email delivery for verification codes and family invites."""
 
 import smtplib
+
+import httpx
 from html import escape
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -138,6 +140,24 @@ def send_appointment_confirmation_email(
 
 
 def _send(to_email: str, subject: str, text: str, html: str, sender: str, reply_to: str | None = None) -> None:
+    if settings.BREVO_API_KEY and sender:
+        body = {
+            "sender": {"email": sender, "name": "Symptora"},
+            "to": [{"email": to_email}],
+            "subject": subject,
+            "htmlContent": html,
+            "textContent": text,
+        }
+        if reply_to:
+            body["replyTo"] = {"email": reply_to}
+        httpx.post(
+            "https://api.brevo.com/v3/smtp/email",
+            json=body,
+            headers={"api-key": settings.BREVO_API_KEY},
+            timeout=10,
+        ).raise_for_status()
+        return
+
     if not settings.SMTP_USER or not settings.SMTP_PASSWORD or not sender:
         raise RuntimeError("SMTP credentials are not configured.")
 

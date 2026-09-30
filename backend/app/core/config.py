@@ -39,6 +39,8 @@ class Settting(BaseSettings):
     SMTP_PASSWORD                 : str = ""
     FROM_EMAIL                    : str = ""
     SMTP_USE_TLS                  : bool = True
+    # HTTPS email API (Render's free tier blocks SMTP ports). Used when set.
+    BREVO_API_KEY                 : str = ""
     # Family invites: sender (falls back to FROM_EMAIL) and an optional
     # website linked in the email footer.
     INVITE_FROM_EMAIL             : str = ""

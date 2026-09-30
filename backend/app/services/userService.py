@@ -264,6 +264,7 @@ class UserService:
         try:
             send_password_reset_email(user.email, otp)
         except Exception:
+            logging.getLogger(__name__).exception("password reset email failed")
             discard_otp(self._reset_otp_id(email))
             raise OTPDeliveryError("Unable to send the reset email. Please try again later.")
 
