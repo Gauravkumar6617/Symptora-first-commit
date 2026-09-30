@@ -1144,11 +1144,41 @@ export interface TelemedicineConsultation {
   status: TelemedicineStatus
   trigger: TelemedicineTrigger
   symptom_check_id: string | null
+  /** Fee in rupees; paid_at null = not paid yet, so not in the doctor queue. */
+  amount: number | null
+  paid_at: string | null
   patient_name: string | null
   doctor_name: string | null
   doctor_specialization: string | null
   created_at: string
   updated_at: string
+}
+
+/** backend: schemas/telemedicine.PaymentOrder — "simulated" = no Razorpay keys on the server. */
+export interface PaymentOrder {
+  gateway: 'razorpay' | 'simulated'
+  order_id: string
+  amount: number
+  currency: string
+  key_id: string | null
+}
+
+/** POST /telemedicine/{id}/payment/order */
+export async function createConsultationPayment(token: string, id: string): Promise<PaymentOrder> {
+  return request<PaymentOrder>(`/telemedicine/${id}/payment/order`, { method: 'POST', token })
+}
+
+/** POST /telemedicine/{id}/payment/confirm — once paid, doctors are notified. */
+export async function confirmConsultationPayment(
+  token: string,
+  id: string,
+  payload: { order_id: string; payment_id: string; signature?: string },
+): Promise<TelemedicineConsultation> {
+  return request<TelemedicineConsultation>(`/telemedicine/${id}/payment/confirm`, {
+    method: 'POST',
+    body: payload,
+    token,
+  })
 }
 
 /** POST /telemedicine — patients only. Starts an instant consultation and
@@ -1292,4 +1322,38 @@ export async function dataUrlToFile(
   const blob = await (await fetch(dataUrl)).blob()
   const extension = blob.type.split('/')[1] ?? 'png'
   return new File([blob], `${filename}.${extension}`, { type: blob.type })
+}
+
+/** backend: schemas/notification.NotificationRead */
+export interface AppNotification {
+  id: string
+  title: string
+  body: string
+  link: string | null
+  read: boolean
+  created_at: string
+}
+
+/** GET /notifications — latest 30, newest first. */
+export async function listNotifications(token: string): Promise<AppNotification[]> {
+  return request<AppNotification[]>('/notifications', { token })
+}
+
+/** POST /notifications/read-all */
+export async function readAllNotifications(token: string): Promise<void> {
+  await request<void>('/notifications/read-all', { method: 'POST', token })
+}
+
+/** GET /prescriptions/{id}/pdf — fetched with the auth header, then saved as a file. */
+export async function downloadPrescriptionPdf(token: string, id: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}${API_PREFIX}/prescriptions/${id}/pdf`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) throw new ApiError('Could not download the prescription.', response.status)
+  const url = URL.createObjectURL(await response.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `prescription-${id.slice(0, 8)}.pdf`
+  a.click()
+  URL.revokeObjectURL(url)
 }

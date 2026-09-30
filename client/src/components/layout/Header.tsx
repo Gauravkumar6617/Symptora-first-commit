@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import symptoraLogo from '@/assets/symptora-logo.png'
 import { APP_NAME } from '@/lib/constants'
+import { NotificationBell } from '@/components/layout/NotificationBell'
 import { useAuthStore } from '@/store/authStore'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -26,7 +27,7 @@ const navItems = [
 ]
 
 export function Header() {
-  const { isAuthenticated, user, logout } = useAuthStore()
+  const { isAuthenticated, user, logout, token } = useAuthStore()
   const [menuOpen, setMenuOpen] = useState(false)
   const [brokenAvatar, setBrokenAvatar] = useState<string | null>(null)
 
@@ -112,10 +113,12 @@ export function Header() {
           )}
         </div>
 
+        {isAuthenticated && token && <NotificationBell token={token} className="ml-auto xl:ml-0" />}
+
         <button
           type="button"
           onClick={() => setMenuOpen((open) => !open)}
-          className="ml-auto shrink-0 rounded-lg border border-ink/15 p-2 xl:hidden"
+          className={`${isAuthenticated ? '' : 'ml-auto'} shrink-0 rounded-lg border border-ink/15 p-2 xl:hidden`}
           aria-label="Toggle menu"
         >
           <Menu className="h-5 w-5 text-ink" />

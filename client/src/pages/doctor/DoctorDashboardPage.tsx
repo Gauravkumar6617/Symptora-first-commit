@@ -19,7 +19,8 @@ import {
   updateMyDoctorProfile,
 } from '@/lib/api'
 import { AvailabilityGrid } from '@/components/AvailabilityGrid'
-import { ChatThreadModal } from '@/components/telemedicine/ChatThreadModal'
+import { ChatFromLink, ChatThreadModal } from '@/components/telemedicine/ChatThreadModal'
+import { PrescriptionPdfButton } from '@/components/telemedicine/PrescriptionPdfButton'
 import { PrescriptionFormModal } from '@/components/telemedicine/PrescriptionFormModal'
 import { useAuthStore } from '@/store/authStore'
 
@@ -52,6 +53,7 @@ export function DoctorDashboardPage() {
       <ConsultationHistorySection token={token} />
       <IssuedPrescriptionsSection token={token} />
       <MyProfileSection token={token} />
+      <ChatFromLink />
     </div>
   )
 }
@@ -77,9 +79,14 @@ function InstantConsultationSection({ token }: { token: string | null }) {
     if (!token || !approved) return
     let cancelled = false
 
-    listPendingConsultations(token)
-      .then((list) => !cancelled && setPending(list))
-      .catch(() => {})
+    const load = () =>
+      listPendingConsultations(token)
+        .then((list) => !cancelled && setPending(list))
+        .catch(() => {})
+    load()
+    // The socket is the fast path; this catches anything it missed (dropped
+    // connection, server restart) so a paid patient is never left invisible.
+    const poll = setInterval(load, 10000)
 
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission().catch(() => {})
@@ -105,6 +112,7 @@ function InstantConsultationSection({ token }: { token: string | null }) {
 
     return () => {
       cancelled = true
+      clearInterval(poll)
       ws.close()
     }
   }, [token, approved])
@@ -123,7 +131,7 @@ function InstantConsultationSection({ token }: { token: string | null }) {
     }
   }
 
-  if (!approved || pending.length === 0) return null
+  if (!approved) return null
 
   const sorted = [...pending].sort((a, b) =>
     a.trigger === b.trigger ? 0 : a.trigger === 'auto_escalation' ? -1 : 1,
@@ -135,6 +143,11 @@ function InstantConsultationSection({ token }: { token: string | null }) {
         <PhoneIncoming className="h-5 w-5 text-primary-600" /> Instant consultation requests
       </h2>
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      {sorted.length === 0 && (
+        <p className="mt-4 text-sm text-ink/60">
+          No patients waiting right now. Keep this page open — new paid requests appear here instantly.
+        </p>
+      )}
       <div className="mt-4 space-y-3">
         {sorted.map((c) => (
           <div
@@ -427,6 +440,9 @@ function IssuedPrescriptionsSection({ token }: { token: string | null }) {
                 </li>
               ))}
             </ul>
+            <div className="mt-3">
+              <PrescriptionPdfButton token={token} id={p.id} />
+            </div>
           </div>
         ))}
       </div>

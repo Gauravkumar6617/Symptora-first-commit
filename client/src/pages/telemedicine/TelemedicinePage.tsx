@@ -196,7 +196,7 @@ export function TelemedicinePage() {
             </span>
             <h2 className="mt-4 text-center text-lg font-bold text-ink">Start an instant consultation</h2>
             <p className="mt-1 text-center text-sm text-ink/60">
-              The next available doctor is notified right away and joins your video call.
+              Pay the consultation fee and the next available doctor is notified right away and joins your video call.
             </p>
 
             <div className="mt-5">

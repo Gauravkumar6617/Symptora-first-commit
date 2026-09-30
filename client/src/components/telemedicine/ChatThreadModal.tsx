@@ -1,7 +1,9 @@
 import { MessageCircle, Send, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { listMessages, sendMessage } from '@/lib/api'
+import { useAuthStore } from '@/store/authStore'
 
 interface ChatThreadModalProps {
   kind: 'appointment' | 'telemedicine'
@@ -104,5 +106,24 @@ export function ChatThreadModal({ kind, id, token, currentUserId, onClose }: Cha
         </div>
       </div>
     </div>
+  )
+}
+
+/** Opens the thread named in `?chat=<kind>:<id>` — where message
+ * notifications link to — and clears the param on close. */
+export function ChatFromLink() {
+  const [params, setParams] = useSearchParams()
+  const token = useAuthStore((state) => state.token)
+  const user = useAuthStore((state) => state.user)
+  const [kind, id] = (params.get('chat') ?? '').split(':')
+  if ((kind !== 'appointment' && kind !== 'telemedicine') || !id || !token || !user) return null
+  return (
+    <ChatThreadModal
+      kind={kind}
+      id={id}
+      token={token}
+      currentUserId={user.id}
+      onClose={() => setParams((p) => { p.delete('chat'); return p }, { replace: true })}
+    />
   )
 }

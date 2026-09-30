@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Screen } from '@/components/ui/screen';
 import { StackHeader } from '@/components/ui/stack-header';
 import { Spacing, Typography, tint } from '@/constants/theme';
-import { getConsultation, telemedicinePatientSocketUrl } from '@/lib/api';
+import { getConsultation, payForConsultation, telemedicinePatientSocketUrl } from '@/lib/api';
 import { openVideoCall } from '@/lib/call';
 import { useCancelConsultation } from '@/hooks/use-queries';
 import { useTheme } from '@/hooks/use-theme';
@@ -23,7 +23,10 @@ export default function TelemedicineWaitingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const accessToken = useAuthStore((state) => state.accessToken);
   const cancelConsultation = useCancelConsultation();
-  const [status, setStatus] = useState<'waiting' | 'cancelled' | 'error'>('waiting');
+  const [status, setStatus] = useState<'payment' | 'waiting' | 'cancelled' | 'error'>('waiting');
+  const [amount, setAmount] = useState<number | null>(null);
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const handedOff = useRef(false);
 
@@ -43,6 +46,10 @@ export default function TelemedicineWaitingScreen() {
         if (cancelled) return;
         if (consultation.status === 'in_progress') void handOff();
         else if (consultation.status !== 'pending') setStatus('cancelled');
+        else if (!consultation.paid_at) {
+          setAmount(consultation.amount);
+          setStatus('payment');
+        }
       })
       .catch(() => {});
 
@@ -72,6 +79,20 @@ export default function TelemedicineWaitingScreen() {
     };
   }, [accessToken, id, router]);
 
+  async function handlePay() {
+    if (!accessToken || !id) return;
+    setPaying(true);
+    setPayError(null);
+    try {
+      await payForConsultation(accessToken, id);
+      setStatus('waiting');
+    } catch (err) {
+      setPayError(err instanceof Error ? err.message : 'Payment failed. Please try again.');
+    } finally {
+      setPaying(false);
+    }
+  }
+
   function handleCancel() {
     if (!id) return;
     cancelConsultation.mutate(id, {
@@ -83,14 +104,36 @@ export default function TelemedicineWaitingScreen() {
     <Screen header={<StackHeader title="Video consultation" fallbackHref="/(patient)/(tabs)" />}>
       <View style={styles.center}>
         <View style={[styles.icon, { backgroundColor: tint(theme.primary, 0.12) }]}>
-          {status === 'waiting' ? (
+          {status === 'payment' ? (
+            <Ionicons name="card-outline" size={26} color={theme.primary} />
+          ) : status === 'waiting' ? (
             <ActivityIndicator color={theme.primary} />
           ) : (
             <Ionicons name="medkit-outline" size={26} color={theme.primary} />
           )}
         </View>
 
-        {status === 'waiting' ? (
+        {status === 'payment' ? (
+          <>
+            <Text style={[styles.title, { color: theme.text }]}>Pay to connect with a doctor</Text>
+            <Text style={[styles.body, { color: theme.textSecondary }]}>
+              Consultation fee ₹{amount ?? '—'}. Doctors are notified the moment payment goes through.
+            </Text>
+            {payError ? <Text style={[styles.body, { color: theme.danger }]}>{payError}</Text> : null}
+            <Button
+              label={paying ? 'Processing…' : `Pay ₹${amount ?? ''}`}
+              icon="card-outline"
+              loading={paying}
+              onPress={handlePay}
+              style={styles.action}
+            />
+            <Button
+              label="Cancel request"
+              variant="ghost"
+              onPress={handleCancel}
+            />
+          </>
+        ) : status === 'waiting' ? (
           <>
             <Text style={[styles.title, { color: theme.text }]}>Connecting you to a doctor</Text>
             <Text style={[styles.body, { color: theme.textSecondary }]}>

@@ -16,7 +16,8 @@ import {
   type SymptomCheck,
   type TelemedicineConsultation,
 } from '@/lib/api'
-import { ChatThreadModal } from '@/components/telemedicine/ChatThreadModal'
+import { ChatFromLink, ChatThreadModal } from '@/components/telemedicine/ChatThreadModal'
+import { PrescriptionPdfButton } from '@/components/telemedicine/PrescriptionPdfButton'
 import { useAuthStore } from '@/store/authStore'
 import { relationLabel, useFamilyStore } from '@/store/familyStore'
 import { MyClinicsCard } from './MyClinicsCard'
@@ -84,6 +85,7 @@ export function DashboardPage() {
       <MyConsultationsSection token={token} />
 
       <MyPrescriptionsSection token={token} />
+      <ChatFromLink />
 
       <RecentChecks checks={checks} />
 
@@ -295,7 +297,7 @@ function MyConsultationsSection({ token }: { token: string | null }) {
                   to={`/telemedicine/waiting/${c.id}`}
                   className="text-xs font-semibold text-primary hover:underline"
                 >
-                  View
+                  {c.paid_at ? 'View' : `Pay ₹${c.amount ?? ''}`}
                 </Link>
               )}
               {c.status !== 'pending' && (
@@ -346,7 +348,7 @@ function MyPrescriptionsSection({ token }: { token: string | null }) {
   if (prescriptions.length === 0) return null
 
   return (
-    <div className="mt-10">
+    <div id="prescriptions" className="mt-10 scroll-mt-24">
       <h2 className="flex items-center gap-2 text-lg font-bold text-ink">
         <FileText className="h-5 w-5 text-primary-600" /> Prescriptions
       </h2>
@@ -370,9 +372,12 @@ function MyPrescriptionsSection({ token }: { token: string | null }) {
               ))}
             </ul>
             {p.notes && <p className="mt-2 text-xs italic text-ink/50">{p.notes}</p>}
-            {p.synced_to_medplum && (
-              <p className="mt-2 text-[11px] font-medium text-success">Synced to your Medplum record</p>
-            )}
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <PrescriptionPdfButton token={token} id={p.id} />
+              {p.synced_to_medplum && (
+                <p className="text-[11px] font-medium text-success">Synced to your Medplum record</p>
+              )}
+            </div>
           </div>
         ))}
       </div>

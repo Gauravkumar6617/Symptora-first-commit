@@ -306,6 +306,9 @@ export interface TelemedicineConsultationRecord {
   status: ConsultationStatus;
   trigger: ConsultationTrigger;
   symptom_check_id: string | null;
+  /** Fee in rupees; paid_at null = not paid yet, so not in the doctor queue. */
+  amount: number | null;
+  paid_at: string | null;
   patient_name: string | null;
   doctor_name: string | null;
   doctor_specialization: string | null;

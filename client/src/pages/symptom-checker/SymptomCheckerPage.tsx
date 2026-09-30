@@ -571,15 +571,15 @@ export function SymptomCheckerPage() {
             <div className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-danger/30 bg-danger/5 p-4">
               <Stethoscope className="h-5 w-5 shrink-0 text-danger" />
               <p className="flex-1 text-sm font-semibold text-danger">
-                High risk result — we've already notified every available doctor. Join the video call as soon as
-                one accepts.
+                High risk result — we've opened a priority video consultation for you. Pay the consultation fee
+                and the next available doctor is notified straight away.
               </p>
               <button
                 type="button"
                 onClick={() => navigate(`/telemedicine/waiting/${result.escalated_consultation_id}`)}
                 className="btn-raised shrink-0"
               >
-                Join now
+                Continue
               </button>
             </div>
           ) : (

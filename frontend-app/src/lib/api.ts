@@ -567,6 +567,24 @@ export async function getConsultation(token: string, id: string): Promise<Teleme
   return request<TelemedicineConsultationRecord>(`/telemedicine/${id}`, { token });
 }
 
+/** Pay the consultation fee. Only the server's simulated gateway (no Razorpay
+ * keys) completes in the app; with real keys the web checkout is needed.
+ * ponytail: add react-native-razorpay (needs a dev build, not Expo Go) for in-app card payments. */
+export async function payForConsultation(token: string, id: string): Promise<TelemedicineConsultationRecord> {
+  const order = await request<{ gateway: 'razorpay' | 'simulated'; order_id: string }>(
+    `/telemedicine/${id}/payment/order`,
+    { method: 'POST', token },
+  );
+  if (order.gateway !== 'simulated') {
+    throw new ApiError('Card payment is available on the Symptora website for now.', 0);
+  }
+  return request<TelemedicineConsultationRecord>(`/telemedicine/${id}/payment/confirm`, {
+    method: 'POST',
+    body: { order_id: order.order_id, payment_id: `test_${Date.now()}` },
+    token,
+  });
+}
+
 /** GET /telemedicine/me — the caller's own instant consultations. */
 export async function fetchMyConsultations(): Promise<TelemedicineConsultationRecord[]> {
   const token = useAuthStore.getState().accessToken;
