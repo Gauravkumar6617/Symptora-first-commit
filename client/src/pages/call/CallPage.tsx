@@ -4,9 +4,19 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { callSocketUrl } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 
-// ponytail: public STUN only, no TURN — calls between peers on restrictive
-// symmetric NATs may fail to connect. Add a TURN server if that happens in practice.
-const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }]
+// STUN finds a direct path; phones on mobile data (carrier NAT) usually also
+// need a TURN relay. Set VITE_TURN_URL / VITE_TURN_USERNAME / VITE_TURN_CREDENTIAL
+// (e.g. a free metered.ca or self-hosted coturn server) to enable it.
+const ICE_SERVERS: RTCIceServer[] = [
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+  ...(import.meta.env.VITE_TURN_URL
+    ? [{
+        urls: String(import.meta.env.VITE_TURN_URL).split(','),
+        username: import.meta.env.VITE_TURN_USERNAME,
+        credential: import.meta.env.VITE_TURN_CREDENTIAL,
+      }]
+    : []),
+]
 
 type CallState = 'connecting' | 'waiting' | 'in-call' | 'ended'
 
@@ -26,6 +36,8 @@ export function CallPage() {
   const [error, setError] = useState<string | null>(null)
   const [micOn, setMicOn] = useState(true)
   const [cameraOn, setCameraOn] = useState(true)
+  /** The browser blocked auto-play (common in phone in-app browsers). */
+  const [needsTap, setNeedsTap] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -35,6 +47,21 @@ export function CallPage() {
       if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify(message))
     }
 
+    // ICE candidates can arrive before the offer/answer is applied (the
+    // handlers are async); adding them then fails, so hold them until it is.
+    let pendingCandidates: RTCIceCandidateInit[] = []
+    async function flushCandidates(pc: RTCPeerConnection) {
+      for (const candidate of pendingCandidates) await pc.addIceCandidate(candidate).catch(() => {})
+      pendingCandidates = []
+    }
+
+    function resetPeerConnection() {
+      pcRef.current?.close()
+      pcRef.current = null
+      pendingCandidates = []
+      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
+    }
+
     function ensurePeerConnection() {
       if (pcRef.current) return pcRef.current
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
@@ -42,7 +69,11 @@ export function CallPage() {
         if (e.candidate) send({ type: 'ice-candidate', candidate: e.candidate })
       }
       pc.ontrack = (e) => {
-        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = e.streams[0]
+        const video = remoteVideoRef.current
+        if (video && video.srcObject !== e.streams[0]) {
+          video.srcObject = e.streams[0]
+          video.play().catch(() => setNeedsTap(true))
+        }
         setState('in-call')
       }
       for (const track of localStreamRef.current?.getTracks() ?? []) {
@@ -82,13 +113,18 @@ export function CallPage() {
         const pc = ensurePeerConnection()
         switch (message.type) {
           case 'peer-joined': {
-            const offer = await pc.createOffer()
-            await pc.setLocalDescription(offer)
+            // The other side (re)joined: always start from a fresh connection,
+            // never renegotiate a dead one from their previous attempt.
+            resetPeerConnection()
+            const fresh = ensurePeerConnection()
+            const offer = await fresh.createOffer()
+            await fresh.setLocalDescription(offer)
             send({ type: 'offer', sdp: offer })
             break
           }
           case 'offer': {
             await pc.setRemoteDescription(new RTCSessionDescription(message.sdp))
+            await flushCandidates(pc)
             const answer = await pc.createAnswer()
             await pc.setLocalDescription(answer)
             send({ type: 'answer', sdp: answer })
@@ -96,16 +132,14 @@ export function CallPage() {
           }
           case 'answer':
             await pc.setRemoteDescription(new RTCSessionDescription(message.sdp))
+            await flushCandidates(pc)
             break
           case 'ice-candidate':
-            try {
-              await pc.addIceCandidate(new RTCIceCandidate(message.candidate))
-            } catch {
-              // a stray candidate arriving before setRemoteDescription is harmless to drop
-            }
+            if (pc.remoteDescription) await pc.addIceCandidate(message.candidate).catch(() => {})
+            else pendingCandidates.push(message.candidate)
             break
           case 'peer-left':
-            if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
+            resetPeerConnection()
             setState('waiting')
             break
         }
@@ -163,6 +197,17 @@ export function CallPage() {
 
       <div className="relative mt-4 flex-1 overflow-hidden rounded-2xl bg-ink">
         <video ref={remoteVideoRef} autoPlay playsInline className="h-full w-full object-cover" />
+        {needsTap && (
+          <button
+            type="button"
+            onClick={() => {
+              remoteVideoRef.current?.play().then(() => setNeedsTap(false)).catch(() => {})
+            }}
+            className="absolute inset-0 flex items-center justify-center bg-ink/60 text-sm font-semibold text-white"
+          >
+            Tap to start video
+          </button>
+        )}
         <video
           ref={localVideoRef}
           autoPlay

@@ -38,7 +38,8 @@ export function Header() {
           <img src={symptoraLogo} alt={APP_NAME} className="h-8 w-auto sm:h-9" />
         </Link>
 
-        <nav className="hidden min-w-0 flex-1 items-center justify-center gap-5 pr-6 xl:flex 2xl:gap-7">
+        {/* No min-w-0: the links must never be squeezed under the account area. */}
+        <nav className="hidden flex-1 items-center justify-center gap-4 pr-2 xl:flex 2xl:gap-7 2xl:pr-6">
           {navItems.filter((item) => !('secondary' in item)).map((item) => (
             <NavLink
               key={item.to}
@@ -51,7 +52,7 @@ export function Header() {
           ))}
         </nav>
 
-        <div className="ml-auto hidden shrink-0 items-center gap-2 xl:flex 2xl:gap-3">
+        <div className="ml-auto hidden shrink-0 items-center gap-1.5 xl:flex 2xl:gap-3">
           {isAuthenticated ? (
             <>
               {user?.isAdmin && (
@@ -70,6 +71,8 @@ export function Header() {
               </Link>
               <Link
                 to="/profile"
+                title={user?.name}
+                aria-label={`Profile: ${user?.name ?? ''}`}
                 className="flex max-w-[12rem] items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-ink hover:bg-ink/5"
               >
                 <span className="icon-badge h-8 w-8 overflow-hidden">
@@ -85,7 +88,8 @@ export function Header() {
                     <UserRound className="h-4 w-4 text-primary-600" />
                   )}
                 </span>
-                <span className="truncate">{user?.name}</span>
+                {/* Name only when there's room; the avatar alone below 1536px. */}
+                <span className="hidden truncate 2xl:inline">{user?.name}</span>
               </Link>
               <button
                 type="button"

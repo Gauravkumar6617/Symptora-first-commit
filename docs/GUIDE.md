@@ -167,6 +167,7 @@ A template with every variable is in
 | Variable | Purpose |
 | --- | --- |
 | `VITE_API_URL` | API base URL, e.g. `http://localhost:8000`. Leave it unset if the API is served from the same origin. |
+| `VITE_TURN_URL`, `VITE_TURN_USERNAME`, `VITE_TURN_CREDENTIAL` | optional TURN relay for video calls (comma-separate several URLs). Phones on mobile data usually need one, because STUN alone can't get through carrier NAT. |
 
 ### Mobile (`frontend-app/.env`)
 
@@ -490,6 +491,7 @@ them. To scale out, move them to Redis pub/sub first.
 | `401` after about 30 minutes | Access tokens expire (`ACCESS_TOKEN_EXPIRE_MINUTES`). Log in again. |
 | CORS error from a new domain | Add it to `CORS_ORIGINS`. |
 | Emails not arriving on Render | SMTP ports are blocked there. Set `BREVO_API_KEY`. |
+| App call opens but the two sides can't see each other | Both sides must use the **same backend**. The app's calls open `EXPO_PUBLIC_WEB_URL` (the production site by default), which talks to the production API. So test app calls against the deployed web app, not `localhost`. On mobile data, also set a TURN server (`VITE_TURN_*`). |
 | Phone can't reach the API | Use your LAN IP or a tunnel in `EXPO_PUBLIC_API_URL`, not `localhost`. |
 | Tab shows the Vite/React icon | Cached favicon. Hard-refresh; the icon links carry a `?v=` cache-buster. |
 
