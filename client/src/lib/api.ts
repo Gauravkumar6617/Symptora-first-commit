@@ -367,6 +367,10 @@ export interface AdminStats {
   doctors: number
   clinics: number
   pending_applications: number
+  /** Paid telemedicine fees in rupees. */
+  total_earnings: number
+  month_earnings: number
+  paid_consultations: number
 }
 
 /** backend AdminDoctorRead — an approved doctor plus their user info and clinics. */
@@ -797,6 +801,33 @@ export async function acceptFamilyInvite(payload: {
   number?: string
 }): Promise<TokenResponse> {
   return request<TokenResponse>('/users/family-invite/accept', { method: 'POST', body: payload })
+}
+
+/** PATCH /family-members/{member_id} — only the fields given are changed. */
+export async function updateFamilyMember(
+  token: string,
+  memberId: string,
+  payload: Partial<FamilyMemberCreatePayload>,
+): Promise<FamilyMemberRecord> {
+  return request<FamilyMemberRecord>(`/family-members/${memberId}`, { method: 'PATCH', body: payload, token })
+}
+
+/** backend FamilyLinkRead — someone who added *you* as family. */
+export interface FamilyLink {
+  id: string
+  owner_name: string
+  relationship_to_owner: FamilyRelationship | null
+  status: 'pending' | 'linked'
+}
+
+/** GET /family-members/links — requests to approve, and approved links. */
+export async function listFamilyLinks(token: string): Promise<FamilyLink[]> {
+  return request<FamilyLink[]>('/family-members/links', { token })
+}
+
+/** POST /family-members/links/{id}/accept|decline — decline also leaves an approved link. */
+export async function answerFamilyLink(token: string, id: string, accept: boolean): Promise<void> {
+  await request(`/family-members/links/${id}/${accept ? 'accept' : 'decline'}`, { method: 'POST', token })
 }
 
 /** DELETE /family-members/{member_id} */

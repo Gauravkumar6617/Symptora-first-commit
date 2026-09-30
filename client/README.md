@@ -1,16 +1,18 @@
-# React + Vite
+# Symptora Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React 19 + Vite + TypeScript + Tailwind web app for Symptora: marketing
+pages, symptom checker, telemedicine (payment, waiting room, WebRTC call),
+appointments, family, doctor and admin dashboards.
 
-Currently, two official plugins are available:
+```bash
+echo "VITE_API_URL=http://localhost:8000" > .env
+pnpm install
+pnpm dev        # http://localhost:5173
+pnpm build      # type-check + production build
+```
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- API calls and types: `src/lib/api.ts`
+- Routes: `src/app/router.tsx`
+- Pages: `src/pages/*`, shared UI: `src/components/*`
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+See [docs/GUIDE.md](../docs/GUIDE.md) for the full guide.

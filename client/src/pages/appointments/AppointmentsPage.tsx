@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   type Appointment,
   ApiError,
@@ -164,7 +164,9 @@ export function AppointmentsPage() {
   })
   const [selectedSlot, setSelectedSlot] = useState<OpenSlot | null>(null)
 
-  const [selectedFor, setSelectedFor] = useState<string>('self')
+  // "Book for them" on the Family page links here with ?member=<id>.
+  const [searchParams] = useSearchParams()
+  const [selectedFor, setSelectedFor] = useState<string>(searchParams.get('member') ?? 'self')
   const [reason, setReason] = useState('')
   const [phone, setPhone] = useState(user?.phone ?? '')
   const [notes, setNotes] = useState('')

@@ -131,7 +131,8 @@ class UserService:
             user_data, password_hash=password_hash, is_active=True
         )
         self.redis_user.delete(pending_key)
-        self._link_family_rows(user)
+        # Family profiles with this email show up as link requests for the
+        # user to approve on their Family page; nothing is linked automatically.
         return user
 
     def create_fhir_patient(self, user_data, local_user_id: str | int) -> dict:
@@ -297,15 +298,6 @@ class UserService:
     def _family_repo(self) -> FamilyMemberRepository:
         return FamilyMemberRepository(self.user_repository.db)
 
-    def _link_family_rows(self, user) -> None:
-        """Link every family-member row with this email to the account."""
-        rows = self._family_repo().unlinked_by_email(user.email)
-        for row in rows:
-            if row.account_owner_id != user.id:
-                row.linked_user_id = user.id
-        if rows:
-            self.user_repository.db.commit()
-
     def request_family_invite(self, email: str) -> None:
         """Member side of the invite: send a fresh activation code.
 
@@ -319,8 +311,10 @@ class UserService:
             return
         existing = self.user_repository.get_user_by_email(email.strip().lower())
         if existing and existing.is_active:
-            self._link_family_rows(existing)
-            raise ValueError("You already have a Symptora account. Log in with it instead.")
+            # No linking here: this endpoint needs no login, so anyone could call it.
+            raise ValueError(
+                "You already have a Symptora account. Log in and approve the request on your Family page."
+            )
         FamilyMemberService(self.user_repository.db).send_invite_code(rows[0], rows[0].account_owner)
 
     def accept_family_invite(self, data: FamilyInviteAccept) -> dict:
@@ -368,7 +362,7 @@ class UserService:
                 logger.exception("Medplum patient for invited user %s not created", user.id)
         user.medplum_patient_id = patient_id
         self.user_repository.db.commit()
-        self._link_family_rows(user)
+        # The family link itself is approved on the Family page (link requests).
 
         token = create_access_token({"sub": str(user.id)})
         return {"access_token": token, "token_type": "bearer"}

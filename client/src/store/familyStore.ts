@@ -8,6 +8,7 @@ import {
   type FamilyRelationship,
   inviteFamilyMember,
   listFamilyMembers,
+  updateFamilyMember,
 } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 
@@ -39,6 +40,7 @@ interface FamilyState {
   isLoading: boolean
   loadMembers: () => Promise<void>
   addMember: (member: NewFamilyMember) => Promise<FamilyMember>
+  updateMember: (id: string, member: NewFamilyMember) => Promise<void>
   removeMember: (id: string) => Promise<void>
   /** Emails the member an activation code; returns the message to show. */
   inviteMember: (id: string) => Promise<string>
@@ -92,7 +94,7 @@ function requireToken(): string {
 
 export const useFamilyStore = create<FamilyState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       members: [],
       isLoading: false,
       loadMembers: async () => {
@@ -119,6 +121,22 @@ export const useFamilyStore = create<FamilyState>()(
         const created = toFamilyMember(record)
         set((state) => ({ members: [...state.members, created] }))
         return created
+      },
+      updateMember: async (id, member) => {
+        const current = get().members.find((m) => m.id === id)
+        const record = await updateFamilyMember(requireToken(), id, {
+          full_name: member.name,
+          relationship_to_owner: member.relation,
+          // Only re-derive the birth date when the age actually changed.
+          ...(current?.age !== member.age && { date_of_birth: ageToDateOfBirth(member.age) }),
+          profile: member.avatarUrl ?? null,
+          gender: member.gender || null,
+          // A member with their own login keeps the email they log in with.
+          ...(!current?.hasAccount && { email: member.email || null }),
+          number: member.number || null,
+        })
+        const updated = toFamilyMember(record)
+        set((state) => ({ members: state.members.map((m) => (m.id === id ? updated : m)) }))
       },
       removeMember: async (id) => {
         await deleteFamilyMember(requireToken(), id)

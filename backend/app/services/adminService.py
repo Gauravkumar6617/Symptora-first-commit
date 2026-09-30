@@ -10,6 +10,7 @@ from app.repositories.clinicRepositories import ClinicRepository
 from app.repositories.doctorClinicRepository import DoctorClinicRepository
 from app.repositories.doctorRepositories import DoctorRepository
 from app.repositories.serviceRepository import ServiceRepository
+from app.repositories.telemedicineRepository import TelemedicineRepository
 from app.repositories.userRepositories import UserRepository
 from app.models.clinicModel import CliniModel
 from app.models.doctorModel import DoctorProfile
@@ -83,6 +84,7 @@ class AdminService:
             "doctors": len(self.doctor_repo.list_by_status(Status.APPROVED)),
             "clinics": len(self.clinic_repo.list_all()),
             "pending_applications": len(self.doctor_repo.list_by_status(Status.PENDING)),
+            **TelemedicineRepository(self.db).earnings(),
         }
 
     def list_patients(self):

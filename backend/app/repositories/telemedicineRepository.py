@@ -1,4 +1,6 @@
-from sqlalchemy import case
+from datetime import datetime, timezone
+
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.models.enumModel import ConsultationStatus, ConsultationTrigger
@@ -100,3 +102,12 @@ class TelemedicineRepository:
         self.db.commit()
         self.db.refresh(consultation)
         return consultation
+
+    def earnings(self) -> dict:
+        """Paid consultation fees (rupees): all time, this calendar month, and how many."""
+        paid = TelemedicineConsultationModel.paid_at.isnot(None)
+        amount = func.coalesce(func.sum(TelemedicineConsultationModel.amount), 0)
+        total, count = self.db.query(amount, func.count()).filter(paid).one()
+        month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        month = self.db.query(amount).filter(paid, TelemedicineConsultationModel.paid_at >= month_start).scalar()
+        return {"total_earnings": int(total), "month_earnings": int(month), "paid_consultations": count}

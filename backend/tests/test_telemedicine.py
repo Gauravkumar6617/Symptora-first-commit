@@ -255,3 +255,59 @@ def test_prescription_pdf(db, setup):
     pdf = prescription_pdf(prescription)
     assert pdf.startswith(b"%PDF-1.4") and pdf.rstrip().endswith(b"%%EOF")
     assert b"Paracetamol \\(500mg\\)" in pdf and b"Dr. Asha Rao" in pdf
+
+
+def test_call_ends_only_when_both_have_left():
+    import asyncio
+    from fastapi import WebSocketDisconnect
+    from app.routers.callRouter import _run_call
+
+    class FakeSocket:
+        def __init__(self):
+            self.inbox = asyncio.Queue()
+        async def accept(self): pass
+        async def close(self, code=None): pass
+        async def send_json(self, message): pass
+        async def receive_json(self):
+            if await self.inbox.get() == "leave":
+                raise WebSocketDisconnect()
+
+    async def scenario():
+        ended = []
+        join = lambda ws: asyncio.create_task(_run_call(ws, "telemedicine:t1", on_ended=lambda: ended.append(1)))
+        async def leave(ws, task):
+            await ws.inbox.put("leave")
+            await task
+
+        doctor, patient = FakeSocket(), FakeSocket()
+        d, p = join(doctor), join(patient)
+        await asyncio.sleep(0)
+        await leave(patient, p)                 # patient's connection drops
+        assert ended == []                      # doctor still there: not over
+        patient = FakeSocket()
+        p = join(patient)                       # patient rejoins
+        await asyncio.sleep(0)
+        await leave(doctor, d)
+        await leave(patient, p)
+        assert ended == [1]                     # both gone: completed once
+
+        lonely = FakeSocket()                   # doctor alone, never met the patient
+        t = asyncio.create_task(_run_call(lonely, "telemedicine:t2", on_ended=lambda: ended.append(2)))
+        await asyncio.sleep(0)
+        await leave(lonely, t)
+        assert ended == [1]                     # not completed: patient can still join
+
+    asyncio.run(scenario())
+
+
+def test_admin_earnings_count_only_paid(db, setup):
+    from app.repositories.telemedicineRepository import TelemedicineRepository
+
+    patient, *_ = setup
+    service = TelemedicineService(db)
+    for _ in range(2):
+        pay(service, patient, service.start(patient, TelemedicineStart(reason="Fever")))
+    service.start(patient, TelemedicineStart(reason="Unpaid"))
+    earnings = TelemedicineRepository(db).earnings()
+    fee = TelemedicineService(db).repo.list_for_patient(patient.id)[0].amount
+    assert earnings == {"total_earnings": 2 * fee, "month_earnings": 2 * fee, "paid_consultations": 2}

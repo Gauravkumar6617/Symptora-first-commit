@@ -8,6 +8,8 @@ from app.repositories.appointmentRepository import AppointmentRepository
 from app.repositories.doctorRepositories import DoctorRepository
 from app.repositories.telemedicineRepository import TelemedicineRepository
 from app.services.notificationService import notify
+from app.deps.medplum import get_medplum_integration
+from app.services.telemedicineService import complete_after_call
 
 router = APIRouter(tags=["Telemedicine"])
 
@@ -15,6 +17,9 @@ router = APIRouter(tags=["Telemedicine"])
 # ponytail: in-memory, single-process only — move to Redis pub/sub if this
 # ever runs behind more than one worker/instance.
 _rooms: dict[str, list[WebSocket]] = {}
+# rooms where both participants have been connected at some point — emptying
+# one of these means the call really happened and is now over.
+_had_both: set[str] = set()
 
 
 def can_join_appointment_call(db: Session, user, appointment) -> bool:
@@ -57,7 +62,7 @@ def notify_other_party(db: Session, user, visit, kind: str) -> None:
            f"/call/{kind}/{visit.id}")
 
 
-async def _run_call(websocket: WebSocket, room_key: str) -> None:
+async def _run_call(websocket: WebSocket, room_key: str, on_ended=None) -> None:
     """Relays WebRTC offer/answer/ICE messages between the two participants
     of one room. Does not touch the media itself — just signaling."""
     room = _rooms.setdefault(room_key, [])
@@ -68,6 +73,7 @@ async def _run_call(websocket: WebSocket, room_key: str) -> None:
     await websocket.accept()
     room.append(websocket)
     if len(room) == 2:
+        _had_both.add(room_key)
         # Tell the peer who was already waiting that it can start the offer.
         await room[0].send_json({"type": "peer-joined"})
 
@@ -85,6 +91,12 @@ async def _run_call(websocket: WebSocket, room_key: str) -> None:
             await peer.send_json({"type": "peer-left"})
         if not room:
             _rooms.pop(room_key, None)
+            # Both sides have left a call that both joined: it's over. A single
+            # dropped connection leaves the room non-empty, so rejoining still works.
+            if room_key in _had_both:
+                _had_both.discard(room_key)
+                if on_ended:
+                    on_ended()
 
 
 @router.websocket("/ws/call/{appointment_id}")
@@ -109,6 +121,9 @@ async def telemedicine_call_signaling(websocket: WebSocket, consultation_id: str
     try:
         user = get_ws_user(db, token)
         consultation = TelemedicineRepository(db).get_by_id(consultation_id)
+        if consultation and consultation.status == ConsultationStatus.COMPLETED:
+            await websocket.close(code=4410)  # the call page shows "this consultation has ended"
+            return
         if not can_join_consultation_call(db, user, consultation):
             await websocket.close(code=4403)
             return
@@ -116,4 +131,7 @@ async def telemedicine_call_signaling(websocket: WebSocket, consultation_id: str
     finally:
         db.close()
 
-    await _run_call(websocket, f"telemedicine:{consultation_id}")
+    await _run_call(
+        websocket, f"telemedicine:{consultation_id}",
+        on_ended=lambda: complete_after_call(consultation_id, get_medplum_integration()),
+    )

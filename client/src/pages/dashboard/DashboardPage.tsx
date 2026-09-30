@@ -249,6 +249,7 @@ function MyConsultationsSection({ token }: { token: string | null }) {
     queryKey: ['my-consultations'],
     queryFn: () => listMyConsultations(token!),
     enabled: Boolean(token),
+    refetchInterval: 15000, // picks up "completed" once both sides leave the call
   })
 
   async function handleCancel(id: string) {

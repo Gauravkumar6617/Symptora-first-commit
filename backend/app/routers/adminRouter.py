@@ -39,6 +39,7 @@ def get_stats(
     service: AdminService = Depends(get_admin_service),
 ):
     """Counts for the dashboard header: patients, approved doctors, clinics,
+    paid telemedicine earnings (total, this month, count),
     and doctor applications still awaiting review."""
     return AdminController.get_stats(service)
 

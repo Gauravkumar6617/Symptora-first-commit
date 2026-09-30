@@ -1,17 +1,20 @@
-import { Baby, CheckCircle2, Mail, UserRound } from 'lucide-react'
+import { Baby, CheckCircle2, Mail, Pencil, UserRound, UsersRound } from 'lucide-react'
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AvatarUpload } from '@/components/ui/AvatarUpload'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ApiError,
+  answerFamilyLink,
   FAMILY_RELATIONSHIPS,
+  listFamilyLinks,
   type FamilyRelationship,
   GENDERS,
   listChecks,
   type SymptomCheck,
 } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
-import { relationLabel, useFamilyStore } from '@/store/familyStore'
+import { type FamilyMember, relationLabel, useFamilyStore } from '@/store/familyStore'
 
 /** Photos are stored inline with the member, so keep them small. */
 async function shrinkPhoto(dataUrl: string, size = 256): Promise<string> {
@@ -41,8 +44,10 @@ const inputClass =
 
 export function FamilyPage() {
   const token = useAuthStore((state) => state.token)
-  const { members, loadMembers, addMember, removeMember, inviteMember } = useFamilyStore()
+  const { members, loadMembers, addMember, updateMember, removeMember, inviteMember } = useFamilyStore()
   const [showForm, setShowForm] = useState(false)
+  /** null = the form adds a new member; otherwise the member being edited. */
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [relation, setRelation] = useState<FamilyRelationship | ''>('')
   const [age, setAge] = useState('')
@@ -93,6 +98,32 @@ export function FamilyPage() {
     }
   }
 
+  function resetForm() {
+    setName('')
+    setRelation('')
+    setAge('')
+    setGender('')
+    setEmail('')
+    setNumber('')
+    setAvatarUrl(null)
+    setEditingId(null)
+  }
+
+  function startEdit(member: FamilyMember) {
+    setError('')
+    setNotice('')
+    setEditingId(member.id)
+    setName(member.name)
+    setRelation(member.relation)
+    setAge(String(member.age))
+    setGender(member.gender ?? '')
+    setEmail(member.email ?? '')
+    setNumber(member.number ?? '')
+    setAvatarUrl(member.avatarUrl ?? null)
+    setShowForm(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError('')
@@ -112,22 +143,19 @@ export function FamilyPage() {
 
     setSaving(true)
     try {
-      await addMember({
+      const details = {
         name: name.trim(),
         relation,
         age: parsedAge,
         gender: gender || undefined,
         email: email.trim() || undefined,
         number: number.replace(/[\s-]/g, '') || undefined,
-        avatarUrl: avatarUrl ? await shrinkPhoto(avatarUrl) : undefined,
-      })
-      setName('')
-      setRelation('')
-      setAge('')
-      setGender('')
-      setEmail('')
-      setNumber('')
-      setAvatarUrl(null)
+        // Already-stored photos are small data URLs; only shrink new uploads.
+        avatarUrl: avatarUrl ? (avatarUrl.length > 60_000 ? await shrinkPhoto(avatarUrl) : avatarUrl) : undefined,
+      }
+      if (editingId) await updateMember(editingId, details)
+      else await addMember(details)
+      resetForm()
       setShowForm(false)
     } catch (err) {
       setError(errorMessage(err, 'Could not save this family member. Please try again.'))
@@ -136,7 +164,13 @@ export function FamilyPage() {
     }
   }
 
-  async function handleRemove(id: string) {
+  async function handleRemove(member: FamilyMember) {
+    const ok = window.confirm(
+      `Remove ${member.name}? Their profile and the health checks you ran for them will be deleted. ` +
+        'This cannot be undone.',
+    )
+    if (!ok) return
+    const id = member.id
     setError('')
     try {
       await removeMember(id)
@@ -158,7 +192,10 @@ export function FamilyPage() {
         </div>
         <button
           type="button"
-          onClick={() => setShowForm((v) => !v)}
+          onClick={() => {
+            resetForm()
+            setShowForm((v) => !v)
+          }}
           className="btn-raised"
         >
           {showForm ? 'Cancel' : '+ Link family member'}
@@ -232,7 +269,9 @@ export function FamilyPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className={inputClass}
+              disabled={Boolean(editingId && members.find((m) => m.id === editingId)?.hasAccount)}
+              title="A member with their own login keeps the email they log in with"
+              className={`${inputClass} disabled:bg-surface disabled:text-ink/50`}
               placeholder="name@example.com"
             />
           </div>
@@ -250,7 +289,7 @@ export function FamilyPage() {
           </div>
           <div className="sm:col-span-3">
             <button type="submit" className="btn-raised" disabled={saving}>
-              {saving ? 'Saving…' : 'Save family member'}
+              {saving ? 'Saving…' : editingId ? 'Save changes' : 'Save family member'}
             </button>
           </div>
         </form>
@@ -258,6 +297,8 @@ export function FamilyPage() {
 
       {error && <p className="mt-4 text-sm text-danger">{error}</p>}
       {notice && <p className="mt-4 text-sm text-success">{notice}</p>}
+
+      {token && <FamilyLinksSection token={token} />}
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {members.map((member) => (
@@ -320,7 +361,7 @@ export function FamilyPage() {
                 Check symptoms
               </Link>
               <Link
-                to="/appointments"
+                to={`/appointments?member=${member.id}`}
                 className="flex-1 rounded-lg border border-ink/15 px-3 py-1.5 text-center text-xs font-semibold text-ink hover:bg-ink/5"
               >
                 Book for them
@@ -338,7 +379,14 @@ export function FamilyPage() {
               )}
               <button
                 type="button"
-                onClick={() => handleRemove(member.id)}
+                onClick={() => startEdit(member)}
+                className="flex items-center gap-1 rounded-lg border border-ink/15 px-3 py-1.5 text-xs font-semibold text-ink hover:bg-ink/5"
+              >
+                <Pencil className="h-3.5 w-3.5" /> Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRemove(member)}
                 className="rounded-lg border border-danger/20 px-3 py-1.5 text-xs font-semibold text-danger hover:bg-danger/5"
               >
                 Remove
@@ -347,6 +395,89 @@ export function FamilyPage() {
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+/** People who added *you* as family. Linking shares health checks both ways,
+ * so it only happens when you approve it here; you can leave at any time. */
+function FamilyLinksSection({ token }: { token: string }) {
+  const queryClient = useQueryClient()
+  const { data: links = [] } = useQuery({ queryKey: ['family-links'], queryFn: () => listFamilyLinks(token) })
+  const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState('')
+
+  async function answer(id: string, accept: boolean, leaving: boolean) {
+    if (leaving && !window.confirm('Stop sharing health checks with this person?')) return
+    setBusy(id)
+    setError('')
+    try {
+      await answerFamilyLink(token, id, accept)
+      await queryClient.invalidateQueries({ queryKey: ['family-links'] })
+    } catch (err) {
+      setError(errorMessage(err, 'Could not update this link. Please try again.'))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  if (links.length === 0) return null
+
+  return (
+    <div className="card-raised mt-6 p-5">
+      <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
+        <UsersRound className="h-4 w-4 text-primary-600" /> People who added you as family
+      </h2>
+      <p className="mt-1 text-xs text-ink/50">
+        Approving lets you both see each other's health checks. Nothing is shared until you approve.
+      </p>
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+      <ul className="mt-3 divide-y divide-ink/10">
+        {links.map((link) => (
+          <li key={link.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+            <p className="text-sm text-ink">
+              <span className="font-semibold">{link.owner_name}</span>
+              {link.relationship_to_owner && (
+                <span className="text-ink/50"> · added you as {relationLabel(link.relationship_to_owner)}</span>
+              )}
+            </p>
+            {link.status === 'pending' ? (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={busy === link.id}
+                  onClick={() => answer(link.id, true, false)}
+                  className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary/90 disabled:opacity-60"
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  disabled={busy === link.id}
+                  onClick={() => answer(link.id, false, false)}
+                  className="rounded-lg border border-ink/15 px-3 py-1.5 text-xs font-semibold text-ink hover:bg-ink/5 disabled:opacity-60"
+                >
+                  Decline
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1 text-xs font-semibold text-success">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Sharing health checks
+                </span>
+                <button
+                  type="button"
+                  disabled={busy === link.id}
+                  onClick={() => answer(link.id, false, true)}
+                  className="text-xs font-semibold text-danger hover:underline disabled:opacity-60"
+                >
+                  Leave
+                </button>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

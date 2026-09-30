@@ -207,6 +207,24 @@ def sync_consultation_to_medplum(consultation_id: str, medplum: MedplumIntegrati
         db.close()
 
 
+def complete_after_call(consultation_id: str, medplum: MedplumIntegration) -> None:
+    """Both participants have left the call: mark the consultation completed
+    (no more "Rejoin") and close its Medplum Encounter."""
+    db = SessionLocal()
+    try:
+        consultation = db.get(TelemedicineConsultationModel, consultation_id)
+        if consultation is None or consultation.status != ConsultationStatus.IN_PROGRESS:
+            return
+        consultation.status = ConsultationStatus.COMPLETED
+        db.commit()
+        if consultation.medplum_encounter_id:
+            finish_encounter_in_medplum(consultation.medplum_encounter_id, medplum)
+    except Exception:
+        logger.exception("Consultation %s: could not complete after the call", consultation_id)
+    finally:
+        db.close()
+
+
 def finish_encounter_in_medplum(encounter_id: str, medplum: MedplumIntegration) -> None:
     """Background task: mark the consultation's FHIR Encounter finished. Best effort."""
     try:

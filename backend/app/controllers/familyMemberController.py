@@ -43,6 +43,8 @@ class FamilyMemberController:
             service.remove_member(owner, member_id)
         except FamilyMemberNotFoundError:
             raise NOT_FOUND
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
     @staticmethod
     def invite_member(owner: UserModel, member_id: str, service: FamilyMemberService):
@@ -54,6 +56,11 @@ class FamilyMemberController:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         except InviteDeliveryError as e:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
-        if linked:
-            return {"detail": "They already have a Symptora account and are now linked.", "has_account": True}
+        if linked == "linked":
+            return {"detail": "They're already linked with you.", "has_account": True}
+        if linked == "requested":
+            return {
+                "detail": "They already have a Symptora account. We've asked them to approve the link.",
+                "has_account": False,
+            }
         return {"detail": "Invite sent. They'll get a code by email to activate their login.", "has_account": False}

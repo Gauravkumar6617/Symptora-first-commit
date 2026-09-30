@@ -2,8 +2,11 @@ import {
   Building2,
   CheckCircle2,
   Clock,
+  IndianRupee,
   Stethoscope,
+  TrendingUp,
   UsersRound,
+  Video,
   XCircle,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -139,6 +142,9 @@ export function AdminDashboardPage() {
           <StatCard icon={Stethoscope} label="Doctors" value={stats.doctors} />
           <StatCard icon={Building2} label="Clinics" value={stats.clinics} />
           <StatCard icon={Clock} label="Pending applications" value={stats.pending_applications} />
+          <StatCard icon={IndianRupee} label="Total earnings (telemedicine)" value={rupees(stats.total_earnings)} />
+          <StatCard icon={TrendingUp} label="Earnings this month" value={rupees(stats.month_earnings)} />
+          <StatCard icon={Video} label="Paid consultations" value={stats.paid_consultations} />
         </div>
       )}
 
@@ -202,6 +208,8 @@ export function AdminDashboardPage() {
   )
 }
 
+const rupees = (amount: number) => `₹${amount.toLocaleString('en-IN')}`
+
 function StatCard({
   icon: Icon,
   label,
@@ -209,7 +217,7 @@ function StatCard({
 }: {
   icon: typeof UsersRound
   label: string
-  value: number
+  value: number | string
 }) {
   return (
     <div className="card-raised p-5">

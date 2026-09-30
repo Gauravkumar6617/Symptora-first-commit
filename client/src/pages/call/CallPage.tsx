@@ -1,7 +1,7 @@
 import { Mic, MicOff, PhoneOff, Video, VideoOff } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { callSocketUrl, completeConsultation } from '@/lib/api'
+import { callSocketUrl } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 
 // ponytail: public STUN only, no TURN — calls between peers on restrictive
@@ -72,7 +72,8 @@ export function CallPage() {
       ws.onopen = () => setState('waiting')
       ws.onerror = () => setError('Could not connect to the call. Please try again.')
       ws.onclose = (e) => {
-        if (e.code === 4403) setError('You are not allowed to join this call.')
+        if (e.code === 4410) setError('This consultation has ended. You can still message the doctor and see prescriptions from your dashboard.')
+        else if (e.code === 4403) setError('You are not allowed to join this call.')
         else if (e.code === 4409) setError('This call already has both participants.')
       }
 
@@ -139,8 +140,10 @@ export function CallPage() {
     wsRef.current?.close()
     pcRef.current?.close()
     for (const track of localStreamRef.current?.getTracks() ?? []) track.stop()
+    // No explicit "complete" here: the server completes a telemedicine
+    // consultation once both participants have left, so a single dropped
+    // connection can still rejoin and hanging up never kicks the other side.
     setState('ended')
-    if (kind === 'telemedicine' && token) completeConsultation(token, appointmentId).catch(() => {})
     navigate(-1)
   }
 

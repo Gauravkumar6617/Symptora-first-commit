@@ -196,6 +196,7 @@ function ConsultationHistorySection({ token }: { token: string | null }) {
     queryKey: ['my-handled-consultations'],
     queryFn: () => listMyHandledConsultations(token!),
     enabled: Boolean(token),
+    refetchInterval: 15000, // picks up "completed" once both sides leave the call
   })
   const [chatId, setChatId] = useState<string | null>(null)
   const [prescribeId, setPrescribeId] = useState<string | null>(null)

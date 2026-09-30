@@ -62,7 +62,7 @@ export function ActivateFamilyPage() {
       })
       const user = await getCurrentUser(access_token)
       login(toAuthUser(user), access_token)
-      navigate('/dashboard')
+      navigate('/family') // approve the family link(s) that invited them
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Try again.')
     } finally {

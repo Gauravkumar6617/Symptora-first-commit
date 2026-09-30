@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.controllers.familyMemberController import FamilyMemberController
@@ -10,11 +10,12 @@ from app.deps.medplum import get_medplum_integration
 from app.models.userModel import UserModel
 from app.schemas.family_member import (
     FamilyInviteResponse,
+    FamilyLinkRead,
     FamilyMemberCreate,
     FamilyMemberRead,
     FamilyMemberUpdate,
 )
-from app.services.familyMemberService import FamilyMemberService
+from app.services.familyMemberService import FamilyMemberNotFoundError, FamilyMemberService
 from app.utils.integration.medplum.index import MedplumIntegration
 
 router = APIRouter(prefix="/family-members", tags=["Family members"])
@@ -34,6 +35,43 @@ def list_family_members(
 ):
     """Family profiles linked to the caller's account, oldest first."""
     return FamilyMemberController.list_members(current_user, service)
+
+
+@router.get("/links", response_model=List[FamilyLinkRead])
+def list_family_links(
+    current_user: UserModel = Depends(get_current_user),
+    service: FamilyMemberService = Depends(get_family_service),
+):
+    """People who added the caller as family: pending requests and approved links."""
+    return service.links_for_user(current_user)
+
+
+@router.post("/links/{member_id}/accept", status_code=status.HTTP_204_NO_CONTENT)
+def accept_family_link(
+    member_id: str,
+    current_user: UserModel = Depends(get_current_user),
+    service: FamilyMemberService = Depends(get_family_service),
+):
+    """Approve: from now on both sides see each other's health checks."""
+    try:
+        service.accept_link(current_user, member_id)
+    except FamilyMemberNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found.")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/links/{member_id}/decline", status_code=status.HTTP_204_NO_CONTENT)
+def decline_family_link(
+    member_id: str,
+    current_user: UserModel = Depends(get_current_user),
+    service: FamilyMemberService = Depends(get_family_service),
+):
+    """Decline a pending request, or leave an approved link."""
+    try:
+        service.decline_link(current_user, member_id)
+    except FamilyMemberNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found.")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("", response_model=FamilyMemberRead, status_code=status.HTTP_201_CREATED)

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, EmailStr, Field, computed_field
 
@@ -47,3 +47,12 @@ class FamilyMemberRead(FamilyMemberBase, ORMReadBase):
 class FamilyInviteResponse(BaseModel):
     detail: str
     has_account: bool
+
+
+class FamilyLinkRead(BaseModel):
+    """A family profile someone else made for the caller."""
+
+    id: str
+    owner_name: str
+    relationship_to_owner: Optional[str] = None
+    status: Literal["pending", "linked"]

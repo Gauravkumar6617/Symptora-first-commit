@@ -1,6 +1,10 @@
-# HealthBridge Backend
+# Symptora Backend
 
-This is the FastAPI backend for HealthBridge. It exposes the healthcare platform APIs and connects to PostgreSQL and Redis for persistence and caching.
+This is the FastAPI backend for Symptora. For the full setup, environment
+variables, feature flows and API reference see [docs/GUIDE.md](../docs/GUIDE.md);
+this file documents the request layers and the auth flows in depth.
+
+It exposes the healthcare platform APIs and connects to PostgreSQL and Redis for persistence and caching.
 
 ## Tech stack
 
@@ -28,7 +32,8 @@ This is the FastAPI backend for HealthBridge. It exposes the healthcare platform
    python -m pip install --upgrade pip
    pip install -e .
    ```
-4. Create a local environment file named `.env.dev` in the backend folder with the required values:
+4. Copy `.env.example` to `.env.dev` and fill it in (every variable is listed in
+   [docs/GUIDE.md](../docs/GUIDE.md#4-environment-variables)). At minimum:
    ```env
    DATABASE_URL=postgresql://postgres:postgres@localhost:5432/healthbridge
    REDIS_URL=redis://localhost:6379/0
