@@ -13,6 +13,7 @@ from app.repositories.serviceRepository import ServiceRepository
 from app.repositories.telemedicineRepository import TelemedicineRepository
 from app.repositories.userRepositories import UserRepository
 from app.models.clinicModel import CliniModel
+from app.models.newsletterModel import NewsletterSubscriberModel
 from app.models.doctorModel import DoctorProfile
 from app.models.serviceModel import ServiceModel
 from app.schemas.clinic import AdminClinicRead, ClinicBase, ClinicCreate, ClinicRead, ClinicUpdate
@@ -85,6 +86,7 @@ class AdminService:
             "clinics": len(self.clinic_repo.list_all()),
             "pending_applications": len(self.doctor_repo.list_by_status(Status.PENDING)),
             **TelemedicineRepository(self.db).earnings(),
+            "newsletter_subscribers": self.db.query(NewsletterSubscriberModel).filter_by(active=True).count(),
         }
 
     def list_patients(self):

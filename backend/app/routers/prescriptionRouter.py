@@ -9,7 +9,14 @@ from app.deps.auth import get_current_user
 from app.deps.medplum import get_medplum_integration
 from app.models.userModel import UserModel
 from app.schemas.prescription import PrescriptionCreate, PrescriptionRead
-from app.services.prescriptionService import PrescriptionService, prescription_pdf, sync_prescription_to_medplum
+from app.routers.callRouter import force_end_call
+from app.services.telemedicineService import finish_encounter_in_medplum
+from app.services.prescriptionService import (
+    PrescriptionService,
+    email_prescription_ready,
+    prescription_pdf,
+    sync_prescription_to_medplum,
+)
 from app.utils.integration.medplum.index import MedplumIntegration
 
 router = APIRouter(prefix="/prescriptions", tags=["Prescriptions"])
@@ -31,6 +38,14 @@ def issue_prescription(
     instant consultation; best-effort synced to Medplum as MedicationRequests."""
     prescription = PrescriptionController.issue(data, current_user, service)
     background.add_task(sync_prescription_to_medplum, prescription.id, medplum)
+    background.add_task(email_prescription_ready, prescription.id)
+    # Issuing it completed the consultation; close its Medplum Encounter too.
+    consultation = prescription.consultation
+    if consultation is not None:
+        # The consultation is complete: close the live call for both sides.
+        background.add_task(force_end_call, f"telemedicine:{consultation.id}")
+        if consultation.medplum_encounter_id:
+            background.add_task(finish_encounter_in_medplum, consultation.medplum_encounter_id, medplum)
     return prescription
 
 

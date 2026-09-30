@@ -20,6 +20,7 @@ import { DashboardPage } from '@/pages/dashboard/DashboardPage'
 import { DoctorDashboardPage } from '@/pages/doctor/DoctorDashboardPage'
 import { FamilyPage } from '@/pages/family/FamilyPage'
 import { HomePage } from '@/pages/home/HomePage'
+import { UnsubscribePage } from '@/pages/newsletter/UnsubscribePage'
 import { HowItWorksPage } from '@/pages/how-it-works/HowItWorksPage'
 import { PrivacyPolicyPage } from '@/pages/legal/PrivacyPolicyPage'
 import { TermsOfServicePage } from '@/pages/legal/TermsOfServicePage'
@@ -49,6 +50,7 @@ export const router = createBrowserRouter([
       { path: '/contact', element: <ContactPage /> },
       { path: '/privacy', element: <PrivacyPolicyPage /> },
       { path: '/terms', element: <TermsOfServicePage /> },
+      { path: '/newsletter/unsubscribe', element: <UnsubscribePage /> },
       {
         element: <ProtectedRoute />,
         children: [

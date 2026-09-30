@@ -34,5 +34,6 @@ class PrescriptionModel(BaseModel):
     medplum_medication_request_id = Column(String, nullable=True)
 
     doctor_profile = relationship("DoctorProfile")
+    consultation = relationship("TelemedicineConsultationModel")
     patient = relationship("UserModel", foreign_keys=[patient_id])
     family_member = relationship("FamilyMemberModel", foreign_keys=[family_member_id])

@@ -2,8 +2,9 @@ import logging
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import SessionLocal
-from app.models.enumModel import Status
+from app.models.enumModel import AppointmentStatus, ConsultationStatus, Status
 from app.models.prescriptionModel import PrescriptionModel
 from app.repositories.appointmentRepository import AppointmentRepository
 from app.repositories.doctorRepositories import DoctorRepository
@@ -12,6 +13,7 @@ from app.repositories.telemedicineRepository import TelemedicineRepository
 from app.schemas.prescription import PrescriptionCreate
 from app.services.familyMemberService import FamilyMemberService
 from app.services.notificationService import notify
+from app.utils.otp.send_otp import send_consultation_email
 from app.utils.pdf import text_pdf
 from app.utils.integration.medplum.index import MedplumIntegration
 
@@ -45,6 +47,12 @@ class PrescriptionService:
             raise PermissionError("Only the treating doctor may prescribe for this visit")
 
         prescription = self.repo.create(doctor.id, visit.patient_id, visit.family_member_id, data)
+        # Prescribing is the end of the visit: no more "in progress" / Rejoin.
+        if data.consultation_id and visit.status == ConsultationStatus.IN_PROGRESS:
+            visit.status = ConsultationStatus.COMPLETED
+        elif data.appointment_id and visit.status in (AppointmentStatus.SCHEDULED, AppointmentStatus.RESCHEDULED):
+            visit.status = AppointmentStatus.COMPLETED
+        self.db.commit()
         self._label(prescription)
         notify(self.db, visit.patient_id, f"{prescription.doctor_name} sent you a prescription",
                f"{len(prescription.medications)} medication(s). Download it from your dashboard.",
@@ -111,6 +119,29 @@ class PrescriptionService:
         if not doctor or not doctor.user:
             return None
         return f"Dr. {doctor.user.first_name} {doctor.user.last_name}"
+
+
+def email_prescription_ready(prescription_id: str) -> None:
+    """Background task: tell the patient their prescription is ready. Best effort."""
+    db = SessionLocal()
+    try:
+        p = db.get(PrescriptionModel, prescription_id)
+        if p is None or p.patient is None or not p.patient.email:
+            return
+        doctor = PrescriptionService._doctor_display_name(p.doctor_profile) or "Your doctor"
+        who = f" for {p.family_member.full_name}" if p.family_member else ""
+        send_consultation_email(
+            p.patient.email,
+            "Your prescription is ready",
+            f"{doctor} has sent your prescription{who} ({len(p.medications)} medication(s)). "
+            "View it or download the PDF from your dashboard.",
+            f"{settings.FRONTEND_URL.rstrip('/')}/dashboard#prescriptions",
+            "View prescription",
+        )
+    except Exception:
+        logger.exception("Prescription %s: ready email failed", prescription_id)
+    finally:
+        db.close()
 
 
 def prescription_pdf(p: PrescriptionModel) -> bytes:

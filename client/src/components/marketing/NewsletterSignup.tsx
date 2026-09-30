@@ -1,15 +1,26 @@
 import { CheckCircle2, Mail, Send } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
+import { ApiError, subscribeNewsletter } from '@/lib/api'
 
 export function NewsletterSignup() {
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    if (!email) return
-    // TODO: wire to real newsletter/subscription endpoint
-    setSubmitted(true)
+    if (!email.trim() || sending) return
+    setSending(true)
+    setError('')
+    try {
+      await subscribeNewsletter(email.trim())
+      setSubmitted(true)
+    } catch (err) {
+      setError(err instanceof ApiError && err.status === 422 ? 'Enter a valid email address.' : 'Could not subscribe right now. Please try again.')
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -49,11 +60,13 @@ export function NewsletterSignup() {
                   className="w-full bg-transparent text-base text-ink outline-none placeholder:text-ink/40"
                 />
               </div>
+              {error && <p className="text-sm font-medium text-white">{error}</p>}
               <button
                 type="submit"
+                disabled={sending}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-ink px-6 py-4 text-base font-semibold text-white shadow-[0_10px_20px_-6px_rgba(0,0,0,0.4)] hover:bg-ink/90"
               >
-                Subscribe
+                {sending ? 'Subscribing…' : 'Subscribe'}
                 <Send className="h-4 w-4" />
               </button>
               <p className="text-xs text-white/60">

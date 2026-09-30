@@ -7,6 +7,7 @@ import {
   type AvailabilitySlotPayload,
   ApiError,
   acceptConsultation,
+  completeConsultation,
   cancelAppointment,
   type DoctorApplication,
   getMyDoctorApplication,
@@ -200,6 +201,20 @@ function ConsultationHistorySection({ token }: { token: string | null }) {
   })
   const [chatId, setChatId] = useState<string | null>(null)
   const [prescribeId, setPrescribeId] = useState<string | null>(null)
+  const [ending, setEnding] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+
+  /** Manual end, for a call that never properly connected or was left open. */
+  async function handleEnd(id: string) {
+    if (!token || !window.confirm('End this consultation? The patient will no longer be able to rejoin the call.')) return
+    setEnding(id)
+    try {
+      await completeConsultation(token, id)
+      await queryClient.invalidateQueries({ queryKey: ['my-handled-consultations'] })
+    } finally {
+      setEnding(null)
+    }
+  }
 
   if (consultations.length === 0) return null
 
@@ -229,6 +244,16 @@ function ConsultationHistorySection({ token }: { token: string | null }) {
                 >
                   <Video className="h-3.5 w-3.5" /> Rejoin
                 </Link>
+              )}
+              {c.status === 'in_progress' && (
+                <button
+                  type="button"
+                  onClick={() => handleEnd(c.id)}
+                  disabled={ending === c.id}
+                  className="rounded-lg border border-danger/20 px-2.5 py-1 text-xs font-semibold text-danger hover:bg-danger/5 disabled:opacity-60"
+                >
+                  {ending === c.id ? 'Ending…' : 'End consultation'}
+                </button>
               )}
               <button
                 type="button"
@@ -266,7 +291,11 @@ function ConsultationHistorySection({ token }: { token: string | null }) {
           id={prescribeId}
           token={token}
           onClose={() => setPrescribeId(null)}
-          onIssued={() => setPrescribeId(null)}
+          onIssued={() => {
+            setPrescribeId(null)
+            // Prescribing completes the visit; show that straight away.
+            queryClient.invalidateQueries()
+          }}
         />
       )}
     </div>
@@ -402,7 +431,11 @@ function MyAppointmentsSection({ token }: { token: string | null }) {
           id={prescribeId}
           token={token}
           onClose={() => setPrescribeId(null)}
-          onIssued={() => setPrescribeId(null)}
+          onIssued={() => {
+            setPrescribeId(null)
+            // Prescribing completes the visit; show that straight away.
+            queryClient.invalidateQueries()
+          }}
         />
       )}
     </div>

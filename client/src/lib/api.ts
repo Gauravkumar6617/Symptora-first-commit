@@ -371,6 +371,7 @@ export interface AdminStats {
   total_earnings: number
   month_earnings: number
   paid_consultations: number
+  newsletter_subscribers: number
 }
 
 /** backend AdminDoctorRead — an approved doctor plus their user info and clinics. */
@@ -1387,4 +1388,14 @@ export async function downloadPrescriptionPdf(token: string, id: string): Promis
   a.download = `prescription-${id.slice(0, 8)}.pdf`
   a.click()
   URL.revokeObjectURL(url)
+}
+
+/** POST /newsletter/subscribe — public. */
+export async function subscribeNewsletter(email: string): Promise<{ detail: string }> {
+  return request('/newsletter/subscribe', { method: 'POST', body: { email } })
+}
+
+/** POST /newsletter/unsubscribe — token from the link in a newsletter email. */
+export async function unsubscribeNewsletter(token: string): Promise<{ detail: string }> {
+  return request('/newsletter/unsubscribe', { method: 'POST', body: { token } })
 }

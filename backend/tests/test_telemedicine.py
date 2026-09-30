@@ -297,6 +297,19 @@ def test_call_ends_only_when_both_have_left():
         await leave(lonely, t)
         assert ended == [1]                     # not completed: patient can still join
 
+        # prescription issued mid-call: both sides are told and disconnected
+        from app.routers.callRouter import _rooms, force_end_call
+        doctor, patient = FakeSocket(), FakeSocket()
+        d, p = join(doctor), join(patient)
+        await asyncio.sleep(0)
+        sent = []
+        for ws in (doctor, patient):
+            ws.send_json = lambda m, sent=sent: sent.append(m["type"]) or asyncio.sleep(0)
+        await force_end_call("telemedicine:t1")
+        assert sent.count("call-ended") == 2 and "telemedicine:t1" not in _rooms
+        await leave(doctor, d)
+        await leave(patient, p)
+
     asyncio.run(scenario())
 
 
@@ -311,3 +324,20 @@ def test_admin_earnings_count_only_paid(db, setup):
     earnings = TelemedicineRepository(db).earnings()
     fee = TelemedicineService(db).repo.list_for_patient(patient.id)[0].amount
     assert earnings == {"total_earnings": 2 * fee, "month_earnings": 2 * fee, "paid_consultations": 2}
+
+
+def test_issuing_a_prescription_completes_the_consultation(db, setup):
+    from app.schemas.prescription import PrescriptionCreate
+    from app.services.prescriptionService import PrescriptionService
+
+    patient, doc_user, *_ = setup
+    service = TelemedicineService(db)
+    consultation = service.start(patient, TelemedicineStart(reason="Fever"))
+    pay(service, patient, consultation)
+    service.accept(doc_user, consultation.id)
+    PrescriptionService(db).issue(doc_user, PrescriptionCreate(
+        consultation_id=consultation.id,
+        medications=[{"name": "ORS", "dosage": "1 sachet", "frequency": "after each loose stool", "duration": "2 days"}],
+    ))
+    db.refresh(consultation)
+    assert consultation.status == ConsultationStatus.COMPLETED

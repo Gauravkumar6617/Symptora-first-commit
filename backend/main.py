@@ -16,6 +16,7 @@ from app.routers.callRouter import router as CallRouter
 from app.routers.telemedicineRouter import router as TelemedicineRouter
 from app.routers.messageRouter import router as MessageRouter
 from app.routers.notificationRouter import router as NotificationRouter
+from app.routers.newsletterRouter import router as NewsletterRouter
 from app.routers.prescriptionRouter import router as PrescriptionRouter
 from app.routers.blogRouter import router as BlogRouter, admin_router as AdminBlogRouter
 from app.routers.serviceRouter import router as ServiceRouter
@@ -73,6 +74,7 @@ app.include_router(CallRouter,prefix="/api/v1")
 app.include_router(TelemedicineRouter,prefix="/api/v1")
 app.include_router(MessageRouter,prefix="/api/v1")
 app.include_router(NotificationRouter,prefix="/api/v1")
+app.include_router(NewsletterRouter,prefix="/api/v1")
 app.include_router(PrescriptionRouter,prefix="/api/v1")
 app.include_router(BlogRouter,prefix="/api/v1")
 app.include_router(AdminBlogRouter,prefix="/api/v1")

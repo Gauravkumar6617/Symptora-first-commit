@@ -62,6 +62,20 @@ def notify_other_party(db: Session, user, visit, kind: str) -> None:
            f"/call/{kind}/{visit.id}")
 
 
+async def force_end_call(room_key: str) -> None:
+    """Close a live call for everyone in it (the consultation was completed,
+    e.g. the doctor issued the prescription): each page shows the ended screen."""
+    _had_both.discard(room_key)
+    room = _rooms.pop(room_key, [])
+    sockets, room[:] = list(room), []  # emptied, so the old handlers' cleanup has nothing to do
+    for ws in sockets:
+        try:
+            await ws.send_json({"type": "call-ended"})
+            await ws.close(code=4410)
+        except Exception:
+            pass
+
+
 async def _run_call(websocket: WebSocket, room_key: str, on_ended=None) -> None:
     """Relays WebRTC offer/answer/ICE messages between the two participants
     of one room. Does not touch the media itself — just signaling."""
@@ -86,10 +100,14 @@ async def _run_call(websocket: WebSocket, room_key: str, on_ended=None) -> None:
     except WebSocketDisconnect:
         pass
     finally:
-        room.remove(websocket)
+        if websocket in room:
+            room.remove(websocket)
         for peer in room:
-            await peer.send_json({"type": "peer-left"})
-        if not room:
+            try:
+                await peer.send_json({"type": "peer-left"})
+            except Exception:
+                pass  # that peer is going too; don't skip the cleanup below
+        if not room and _rooms.get(room_key) is room:  # not a newer room under the same key
             _rooms.pop(room_key, None)
             # Both sides have left a call that both joined: it's over. A single
             # dropped connection leaves the room non-empty, so rejoining still works.

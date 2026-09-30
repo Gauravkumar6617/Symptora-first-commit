@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Clock,
   IndianRupee,
+  Mail,
   Stethoscope,
   TrendingUp,
   UsersRound,
@@ -145,6 +146,7 @@ export function AdminDashboardPage() {
           <StatCard icon={IndianRupee} label="Total earnings (telemedicine)" value={rupees(stats.total_earnings)} />
           <StatCard icon={TrendingUp} label="Earnings this month" value={rupees(stats.month_earnings)} />
           <StatCard icon={Video} label="Paid consultations" value={stats.paid_consultations} />
+          <StatCard icon={Mail} label="Newsletter subscribers" value={stats.newsletter_subscribers} />
         </div>
       )}
 

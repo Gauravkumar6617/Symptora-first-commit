@@ -1,6 +1,6 @@
-import { Mic, MicOff, PhoneOff, Video, VideoOff } from 'lucide-react'
+import { CheckCircle2, Mic, MicOff, PhoneOff, Video, VideoOff } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { callSocketUrl } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 
@@ -24,7 +24,7 @@ export function CallPage() {
   const { kind, id = '' } = useParams<{ kind: 'appointment' | 'telemedicine'; id: string }>()
   const appointmentId = id
   const token = useAuthStore((state) => state.token)
-  const navigate = useNavigate()
+  const isDoctor = useAuthStore((state) => Boolean(state.user?.isDoctor))
 
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
@@ -38,6 +38,16 @@ export function CallPage() {
   const [cameraOn, setCameraOn] = useState(true)
   /** The browser blocked auto-play (common in phone in-app browsers). */
   const [needsTap, setNeedsTap] = useState(false)
+  /** Why the call is over: this side hung up, or the consultation was completed. */
+  const [endReason, setEndReason] = useState<'left' | 'completed'>('left')
+  /** The other participant hung up while this side is still here. */
+  const [peerLeft, setPeerLeft] = useState(false)
+
+  function teardown() {
+    wsRef.current?.close()
+    pcRef.current?.close()
+    for (const track of localStreamRef.current?.getTracks() ?? []) track.stop()
+  }
 
   useEffect(() => {
     if (!token) return
@@ -103,8 +113,12 @@ export function CallPage() {
       ws.onopen = () => setState('waiting')
       ws.onerror = () => setError('Could not connect to the call. Please try again.')
       ws.onclose = (e) => {
-        if (e.code === 4410) setError('This consultation has ended. You can still message the doctor and see prescriptions from your dashboard.')
-        else if (e.code === 4403) setError('You are not allowed to join this call.')
+        if (e.code === 4410) {
+          // Completed (e.g. prescription issued) — at join time or mid-call.
+          teardown()
+          setEndReason('completed')
+          setState('ended')
+        } else if (e.code === 4403) setError('You are not allowed to join this call.')
         else if (e.code === 4409) setError('This call already has both participants.')
       }
 
@@ -116,6 +130,7 @@ export function CallPage() {
             // The other side (re)joined: always start from a fresh connection,
             // never renegotiate a dead one from their previous attempt.
             resetPeerConnection()
+            setPeerLeft(false)
             const fresh = ensurePeerConnection()
             const offer = await fresh.createOffer()
             await fresh.setLocalDescription(offer)
@@ -140,7 +155,13 @@ export function CallPage() {
             break
           case 'peer-left':
             resetPeerConnection()
+            setPeerLeft(true)
             setState('waiting')
+            break
+          case 'call-ended':
+            teardown()
+            setEndReason('completed')
+            setState('ended')
             break
         }
       }
@@ -171,17 +192,49 @@ export function CallPage() {
   }
 
   function leaveCall() {
-    wsRef.current?.close()
-    pcRef.current?.close()
-    for (const track of localStreamRef.current?.getTracks() ?? []) track.stop()
     // No explicit "complete" here: the server completes a telemedicine
-    // consultation once both participants have left, so a single dropped
-    // connection can still rejoin and hanging up never kicks the other side.
+    // consultation once both participants have left (or the prescription is
+    // issued), so a dropped connection can still rejoin.
+    teardown()
+    setEndReason('left')
     setState('ended')
-    navigate(-1)
   }
 
   if (!token) return null
+
+  if (state === 'ended') {
+    const dashboard = isDoctor ? '/doctor/dashboard' : '/dashboard'
+    let title = 'Call ended'
+    let body = 'You can rejoin from your dashboard while the consultation is still open.'
+    if (kind === 'telemedicine' && endReason === 'completed') {
+      title = 'Consultation complete'
+      body = isDoctor
+        ? 'The prescription has been sent to the patient.'
+        : "Your prescription is ready — we've emailed you, and you can view or download it from your dashboard."
+    } else if (kind === 'telemedicine' && !isDoctor) {
+      body =
+        "Your doctor is preparing your prescription. We'll email you as soon as it's ready, and it will also appear on your dashboard."
+    } else if (kind === 'telemedicine' && isDoctor) {
+      body = 'Write the prescription from Consultation history on your dashboard — that completes the consultation.'
+    }
+    return (
+      <div className="flex min-h-[calc(100vh-72px)] items-center justify-center px-4">
+        <div className="card-raised w-full max-w-md p-8 text-center">
+          <span className="icon-badge mx-auto h-14 w-14">
+            <CheckCircle2 className="h-6 w-6 text-primary-600" />
+          </span>
+          <h1 className="mt-4 text-lg font-bold text-ink">{title}</h1>
+          <p className="mt-2 text-sm text-ink/60">{body}</p>
+          <Link
+            to={endReason === 'completed' && !isDoctor ? '/dashboard#prescriptions' : dashboard}
+            className="btn-raised mt-6 inline-block w-full"
+          >
+            {endReason === 'completed' && !isDoctor ? 'View prescription' : 'Go to dashboard'}
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto flex min-h-[calc(100vh-72px)] max-w-5xl flex-col px-4 py-8 sm:px-6">
@@ -191,8 +244,15 @@ export function CallPage() {
           {error}
         </p>
       )}
-      {!error && state === 'waiting' && (
+      {!error && state === 'waiting' && !peerLeft && (
         <p className="mt-2 text-sm text-ink/50">Waiting for the other participant to join…</p>
+      )}
+      {!error && state === 'waiting' && peerLeft && (
+        <p className="mt-2 rounded-xl bg-primary/5 px-4 py-3 text-sm text-ink/70">
+          {isDoctor
+            ? 'The patient has left the call. You can end here and send the prescription from your dashboard.'
+            : "The doctor has left the call. They're preparing your prescription — we'll email you when it's ready. You can hang up now."}
+        </p>
       )}
 
       <div className="relative mt-4 flex-1 overflow-hidden rounded-2xl bg-ink">
