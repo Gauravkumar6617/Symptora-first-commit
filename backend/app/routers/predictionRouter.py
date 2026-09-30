@@ -20,6 +20,7 @@ from app.schemas.prediction import (
 from app.services.familyMemberService import FamilyMemberNotFoundError
 from app.services.predictionService import PredictionService, get_prediction_service
 from app.services.symptomCheckService import SymptomCheckService, sync_check_to_medplum
+from app.services.telemedicineService import email_doctors_patient_waiting
 from app.services import telemedicineNotifier as notifier
 from app.services.telemedicineService import TelemedicineService
 from app.schemas.telemedicine import TelemedicineRead
@@ -97,6 +98,8 @@ async def predict(
     escalated_id = None
     if result["urgency"] == "high":
         escalated_id = await _escalate_to_telemedicine(db, current_user, member, result, check.id)
+        if escalated_id:
+            background.add_task(email_doctors_patient_waiting, escalated_id)
 
     return {**result, "check_id": check.id, "escalated_consultation_id": escalated_id}
 

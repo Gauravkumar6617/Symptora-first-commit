@@ -1,12 +1,12 @@
-import { Check, Star, UserRound } from 'lucide-react'
+import { Check, UserRound } from 'lucide-react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { SpecialtyThumbnail } from '@/components/specialties/SpecialtyThumbnail'
-import { clinics } from '@/data/clinics'
-import { doctors } from '@/data/doctors'
+import { useDirectory } from '@/hooks/useDirectory'
 import { getSpecialtyBySlug, specialties } from '@/data/specialties'
 
 export function SpecialtyPage() {
   const { slug } = useParams<{ slug: string }>()
+  const { doctors } = useDirectory()
   const specialty = slug ? getSpecialtyBySlug(slug) : undefined
 
   if (!specialty) {
@@ -14,7 +14,7 @@ export function SpecialtyPage() {
   }
 
   const specialtyDoctors = doctors.filter(
-    (doctor) => doctor.specialty === specialty.doctorSpecialty,
+    (doctor) => doctor.specialization === specialty.doctorSpecialty,
   )
   const otherSpecialties = specialties.filter((s) => s.slug !== specialty.slug)
 
@@ -73,7 +73,6 @@ export function SpecialtyPage() {
                 </p>
               )}
               {specialtyDoctors.map((doctor) => {
-                const clinic = clinics.find((c) => c.id === doctor.clinicId)
                 return (
                   <div key={doctor.id} className="card-raised p-4">
                     <div className="flex items-center gap-3">
@@ -85,21 +84,12 @@ export function SpecialtyPage() {
                           {doctor.name}
                         </p>
                         <p className="text-xs text-ink/50">
-                          {doctor.experienceYears} yrs · {clinic?.name}
+                          {doctor.years_of_practice ? `${doctor.years_of_practice} yrs · ` : ''}{doctor.clinicName}
                         </p>
                       </div>
                     </div>
-                    <div className="mt-3 flex items-center justify-between text-xs text-ink/60">
-                      <span className="flex items-center gap-1">
-                        <Star className="h-3.5 w-3.5 fill-warning text-warning" />
-                        {doctor.rating} ({doctor.consults})
-                      </span>
-                      <span>₹{doctor.fee}</span>
-                    </div>
-                    {doctor.availableToday && (
-                      <span className="mt-3 inline-block w-fit rounded-full bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">
-                        Available today
-                      </span>
+                    {doctor.fee != null && (
+                      <p className="mt-3 text-xs text-ink/60">₹{doctor.fee}</p>
                     )}
                     <Link
                       to="/appointments"

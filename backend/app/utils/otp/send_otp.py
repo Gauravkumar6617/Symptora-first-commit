@@ -139,6 +139,21 @@ def send_appointment_confirmation_email(
     )
 
 
+def send_consultation_email(to_email: str, subject: str, message: str, link: str, button: str) -> None:
+    """Short notice with one button, used for telemedicine waiting / accepted alerts."""
+    html = f"""<!doctype html>
+<html><body style=\"margin:0;background:#f4f7fb;font-family:Arial,sans-serif;color:#172033\">
+  <div style=\"max-width:560px;margin:32px auto;background:#ffffff;border-radius:12px;overflow:hidden\">
+    <div style=\"padding:24px 32px;background:#1967d2;color:#ffffff\"><h1 style=\"margin:0;font-size:24px\">Symptora</h1></div>
+    <div style=\"padding:32px\"><h2 style=\"margin-top:0\">{escape(subject)}</h2>
+      <p>{escape(message)}</p>
+      <p style=\"margin:28px 0\"><a href=\"{escape(link)}\" style=\"background:#1967d2;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold\">{escape(button)}</a></p>
+    </div>
+  </div>
+</body></html>"""
+    _send(to_email, subject, f"{message} {link}", html, settings.FROM_EMAIL)
+
+
 def _send(to_email: str, subject: str, text: str, html: str, sender: str, reply_to: str | None = None) -> None:
     if settings.BREVO_API_KEY and sender:
         body = {

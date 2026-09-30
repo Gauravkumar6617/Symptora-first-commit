@@ -955,6 +955,8 @@ export interface PredictionResult {
   urgency: 'low' | 'medium' | 'high'
   /** Why the urgency is what it is, e.g. "Adults 65 and over are at higher risk." */
   urgency_reasons: string[]
+  /** Possible emergency: show the "call now" alert. */
+  emergency: boolean
   disclaimer: string
   /** Id of the saved history entry. */
   check_id: string | null

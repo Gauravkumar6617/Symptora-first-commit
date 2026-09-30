@@ -45,6 +45,8 @@ class Settting(BaseSettings):
     # website linked in the email footer.
     INVITE_FROM_EMAIL             : str = ""
     INVITE_PROMO_URL              : str = ""
+    # Web app base URL, for links in emails.
+    FRONTEND_URL                  : str = "http://localhost:5173"
 
 #CORS
     # Comma-separated extra browser origins allowed to call the API,

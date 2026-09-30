@@ -1,4 +1,4 @@
-import { ShieldCheck, Star } from 'lucide-react'
+import { ShieldCheck } from 'lucide-react'
 import type { ReactNode } from 'react'
 import symptoraLogo from '@/assets/symptora-logo.png'
 import { HeroIllustration } from '@/components/marketing/HeroIllustration'
@@ -35,10 +35,6 @@ export function AuthSplitLayout({ title, subtitle, children }: AuthSplitLayoutPr
         <div className="relative space-y-5">
           <p className="text-2xl font-bold leading-snug">{APP_TAGLINE}</p>
           <div className="flex items-center gap-4 border-t border-white/20 pt-5">
-            <div className="flex items-center gap-2 text-sm text-white/85">
-              <Star className="h-4 w-4 fill-warning text-warning" />
-              4.8 rating · 25k+ health checks
-            </div>
             <div className="flex items-center gap-2 text-sm text-white/85">
               <ShieldCheck className="h-4 w-4" />
               Medplum FHIR secured

@@ -1,10 +1,9 @@
-import { MessageCircle, Pill, Star, Stethoscope, UserRound, Video, Zap } from 'lucide-react'
+import { MessageCircle, Pill, Stethoscope, UserRound, Video, Zap } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { PoweredByStrip } from '@/components/marketing/PoweredByStrip'
 import { ListRowSkeleton } from '@/components/ui/Skeleton'
-import { doctors } from '@/data/doctors'
-import { clinics } from '@/data/clinics'
+import { useDirectory } from '@/hooks/useDirectory'
 import { ApiError, startTelemedicineConsultation } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 import { relationLabel, useFamilyStore } from '@/store/familyStore'
@@ -37,8 +36,7 @@ const capabilities = [
 ]
 
 export function TelemedicinePage() {
-  const availableNow = doctors.filter((doctor) => doctor.availableToday)
-  const [loading, setLoading] = useState(true)
+  const { doctors: availableNow, isLoading: loading } = useDirectory()
   const { user, token } = useAuthStore()
   const navigate = useNavigate()
   const { members, loadMembers } = useFamilyStore()
@@ -50,11 +48,6 @@ export function TelemedicinePage() {
 
   // Only patients may start an instant consultation — not doctors, not admins.
   const canStartInstant = Boolean(user) && !user?.isDoctor && !user?.isAdmin
-
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500)
-    return () => clearTimeout(timer)
-  }, [])
 
   useEffect(() => {
     if (canStartInstant) loadMembers().catch(() => {})
@@ -122,7 +115,7 @@ export function TelemedicinePage() {
 
             <div className="card-raised p-6">
               <h3 className="text-sm font-semibold text-ink/70">
-                Available for video consult now
+                Our doctors
               </h3>
               <div className="mt-4 space-y-3">
                 {loading
@@ -130,7 +123,6 @@ export function TelemedicinePage() {
                       <ListRowSkeleton key={i} />
                     ))
                   : availableNow.map((doctor) => {
-                      const clinic = clinics.find((c) => c.id === doctor.clinicId)
                       return (
                         <div
                           key={doctor.id}
@@ -145,21 +137,17 @@ export function TelemedicinePage() {
                                 {doctor.name}
                               </p>
                               <p className="text-xs text-ink/50">
-                                {doctor.specialty} · {doctor.experienceYears} yrs
+                                {doctor.specialization}{doctor.years_of_practice ? ` · ${doctor.years_of_practice} yrs` : ''}
                               </p>
-                              <p className="mt-0.5 flex items-center gap-1 text-xs text-ink/50">
-                                <Star className="h-3 w-3 fill-warning text-warning" />
-                                {doctor.rating} ({doctor.consults}) · ₹{doctor.fee}
-                              </p>
+                              {doctor.fee != null && (
+                                <p className="mt-0.5 text-xs text-ink/50">₹{doctor.fee}</p>
+                              )}
                               <p className="text-[11px] text-ink/40">
-                                {clinic?.name}
+                                {doctor.clinicName}
                               </p>
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-1.5">
-                            <span className="rounded-full bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">
-                              Online
-                            </span>
                             <Link
                               to="/appointments"
                               className="text-xs font-semibold text-primary-600 hover:underline"

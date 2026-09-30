@@ -1,5 +1,6 @@
 import { HeartPulse, ShieldCheck, Sparkles, Target, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useDirectory } from '@/hooks/useDirectory'
 import { HeroIllustration } from '@/components/marketing/HeroIllustration'
 import { APP_NAME, APP_TAGLINE } from '@/lib/constants'
 
@@ -30,14 +31,12 @@ const values = [
   },
 ]
 
-const stats = [
-  { value: '25k+', label: 'Health checks run' },
-  { value: '40+', label: 'Partner clinics' },
-  { value: '120+', label: 'Verified doctors' },
-  { value: '4.8/5', label: 'Average rating' },
-]
-
 export function AboutPage() {
+  const { clinics, doctors } = useDirectory()
+  const stats = [
+    { value: clinics.length, label: 'Partner clinics' },
+    { value: doctors.length, label: 'Verified doctors' },
+  ]
   return (
     <div>
       <section className="relative overflow-hidden bg-gradient-to-b from-primary-100 via-primary-50 to-transparent">
@@ -62,7 +61,7 @@ export function AboutPage() {
             </div>
           </div>
 
-          <div className="mx-auto mt-12 grid max-w-4xl grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="mx-auto mt-12 grid max-w-md grid-cols-2 gap-4">
             {stats.map((stat) => (
               <div key={stat.label} className="card-raised px-4 py-5 text-center">
                 <p className="text-xl font-bold text-primary-700 sm:text-2xl">

@@ -14,7 +14,12 @@ from app.repositories.doctorRepositories import DoctorRepository
 from app.repositories.telemedicineRepository import TelemedicineRepository
 from app.schemas.telemedicine import TelemedicineRead, TelemedicineStart
 from app.services import telemedicineNotifier as notifier
-from app.services.telemedicineService import TelemedicineService, sync_consultation_to_medplum
+from app.services.telemedicineService import (
+    TelemedicineService,
+    email_consultation_accepted,
+    email_doctors_patient_waiting,
+    sync_consultation_to_medplum,
+)
 from app.utils.integration.medplum.index import MedplumIntegration
 
 router = APIRouter(tags=["Telemedicine"])
@@ -27,6 +32,7 @@ def get_service(db: Session = Depends(get_db)) -> TelemedicineService:
 @router.post("/telemedicine", response_model=TelemedicineRead, status_code=status.HTTP_201_CREATED)
 async def start_consultation(
     data: TelemedicineStart,
+    background: BackgroundTasks,
     current_user: UserModel = Depends(get_current_user),
     service: TelemedicineService = Depends(get_service),
 ):
@@ -36,6 +42,7 @@ async def start_consultation(
     await notifier.notify_doctors_new_consultation(
         TelemedicineRead.model_validate(consultation).model_dump(mode="json")
     )
+    background.add_task(email_doctors_patient_waiting, consultation.id)
     return consultation
 
 
@@ -87,6 +94,7 @@ async def accept_consultation(
     """The first approved doctor to call this wins it."""
     consultation = TelemedicineController.accept(consultation_id, current_user, service)
     background.add_task(sync_consultation_to_medplum, consultation.id, medplum)
+    background.add_task(email_consultation_accepted, consultation.id)
     await notifier.notify_patient(
         consultation_id,
         {"type": "accepted", "doctor_name": consultation.doctor_name},

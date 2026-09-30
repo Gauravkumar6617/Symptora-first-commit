@@ -57,6 +57,7 @@ class PredictResponse(BaseModel):
     predictions: List[DiseasePrediction]  # most likely first
     urgency: Literal["low", "medium", "high"]
     urgency_reasons: List[str]  # why the urgency is what it is, for the UI
+    emergency: bool = False  # possible emergency: the UI shows a "call now" alert
     disclaimer: str
     check_id: Optional[str] = None  # the saved history entry
     # Set when urgency is "high" and an instant consultation was

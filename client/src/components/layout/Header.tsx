@@ -36,7 +36,7 @@ export function Header() {
           <img src={symptoraLogo} alt={APP_NAME} className="h-8 w-auto sm:h-9" />
         </Link>
 
-        <nav className="hidden min-w-0 flex-1 items-center justify-center gap-5 xl:flex 2xl:gap-7">
+        <nav className="hidden min-w-0 flex-1 items-center justify-center gap-5 pr-6 xl:flex 2xl:gap-7">
           {navItems.filter((item) => !('secondary' in item)).map((item) => (
             <NavLink
               key={item.to}

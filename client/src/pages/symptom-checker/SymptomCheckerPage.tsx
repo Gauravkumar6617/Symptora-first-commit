@@ -477,6 +477,39 @@ export function SymptomCheckerPage() {
 
       {result && (
         <section className="mt-8">
+          {(result.emergency || result.urgency === 'high') && (
+            <div role="alert" className="mb-6 rounded-xl border-2 border-danger bg-danger/10 p-5">
+              <p className="flex items-center gap-2 text-base font-bold text-danger">
+                <AlertTriangle className="h-5 w-5 shrink-0" />
+                {result.emergency ? 'This may be a medical emergency' : 'High risk — get care now'}
+              </p>
+              <p className="mt-2 text-sm text-ink/80">
+                {result.emergency
+                  ? 'Do not wait. Call emergency services now, or go to the nearest hospital.'
+                  : 'Talk to a doctor right away. If symptoms get worse, call emergency services.'}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                {result.emergency && (
+                  <a href="tel:112" className="btn-raised bg-danger">
+                    Call 112 (emergency)
+                  </a>
+                )}
+                {result.escalated_consultation_id ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/telemedicine/waiting/${result.escalated_consultation_id}`)}
+                    className="btn-raised"
+                  >
+                    Join video consult now
+                  </button>
+                ) : (
+                  <Link to="/telemedicine" className="btn-raised">
+                    Talk to a doctor now
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-3">
             <span
               className={`rounded-full px-3 py-1 text-xs font-bold ${urgencyStyles[result.urgency].className}`}

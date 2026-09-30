@@ -10,7 +10,9 @@ from app.repositories.familyMemberRepository import FamilyMemberRepository
 from app.repositories.telemedicineRepository import TelemedicineRepository
 from app.schemas.telemedicine import TelemedicineStart
 from app.services.familyMemberService import FamilyMemberService
+from app.core.config import settings
 from app.utils.integration.medplum.index import MedplumIntegration
+from app.utils.otp.send_otp import send_consultation_email
 
 logger = logging.getLogger(__name__)
 
@@ -171,5 +173,56 @@ def sync_consultation_to_medplum(consultation_id: str, medplum: MedplumIntegrati
         db.commit()
     except Exception:
         logger.exception("Consultation %s not sent to Medplum", consultation_id)
+    finally:
+        db.close()
+
+
+def _email(to: str | None, subject: str, message: str, path: str, button: str) -> None:
+    if not to:
+        return
+    try:
+        send_consultation_email(to, subject, message, f"{settings.FRONTEND_URL.rstrip('/')}{path}", button)
+    except Exception:
+        logger.exception("Consultation email to %s failed", to)
+
+
+def email_doctors_patient_waiting(consultation_id: str) -> None:
+    """Background task: tell every approved doctor a patient is waiting."""
+    db = SessionLocal()
+    try:
+        c = db.get(TelemedicineConsultationModel, consultation_id)
+        if c is None or c.status != ConsultationStatus.PENDING:
+            return
+        patient = TelemedicineService._patient_display_name(c) or "A patient"
+        for doctor in DoctorRepository(db).list_by_status(Status.APPROVED):
+            _email(
+                doctor.user.email,
+                "A patient is waiting for you",
+                f"{patient} is waiting for a video consultation ({c.reason}). The first doctor to accept takes the call.",
+                "/doctor/dashboard",
+                "Open the queue",
+            )
+    except Exception:
+        logger.exception("Consultation %s: waiting emails failed", consultation_id)
+    finally:
+        db.close()
+
+
+def email_consultation_accepted(consultation_id: str) -> None:
+    """Background task: tell the patient their doctor is waiting, and confirm to the doctor."""
+    db = SessionLocal()
+    try:
+        c = db.get(TelemedicineConsultationModel, consultation_id)
+        if c is None or c.doctor_profile is None:
+            return
+        doctor = TelemedicineService._doctor_display_name(c.doctor_profile) or "Your doctor"
+        patient = TelemedicineService._patient_display_name(c) or "the patient"
+        call = f"/call/telemedicine/{c.id}"
+        _email(c.patient.email, f"{doctor} is waiting for you",
+               f"{doctor} accepted your consultation and is waiting on the video call. Join now.", call, "Join the call")
+        _email(c.doctor_profile.user.email, f"{patient} is waiting on the call",
+               f"You accepted the consultation with {patient}. Join the video call now.", call, "Join the call")
+    except Exception:
+        logger.exception("Consultation %s: accepted emails failed", consultation_id)
     finally:
         db.close()

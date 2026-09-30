@@ -20,6 +20,13 @@ DISCLAIMER = (
 )
 
 
+# Any one of these is treated as a possible emergency, whatever the severity weights say.
+EMERGENCY_SYMPTOMS = {
+    "chest_pain", "breathlessness", "coma", "altered_sensorium", "slurred_speech",
+    "weakness_of_one_body_side", "blood_in_sputum", "bloody_stool",
+}
+
+
 class UnknownSymptomError(Exception):
     def __init__(self, unknown: list[str]):
         self.unknown = unknown
@@ -105,6 +112,10 @@ class PredictionService:
         ]
         urgency, reasons = self.urgency(given, age, duration)
         red_flags = self.parser.parse(description)["red_flags"] if description else []
+        emergency = [to_label(x).lower() for x in given if x in EMERGENCY_SYMPTOMS]
+        if emergency:
+            urgency = "high"
+            reasons = [f"Possible emergency symptom: {', '.join(emergency)}."] + reasons
         if red_flags:
             urgency, reasons = "high", red_flags + reasons
         return {
@@ -112,6 +123,7 @@ class PredictionService:
             "predictions": predictions,
             "urgency": urgency,
             "urgency_reasons": reasons,
+            "emergency": bool(emergency or red_flags),
             "disclaimer": DISCLAIMER,
         }
 
