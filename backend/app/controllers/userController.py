@@ -99,7 +99,15 @@ class UserController:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         except InviteDeliveryError as e:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
-        return {"detail": "If a family member was added with this email, a code is on its way."}
+        # Same answer either way so this can't reveal who is on Symptora —
+        # but say what to do when nothing arrives.
+        return {
+            "detail": (
+                "If a family member added you with this exact email, a code is on its way (check spam too). "
+                "Nothing after a few minutes? Ask them to add you on their Family page with this email "
+                "and tap Invite."
+            )
+        }
 
     @staticmethod
     def accept_family_invite(data, service: UserService):
