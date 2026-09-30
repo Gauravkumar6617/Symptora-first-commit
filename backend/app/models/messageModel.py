@@ -25,3 +25,5 @@ class MessageModel(BaseModel):
     body = Column(Text, nullable=False)
 
     sender = relationship("UserModel", foreign_keys=[sender_id])
+    appointment = relationship("AppointmentModel")
+    consultation = relationship("TelemedicineConsultationModel")

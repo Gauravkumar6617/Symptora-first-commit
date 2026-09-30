@@ -54,7 +54,10 @@ class TelemedicineRepository:
         )
         return (
             self.db.query(TelemedicineConsultationModel)
-            .filter(TelemedicineConsultationModel.status == ConsultationStatus.PENDING)
+            .filter(
+                TelemedicineConsultationModel.status == ConsultationStatus.PENDING,
+                TelemedicineConsultationModel.paid_at.isnot(None),
+            )
             .order_by(escalated_first, TelemedicineConsultationModel.created_at.asc())
             .all()
         )
@@ -76,13 +79,14 @@ class TelemedicineRepository:
         )
 
     def claim(self, consultation_id: str, doctor_profile_id: str) -> bool:
-        """Atomically assign a doctor — only if still pending, so two doctors
+        """Atomically assign a doctor — only if paid and still pending, so two doctors
         accepting at once can't both win. True if this call won the claim."""
         rows = (
             self.db.query(TelemedicineConsultationModel)
             .filter(
                 TelemedicineConsultationModel.id == consultation_id,
                 TelemedicineConsultationModel.status == ConsultationStatus.PENDING,
+                TelemedicineConsultationModel.paid_at.isnot(None),
             )
             .update(
                 {"doctor_profile_id": doctor_profile_id, "status": ConsultationStatus.IN_PROGRESS},

@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from app.controllers.prescriptionController import PrescriptionController
@@ -9,7 +9,7 @@ from app.deps.auth import get_current_user
 from app.deps.medplum import get_medplum_integration
 from app.models.userModel import UserModel
 from app.schemas.prescription import PrescriptionCreate, PrescriptionRead
-from app.services.prescriptionService import PrescriptionService, sync_prescription_to_medplum
+from app.services.prescriptionService import PrescriptionService, prescription_pdf, sync_prescription_to_medplum
 from app.utils.integration.medplum.index import MedplumIntegration
 
 router = APIRouter(prefix="/prescriptions", tags=["Prescriptions"])
@@ -75,3 +75,18 @@ def get_prescription(
     service: PrescriptionService = Depends(get_service),
 ):
     return PrescriptionController.get(prescription_id, current_user, service)
+
+
+@router.get("/{prescription_id}/pdf", response_class=Response)
+def download_prescription_pdf(
+    prescription_id: str,
+    current_user: UserModel = Depends(get_current_user),
+    service: PrescriptionService = Depends(get_service),
+):
+    """The prescription as a one-page PDF, for the patient or the prescribing doctor."""
+    prescription = PrescriptionController.get(prescription_id, current_user, service)
+    return Response(
+        prescription_pdf(prescription),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="prescription-{prescription.id[:8]}.pdf"'},
+    )

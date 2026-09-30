@@ -1,6 +1,7 @@
+import httpx
 from fastapi import HTTPException, status
 
-from app.schemas.telemedicine import TelemedicineStart
+from app.schemas.telemedicine import PaymentConfirm, TelemedicineStart
 from app.services.telemedicineService import TelemedicineService
 
 
@@ -10,6 +11,26 @@ class TelemedicineController:
     def start(data: TelemedicineStart, current_user, service: TelemedicineService):
         try:
             return service.start(current_user, data)
+        except PermissionError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    @staticmethod
+    def create_payment(consultation_id: str, current_user, service: TelemedicineService):
+        try:
+            return service.create_payment(current_user, consultation_id)
+        except PermissionError as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        except httpx.HTTPError:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Payment gateway is unavailable, try again.")
+
+    @staticmethod
+    def confirm_payment(consultation_id: str, data: PaymentConfirm, current_user, service: TelemedicineService):
+        try:
+            return service.confirm_payment(current_user, consultation_id, data.order_id, data.payment_id, data.signature)
         except PermissionError as e:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
         except ValueError as e:

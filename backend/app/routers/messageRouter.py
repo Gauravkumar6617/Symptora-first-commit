@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 from sqlalchemy.orm import Session
 
 from app.controllers.messageController import MessageController
@@ -8,7 +8,9 @@ from app.core.database import get_db
 from app.deps.auth import get_current_user
 from app.models.userModel import UserModel
 from app.schemas.message import MessageCreate, MessageRead
-from app.services.messageService import MessageService
+from app.deps.medplum import get_medplum_integration
+from app.services.messageService import MessageService, sync_message_to_medplum
+from app.utils.integration.medplum.index import MedplumIntegration
 
 router = APIRouter(prefix="/messages", tags=["Messages"])
 
@@ -30,10 +32,14 @@ def list_appointment_messages(
 def send_appointment_message(
     appointment_id: str,
     data: MessageCreate,
+    background: BackgroundTasks,
     current_user: UserModel = Depends(get_current_user),
     service: MessageService = Depends(get_service),
+    medplum: MedplumIntegration = Depends(get_medplum_integration),
 ):
-    return MessageController.send_to_appointment(appointment_id, data.body, current_user, service)
+    message = MessageController.send_to_appointment(appointment_id, data.body, current_user, service)
+    background.add_task(sync_message_to_medplum, message.id, medplum)
+    return message
 
 
 @router.get("/telemedicine/{consultation_id}", response_model=List[MessageRead])
@@ -49,7 +55,11 @@ def list_consultation_messages(
 def send_consultation_message(
     consultation_id: str,
     data: MessageCreate,
+    background: BackgroundTasks,
     current_user: UserModel = Depends(get_current_user),
     service: MessageService = Depends(get_service),
+    medplum: MedplumIntegration = Depends(get_medplum_integration),
 ):
-    return MessageController.send_to_consultation(consultation_id, data.body, current_user, service)
+    message = MessageController.send_to_consultation(consultation_id, data.body, current_user, service)
+    background.add_task(sync_message_to_medplum, message.id, medplum)
+    return message

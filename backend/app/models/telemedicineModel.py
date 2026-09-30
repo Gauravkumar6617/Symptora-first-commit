@@ -1,4 +1,4 @@
-from sqlalchemy import String, Column, ForeignKey, Enum as SAEnum
+from sqlalchemy import DateTime, Integer, String, Column, ForeignKey, Enum as SAEnum
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
@@ -39,6 +39,12 @@ class TelemedicineConsultationModel(BaseModel):
         default=ConsultationTrigger.MANUAL_BOOKING,
         server_default=ConsultationTrigger.MANUAL_BOOKING.name,
     )
+
+    # Paid up front: the consultation only reaches the doctor queue once
+    # paid_at is set. amount is in whole rupees.
+    amount = Column(Integer, nullable=True)
+    payment_ref = Column(String(100), nullable=True)  # gateway order id, then payment id
+    paid_at = Column(DateTime(timezone=True), nullable=True)
 
     # FHIR Encounter created once a doctor accepts — best effort, like the
     # rest of the Medplum sync in this app.

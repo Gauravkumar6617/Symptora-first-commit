@@ -9,6 +9,7 @@ from app.models.doctorAvailabilityModel import doctorAvailabilityModel
 from app.models.doctorModel import DoctorProfile
 from app.models.familyMemeberModel import FamilyMemberModel
 from app.models.messageModel import MessageModel
+from app.models.notificationModel import NotificationModel
 from app.models.prescriptionModel import PrescriptionModel
 from app.models.serviceModel import ServiceModel
 from app.models.symptomCheckModel import SymptomCheckModel
@@ -25,6 +26,7 @@ __all__ = [
     "DoctorProfile",
     "FamilyMemberModel",
     "MessageModel",
+    "NotificationModel",
     "PrescriptionModel",
     "ServiceModel",
     "SymptomCheckModel",

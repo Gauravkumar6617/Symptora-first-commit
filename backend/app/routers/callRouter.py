@@ -7,6 +7,7 @@ from app.models.enumModel import AppointmentStatus, ConsultationStatus, Status
 from app.repositories.appointmentRepository import AppointmentRepository
 from app.repositories.doctorRepositories import DoctorRepository
 from app.repositories.telemedicineRepository import TelemedicineRepository
+from app.services.notificationService import notify
 
 router = APIRouter(tags=["Telemedicine"])
 
@@ -40,6 +41,20 @@ def can_join_consultation_call(db: Session, user, consultation) -> bool:
         return True
     doctor = DoctorRepository(db).get_by_user_id(user.id)
     return bool(doctor) and doctor.id == consultation.doctor_profile_id
+
+
+def notify_other_party(db: Session, user, visit, kind: str) -> None:
+    """Someone opened the call and is alone in it: tell the other side
+    (bell notification) that they're waiting, with a link straight in."""
+    if _rooms.get(f"{kind}:{visit.id}"):
+        return  # the other side is already in the call
+    doctor_user_id = visit.doctor_profile.user_id if visit.doctor_profile else None
+    if user.id == visit.patient_id:
+        other_id, name = doctor_user_id, f"{user.first_name} {user.last_name}".strip()
+    else:
+        other_id, name = visit.patient_id, f"Dr. {user.first_name} {user.last_name}"
+    notify(db, other_id, f"{name} joined the video call", "They're waiting for you. Join now.",
+           f"/call/{kind}/{visit.id}")
 
 
 async def _run_call(websocket: WebSocket, room_key: str) -> None:
@@ -81,6 +96,7 @@ async def appointment_call_signaling(websocket: WebSocket, appointment_id: str, 
         if not can_join_appointment_call(db, user, appointment):
             await websocket.close(code=4403)
             return
+        notify_other_party(db, user, appointment, "appointment")
     finally:
         db.close()
 
@@ -96,6 +112,7 @@ async def telemedicine_call_signaling(websocket: WebSocket, consultation_id: str
         if not can_join_consultation_call(db, user, consultation):
             await websocket.close(code=4403)
             return
+        notify_other_party(db, user, consultation, "telemedicine")
     finally:
         db.close()
 

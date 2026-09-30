@@ -1,5 +1,5 @@
-"""One-off dev seed: a couple of clinics, a few approved doctors, and the
-services they offer — enough real data to exercise booking, telemedicine and
+"""One-off dev seed: clinics, approved doctors, the services they offer, and
+two demo patients with a finished video consultation — enough real data to exercise booking, telemedicine and
 the Medplum sync end to end. Safe to re-run; anything that already exists
 (by clinic name / doctor email / service name) is skipped.
 
@@ -11,13 +11,18 @@ admin-approval flow would.
 Usage: cd backend && source .venv/bin/activate && python -m scripts.seed_demo_data
 """
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app.core.config import settings
 from app.core.database import SessionLocal
+from app.models import (
+    FamilyMemberModel, MessageModel, NotificationModel, PrescriptionModel, TelemedicineConsultationModel,
+)
+from app.models.enumModel import ConsultationStatus
 from app.repositories.userRepositories import UserRepository
 from app.schemas.clinic import ClinicBase
 from app.schemas.clinic_availability import ClinicAvailabilityCreate
@@ -41,6 +46,22 @@ CLINICS = [
         "address": "12 MG Road, Bengaluru",
         "phone": "080-4000-1000",
         "opening_hours": "Mon-Sat, 9am-7pm",
+    },
+    {
+        "name": "Lakeside Health Centre",
+        "picture": "https://images.unsplash.com/photo-1586773860418-d37222d8fce3?w=800",
+        "description": "Outpatient centre with diagnostics and women's health.",
+        "address": "8 Lake View Road, Hyderabad",
+        "phone": "040-3300-3000",
+        "opening_hours": "Mon-Sun, 8am-8pm",
+    },
+    {
+        "name": "Greenleaf Wellness Clinic",
+        "picture": "https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=800",
+        "description": "Mental health, ENT and dental care under one roof.",
+        "address": "221 Anna Salai, Chennai",
+        "phone": "044-2800-4000",
+        "opening_hours": "Mon-Sat, 9am-6pm",
     },
     {
         "name": "Sunrise Family Clinic",
@@ -77,6 +98,35 @@ DOCTORS = [
         "fee": 500, "years_of_practice": 10, "languages": "English, Punjabi",
         "clinics": ["Sunrise Family Clinic"],
     },
+    {
+        "email": "priya.nair@symptora.demo", "first_name": "Priya", "last_name": "Nair",
+        "specialization": "Gynecologist", "license_number": "DL-GYN-005",
+        "fee": 700, "years_of_practice": 14, "languages": "English, Malayalam, Hindi",
+        "clinics": ["Lakeside Health Centre"],
+    },
+    {
+        "email": "arjun.reddy@symptora.demo", "first_name": "Arjun", "last_name": "Reddy",
+        "specialization": "ENT Specialist", "license_number": "DL-ENT-006",
+        "fee": 550, "years_of_practice": 9, "languages": "English, Telugu",
+        "clinics": ["Lakeside Health Centre", "Greenleaf Wellness Clinic"],
+    },
+    {
+        "email": "meera.iyer@symptora.demo", "first_name": "Meera", "last_name": "Iyer",
+        "specialization": "Psychiatrist", "license_number": "DL-PSY-007",
+        "fee": 900, "years_of_practice": 11, "languages": "English, Tamil",
+        "clinics": ["Greenleaf Wellness Clinic"],
+    },
+    {
+        "email": "vikram.das@symptora.demo", "first_name": "Vikram", "last_name": "Das",
+        "specialization": "Dentist", "license_number": "DL-DEN-008",
+        "fee": 450, "years_of_practice": 7, "languages": "English, Bengali, Hindi",
+        "clinics": ["Greenleaf Wellness Clinic"],
+    },
+]
+
+PATIENTS = [
+    {"email": "ananya.patel@symptora.demo", "first_name": "Ananya", "last_name": "Patel"},
+    {"email": "rahul.verma@symptora.demo", "first_name": "Rahul", "last_name": "Verma"},
 ]
 
 SERVICES = [
@@ -88,6 +138,14 @@ SERVICES = [
      "description": "Routine checkup for common symptoms."},
     {"name": "Child Wellness Visit", "specialization": "Pediatrics", "fee": 500,
      "description": "Growth, vaccination and general pediatric care."},
+    {"name": "Women's Health Consultation", "specialization": "Gynecologist", "fee": 700,
+     "description": "Periods, pregnancy planning and routine women's health."},
+    {"name": "Ear, Nose & Throat Checkup", "specialization": "ENT Specialist", "fee": 550,
+     "description": "Sinus, hearing, throat and allergy concerns."},
+    {"name": "Mental Wellness Session", "specialization": "Psychiatrist", "fee": 900,
+     "description": "Stress, anxiety, sleep and mood support."},
+    {"name": "Dental Checkup & Cleaning", "specialization": "Dentist", "fee": 450,
+     "description": "Routine dental exam, cleaning and advice."},
 ]
 
 DEMO_PASSWORD = "Demo@12345"
@@ -172,6 +230,61 @@ def seed_services(db) -> None:
         print(f"  created service: {data['name']}")
 
 
+def seed_patients(db) -> None:
+    """Demo patients with a family member and one finished, paid video
+    consultation (chat + prescription + notifications) so the dashboards,
+    bell and PDF download have something to show. Skipped if the patient exists."""
+    users = UserRepository(db)
+    doctor_user = users.get_user_by_email("neha.sharma@symptora.demo")
+    doctor = doctor_user.doctor_profile if doctor_user else None
+    now = datetime.now(timezone.utc)
+
+    for i, data in enumerate(PATIENTS):
+        if users.get_user_by_email(data["email"]):
+            print(f"  patient already exists: {data['email']}")
+            continue
+        patient = users.create_user(
+            UserCreate(**data, number=f"91234{56000 + i:05d}", date_of_birth=datetime(1992, 6, 15),
+                       password=DEMO_PASSWORD),
+            is_active=True,
+        )
+        db.add(FamilyMemberModel(account_owner_id=patient.id, full_name=f"Kavya {data['last_name']}",
+                                 relationship_to_owner="Daughter", date_of_birth=datetime(2017, 3, 2),
+                                 gender="female"))
+        if doctor:
+            c = TelemedicineConsultationModel(
+                patient_id=patient.id, doctor_profile_id=doctor.id, reason="Fever and sore throat for 2 days",
+                status=ConsultationStatus.COMPLETED, amount=settings.TELEMEDICINE_FEE,
+                payment_ref=f"test_seed_{i}", paid_at=now - timedelta(days=2),
+            )
+            db.add(c)
+            db.flush()
+            chat = [
+                (doctor_user.id, "Hi, I've reviewed your notes. Any cough or trouble breathing?"),
+                (patient.id, "A mild cough, no trouble breathing."),
+                (doctor_user.id, "Sounds viral. I've sent a prescription; rest and fluids. Message me if the fever lasts beyond 3 days."),
+            ]
+            db.add_all(MessageModel(consultation_id=c.id, sender_id=who, body=body) for who, body in chat)
+            db.add(PrescriptionModel(
+                consultation_id=c.id, doctor_profile_id=doctor.id, patient_id=patient.id,
+                medications=[
+                    {"name": "Paracetamol 500mg", "dosage": "1 tablet", "frequency": "every 6 hours if fever",
+                     "duration": "3 days", "instructions": "After food"},
+                    {"name": "Warm saline gargle", "dosage": "1 glass", "frequency": "3 times a day",
+                     "duration": "5 days", "instructions": None},
+                ],
+                notes="Rest, plenty of fluids. Seek care if breathing gets difficult.",
+            ))
+            db.add_all([
+                NotificationModel(user_id=patient.id, title="Dr. Neha Sharma sent you a prescription",
+                                  body="2 medication(s). Download it from your dashboard.", link="/dashboard#prescriptions"),
+                NotificationModel(user_id=patient.id, title="New message from Dr. Neha Sharma",
+                                  body=chat[-1][1][:140], link=f"/dashboard?chat=telemedicine:{c.id}"),
+            ])
+        db.commit()
+        print(f"  created patient: {data['first_name']} {data['last_name']}")
+
+
 def main() -> None:
     db = SessionLocal()
     try:
@@ -181,8 +294,11 @@ def main() -> None:
         seed_doctors(db, clinic_ids)
         print("Services:")
         seed_services(db)
-        print(f"\nDone. Every seeded doctor logs in with password: {DEMO_PASSWORD}")
+        print("Patients:")
+        seed_patients(db)
+        print(f"\nDone. Every seeded account logs in with password: {DEMO_PASSWORD}")
         print("Doctor logins: " + ", ".join(d["email"] for d in DOCTORS))
+        print("Patient logins: " + ", ".join(p["email"] for p in PATIENTS))
     finally:
         db.close()
 

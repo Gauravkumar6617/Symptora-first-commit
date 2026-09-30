@@ -11,6 +11,8 @@ from app.repositories.prescriptionRepository import PrescriptionRepository
 from app.repositories.telemedicineRepository import TelemedicineRepository
 from app.schemas.prescription import PrescriptionCreate
 from app.services.familyMemberService import FamilyMemberService
+from app.services.notificationService import notify
+from app.utils.pdf import text_pdf
 from app.utils.integration.medplum.index import MedplumIntegration
 
 logger = logging.getLogger(__name__)
@@ -43,7 +45,11 @@ class PrescriptionService:
             raise PermissionError("Only the treating doctor may prescribe for this visit")
 
         prescription = self.repo.create(doctor.id, visit.patient_id, visit.family_member_id, data)
-        return self._label(prescription)
+        self._label(prescription)
+        notify(self.db, visit.patient_id, f"{prescription.doctor_name} sent you a prescription",
+               f"{len(prescription.medications)} medication(s). Download it from your dashboard.",
+               "/dashboard#prescriptions")
+        return prescription
 
     def get_for_user(self, prescription_id: str, current_user) -> PrescriptionModel:
         prescription = self.repo.get_by_id(prescription_id)
@@ -105,6 +111,25 @@ class PrescriptionService:
         if not doctor or not doctor.user:
             return None
         return f"Dr. {doctor.user.first_name} {doctor.user.last_name}"
+
+
+def prescription_pdf(p: PrescriptionModel) -> bytes:
+    lines = [
+        ("Symptora e-Prescription", 20), ("", 0),
+        (f"Doctor: {p.doctor_name or '-'}" + (f"  ({p.doctor_specialization})" if p.doctor_specialization else ""), 11),
+        (f"Patient: {p.patient_name or '-'}", 11),
+        (f"Date: {p.created_at:%d %b %Y}", 11),
+        (f"Prescription ID: {p.id}", 9), ("", 0),
+        ("Medications", 14),
+    ]
+    for i, med in enumerate(p.medications, 1):
+        lines.append((f"{i}. {med['name']} - {med['dosage']}, {med['frequency']}, for {med['duration']}", 11))
+        if med.get("instructions"):
+            lines.append((f"     {med['instructions']}", 10))
+    if p.notes:
+        lines += [("", 0), ("Notes", 14), (p.notes, 11)]
+    lines += [("", 0), ("Issued digitally via Symptora. Valid without signature.", 8)]
+    return text_pdf(lines)
 
 
 def medication_requests(prescription: PrescriptionModel, patient_id: str, practitioner_id: str) -> list[dict]:

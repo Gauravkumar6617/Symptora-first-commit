@@ -9,6 +9,7 @@ from app.repositories.doctorRepositories import DoctorRepository
 from app.repositories.familyMemberRepository import FamilyMemberRepository
 from app.repositories.telemedicineRepository import TelemedicineRepository
 from app.schemas.telemedicine import TelemedicineStart
+from app.services import paymentService as payments
 from app.services.familyMemberService import FamilyMemberService
 from app.core.config import settings
 from app.utils.integration.medplum.index import MedplumIntegration
@@ -30,7 +31,7 @@ class TelemedicineService:
             raise PermissionError("Only patients can start an instant video consultation")
         if data.family_member_id and not self.family_repo.get_for_owner(patient.id, data.family_member_id):
             raise ValueError("Family member not found")
-        return self._label(self.repo.create(patient.id, data))
+        return self._label(self._priced(self.repo.create(patient.id, data)))
 
     def escalate(self, patient, family_member, reason: str, symptom_check_id: str) -> TelemedicineConsultationModel:
         """Auto-create a consultation for a High risk symptom check —
@@ -38,16 +39,44 @@ class TelemedicineService:
         entry every available doctor is immediately notified about."""
         if patient.is_admin or self.doctor_repo.get_by_user_id(patient.id):
             raise PermissionError("Only patients can be escalated to an instant consultation")
-        return self._label(
+        return self._label(self._priced(
             self.repo.create_escalated(patient.id, family_member.id if family_member else None, reason, symptom_check_id)
-        )
+        ))
+
+    def _priced(self, consultation: TelemedicineConsultationModel) -> TelemedicineConsultationModel:
+        consultation.amount = settings.TELEMEDICINE_FEE
+        return self.repo.save(consultation)
+
+    def _own_unpaid(self, consultation_id: str, patient) -> TelemedicineConsultationModel:
+        consultation = self.repo.get_by_id(consultation_id)
+        if not consultation:
+            raise ValueError("Consultation not found")
+        if consultation.patient_id != patient.id:
+            raise PermissionError("Only the patient who started this consultation can pay for it")
+        if consultation.status != ConsultationStatus.PENDING:
+            raise ValueError("This consultation is no longer waiting for payment")
+        return consultation
+
+    def create_payment(self, patient, consultation_id: str) -> dict:
+        consultation = self._own_unpaid(consultation_id, patient)
+        order = payments.create_order(consultation)
+        self.repo.save(consultation)
+        return order
+
+    def confirm_payment(self, patient, consultation_id: str, order_id: str, payment_id: str, signature: str | None):
+        """True the first time it becomes paid (so the caller notifies doctors once)."""
+        consultation = self._own_unpaid(consultation_id, patient)
+        was_paid = consultation.paid_at is not None
+        payments.verify(consultation, order_id, payment_id, signature)
+        self.repo.save(consultation)
+        return self._label(consultation), not was_paid
 
     def accept(self, doctor_user, consultation_id: str) -> TelemedicineConsultationModel:
         doctor = self.doctor_repo.get_by_user_id(doctor_user.id)
         if not doctor or doctor.status != Status.APPROVED:
             raise PermissionError("Only an approved doctor can accept a consultation")
         if not self.repo.claim(consultation_id, doctor.id):
-            raise ValueError("This consultation was already taken or is no longer pending")
+            raise ValueError("This consultation was already taken, is not paid yet, or is no longer pending")
         return self._label(self.repo.get_by_id(consultation_id))
 
     def cancel(self, consultation_id: str, current_user) -> TelemedicineConsultationModel:
@@ -62,6 +91,7 @@ class TelemedicineService:
         if consultation.status in (ConsultationStatus.CANCELLED, ConsultationStatus.COMPLETED):
             raise ValueError("This consultation has already finished")
         consultation.status = ConsultationStatus.CANCELLED
+        # ponytail: paid-then-cancelled needs a manual refund from the Razorpay dashboard; automate if volume grows.
         return self._label(self.repo.save(consultation))
 
     def complete(self, consultation_id: str, current_user) -> TelemedicineConsultationModel:
@@ -175,6 +205,14 @@ def sync_consultation_to_medplum(consultation_id: str, medplum: MedplumIntegrati
         logger.exception("Consultation %s not sent to Medplum", consultation_id)
     finally:
         db.close()
+
+
+def finish_encounter_in_medplum(encounter_id: str, medplum: MedplumIntegration) -> None:
+    """Background task: mark the consultation's FHIR Encounter finished. Best effort."""
+    try:
+        medplum.patch_resource("Encounter", encounter_id, [{"op": "replace", "path": "/status", "value": "finished"}])
+    except Exception:
+        logger.exception("Encounter %s not marked finished in Medplum", encounter_id)
 
 
 def _email(to: str | None, subject: str, message: str, path: str, button: str) -> None:

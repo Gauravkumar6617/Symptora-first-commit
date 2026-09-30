@@ -59,6 +59,20 @@ class MedplumIntegration:
             detail=f"Failed to create {resource['resourceType']} in Medplum.",
         )
 
+    def patch_resource(self, resource_type: str, resource_id: str, operations: list[dict]) -> dict:
+        """JSON Patch an existing FHIR resource, e.g. set an Encounter's status."""
+        access_token = self.get_access_token()
+        url = f"{self.base_url.rstrip('/')}/fhir/R4/{resource_type}/{resource_id}"
+        response = httpx.patch(
+            url,
+            json=operations,
+            headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json-patch+json"},
+            timeout=15,
+        )
+        if response.status_code == 200:
+            return response.json()
+        raise HTTPException(status_code=response.status_code, detail=f"Failed to update {resource_type} in Medplum.")
+
     def update_organisation(self, organisation_id: str, clinic) -> dict:
         """Replace the clinic's Organization with its current details."""
         access_token = self.get_access_token()

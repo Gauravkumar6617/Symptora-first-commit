@@ -12,12 +12,14 @@ from app.models.enumModel import Status
 from app.models.userModel import UserModel
 from app.repositories.doctorRepositories import DoctorRepository
 from app.repositories.telemedicineRepository import TelemedicineRepository
-from app.schemas.telemedicine import TelemedicineRead, TelemedicineStart
+from app.schemas.telemedicine import PaymentConfirm, PaymentOrder, TelemedicineRead, TelemedicineStart
 from app.services import telemedicineNotifier as notifier
+from app.services.notificationService import notify
 from app.services.telemedicineService import (
     TelemedicineService,
     email_consultation_accepted,
     email_doctors_patient_waiting,
+    finish_encounter_in_medplum,
     sync_consultation_to_medplum,
 )
 from app.utils.integration.medplum.index import MedplumIntegration
@@ -30,19 +32,45 @@ def get_service(db: Session = Depends(get_db)) -> TelemedicineService:
 
 
 @router.post("/telemedicine", response_model=TelemedicineRead, status_code=status.HTTP_201_CREATED)
-async def start_consultation(
+def start_consultation(
     data: TelemedicineStart,
-    background: BackgroundTasks,
     current_user: UserModel = Depends(get_current_user),
     service: TelemedicineService = Depends(get_service),
 ):
-    """Patients only. Creates a pending instant consultation and pushes it
-    to every doctor currently watching the queue."""
-    consultation = TelemedicineController.start(data, current_user, service)
-    await notifier.notify_doctors_new_consultation(
-        TelemedicineRead.model_validate(consultation).model_dump(mode="json")
-    )
-    background.add_task(email_doctors_patient_waiting, consultation.id)
+    """Patients only. Creates an unpaid consultation; it reaches the doctor
+    queue once paid (POST /telemedicine/{id}/payment/confirm)."""
+    return TelemedicineController.start(data, current_user, service)
+
+
+@router.post("/telemedicine/{consultation_id}/payment/order", response_model=PaymentOrder)
+def create_payment_order(
+    consultation_id: str,
+    current_user: UserModel = Depends(get_current_user),
+    service: TelemedicineService = Depends(get_service),
+):
+    """Open checkout for the consultation fee (Razorpay test mode, or simulated without keys)."""
+    return TelemedicineController.create_payment(consultation_id, current_user, service)
+
+
+@router.post("/telemedicine/{consultation_id}/payment/confirm", response_model=TelemedicineRead)
+async def confirm_payment(
+    consultation_id: str,
+    data: PaymentConfirm,
+    background: BackgroundTasks,
+    current_user: UserModel = Depends(get_current_user),
+    service: TelemedicineService = Depends(get_service),
+    db: Session = Depends(get_db),
+):
+    """Verify the gateway's signature; once paid, every online doctor is told a patient is waiting."""
+    consultation, newly_paid = TelemedicineController.confirm_payment(consultation_id, data, current_user, service)
+    if newly_paid:
+        notify(db, consultation.patient_id, "Payment received",
+               f"₹{consultation.amount} paid. We're finding you a doctor now.",
+               f"/telemedicine/waiting/{consultation.id}")
+        await notifier.notify_doctors_new_consultation(
+            TelemedicineRead.model_validate(consultation).model_dump(mode="json")
+        )
+        background.add_task(email_doctors_patient_waiting, consultation.id)
     return consultation
 
 
@@ -95,6 +123,8 @@ async def accept_consultation(
     consultation = TelemedicineController.accept(consultation_id, current_user, service)
     background.add_task(sync_consultation_to_medplum, consultation.id, medplum)
     background.add_task(email_consultation_accepted, consultation.id)
+    notify(service.db, consultation.patient_id, f"{consultation.doctor_name} accepted your consultation",
+           "They're waiting on the video call. Join now.", f"/call/telemedicine/{consultation.id}")
     await notifier.notify_patient(
         consultation_id,
         {"type": "accepted", "doctor_name": consultation.doctor_name},
@@ -118,10 +148,15 @@ async def cancel_consultation(
 @router.patch("/telemedicine/{consultation_id}/complete", response_model=TelemedicineRead)
 def complete_consultation(
     consultation_id: str,
+    background: BackgroundTasks,
     current_user: UserModel = Depends(get_current_user),
     service: TelemedicineService = Depends(get_service),
+    medplum: MedplumIntegration = Depends(get_medplum_integration),
 ):
-    return TelemedicineController.complete(consultation_id, current_user, service)
+    consultation = TelemedicineController.complete(consultation_id, current_user, service)
+    if consultation.medplum_encounter_id:
+        background.add_task(finish_encounter_in_medplum, consultation.medplum_encounter_id, medplum)
+    return consultation
 
 
 @router.websocket("/ws/telemedicine/doctor")

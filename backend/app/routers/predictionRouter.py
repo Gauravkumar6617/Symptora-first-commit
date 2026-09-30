@@ -20,10 +20,7 @@ from app.schemas.prediction import (
 from app.services.familyMemberService import FamilyMemberNotFoundError
 from app.services.predictionService import PredictionService, get_prediction_service
 from app.services.symptomCheckService import SymptomCheckService, sync_check_to_medplum
-from app.services.telemedicineService import email_doctors_patient_waiting
-from app.services import telemedicineNotifier as notifier
 from app.services.telemedicineService import TelemedicineService
-from app.schemas.telemedicine import TelemedicineRead
 from app.utils.integration.medplum.index import MedplumIntegration
 
 logger = logging.getLogger(__name__)
@@ -84,7 +81,7 @@ async def predict(
 
     The result is saved to the patient's history and sent to Medplum in the
     background. A "high" urgency result also auto-escalates to an instant
-    video consultation — every available doctor is notified immediately.
+    video consultation — doctors are notified once the patient pays.
     """
     try:
         member = checks.member_for(current_user, data.family_member_id)
@@ -97,25 +94,20 @@ async def predict(
 
     escalated_id = None
     if result["urgency"] == "high":
-        escalated_id = await _escalate_to_telemedicine(db, current_user, member, result, check.id)
-        if escalated_id:
-            background.add_task(email_doctors_patient_waiting, escalated_id)
+        escalated_id = _escalate_to_telemedicine(db, current_user, member, result, check.id)
 
     return {**result, "check_id": check.id, "escalated_consultation_id": escalated_id}
 
 
-async def _escalate_to_telemedicine(db: Session, current_user, member, result: dict, check_id: str) -> str | None:
+def _escalate_to_telemedicine(db: Session, current_user, member, result: dict, check_id: str) -> str | None:
     """Best-effort — a patient who can't start a consultation (e.g. is a
     doctor testing their own symptoms) just doesn't get one; the check
-    itself has already been saved either way."""
+    itself has already been saved either way. Doctors are notified once
+    the patient pays on the waiting page."""
     try:
         top = result["predictions"][0]["label"] if result.get("predictions") else "your symptoms"
         reason = f"Auto-escalated (High risk): {top}"[:255]
-        consultation = TelemedicineService(db).escalate(current_user, member, reason, check_id)
-        await notifier.notify_doctors_new_consultation(
-            TelemedicineRead.model_validate(consultation).model_dump(mode="json")
-        )
-        return consultation.id
+        return TelemedicineService(db).escalate(current_user, member, reason, check_id).id
     except PermissionError:
         return None
     except Exception:
