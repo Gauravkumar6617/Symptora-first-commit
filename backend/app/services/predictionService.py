@@ -4,6 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import joblib
+import numpy as np
 import pandas as pd
 
 from app.services.symptomParser import SymptomParser
@@ -25,6 +26,28 @@ EMERGENCY_SYMPTOMS = {
     "chest_pain", "breathlessness", "coma", "altered_sensorium", "slurred_speech",
     "weakness_of_one_body_side", "blood_in_sputum", "bloody_stool",
 }
+
+
+# The training data has every disease equally often, so on vague input a rare
+# disease ("headache" -> brain hemorrhage) could outrank a common one. Scale
+# probabilities by rough real-world frequency; strong specific symptoms still
+# win (chest pain + sweating + breathlessness -> heart attack).
+# ponytail: 3 hand-picked tiers, replace with real prevalence data if we get it.
+COMMON_DISEASES = {
+    "common_cold", "gerd", "allergy", "gastroenteritis", "migraine", "fungal_infection",
+    "acne", "urinary_tract_infection", "hypertension", "diabetes", "arthritis",
+    "osteoarthristis", "cervical_spondylosis", "bronchial_asthma", "drug_reaction",
+    "dimorphic_hemorrhoids(piles)", "varicose_veins",
+}
+RARE_DISEASES = {
+    "aids", "hepatitis_b", "hepatitis_c", "hepatitis_d", "hepatitis_e", "alcoholic_hepatitis",
+    "chronic_cholestasis", "heart_attack", "paralysis_(brain_hemorrhage)", "hypoglycemia",
+    "hyperthyroidism", "tuberculosis",
+}
+
+
+def prior(disease: str) -> float:
+    return 3.0 if disease in COMMON_DISEASES else 0.3 if disease in RARE_DISEASES else 1.0
 
 
 class UnknownSymptomError(Exception):
@@ -49,6 +72,7 @@ class PredictionService:
     def __init__(self, artifact_dir: Path = ARTIFACT, processed_dir: Path = PROCESSED):
         self.model = joblib.load(artifact_dir / "model.joblib")
         self.symptoms: list[str] = json.loads((artifact_dir / "symptoms.json").read_text())
+        self.prior = np.array([prior(d) for d in self.model.classes_])
         self.parser = SymptomParser(self.symptoms)
 
         severity = pd.read_csv(processed_dir / "severity.csv")
@@ -96,7 +120,8 @@ class PredictionService:
             raise UnknownSymptomError(unknown)
 
         row = pd.DataFrame([[int(s in given) for s in self.symptoms]], columns=self.symptoms)
-        probs = self.model.predict_proba(row)[0]
+        probs = self.model.predict_proba(row)[0] * self.prior
+        probs /= probs.sum()
         top = probs.argsort()[::-1][:TOP_K]
 
         predictions = [

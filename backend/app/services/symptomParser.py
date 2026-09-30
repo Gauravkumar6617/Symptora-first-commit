@@ -55,6 +55,8 @@ SYNONYMS: dict[str, str] = {
     "out of breath": "breathlessness", "breathless": "breathlessness",
     "heart racing": "fast_heart_rate", "fast heartbeat": "fast_heart_rate",
     "sore throat": "throat_irritation", "throat pain": "throat_irritation",
+    "throat hurts": "throat_irritation", "scratchy throat": "throat_irritation",
+    "itchy throat": "throat_irritation", "painful swallowing": "throat_irritation",
     "blocked nose": "congestion", "stuffy nose": "congestion", "sneezing": "continuous_sneezing",
     "mucus": "phlegm", "coughing": "cough",
     # skin / eyes / urine
@@ -142,11 +144,13 @@ class SymptomParser:
         self.vocabulary = sorted({w for p in phrases for w in p} | set(AMBIGUOUS) | set(NUMBER_WORDS))
 
     def _fix_typos(self, tokens: list[str]) -> list[str]:
-        """'vomiitng' -> 'vomiting'. Short words are left alone to avoid false fixes."""
+        """'vomiitng' -> 'vomiting'. Short words and first-letter changes are left
+        alone to avoid false fixes ('eating' is not 'sweating')."""
         fixed = []
         for t in tokens:
             if len(t) >= 4 and t not in self.vocabulary:
-                match = get_close_matches(t, self.vocabulary, n=1, cutoff=0.8)
+                same_start = [v for v in self.vocabulary if v[0] == t[0]]
+                match = get_close_matches(t, same_start, n=1, cutoff=0.8)
                 t = match[0] if match else t
             fixed.append(t)
         return fixed

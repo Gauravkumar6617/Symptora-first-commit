@@ -38,6 +38,8 @@ def test_user_example_vomiting_with_blood(parser):
         ("trouble breathing", ["breathlessness"]),
         ("stool with blood", ["bloody_stool"]),
         ("pain in anal region", ["pain_in_anal_region"]),
+        ("stomach pain after eating", ["stomach_pain"]),  # not "sweating"
+        ("my throat hurts", ["throat_irritation"]),
     ],
 )
 def test_everyday_wording(parser, text, expected):

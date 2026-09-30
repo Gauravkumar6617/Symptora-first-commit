@@ -20,6 +20,7 @@ const navItems = [
   // Secondary links: mobile menu only; on desktop they live in the footer
   // (the header row is capped at max-w-7xl, so they never fit next to the account links).
   { to: '/blog', label: 'Blog', secondary: true },
+  { to: '/how-it-works', label: 'How it works', secondary: true },
   { to: '/about', label: 'About', secondary: true },
   { to: '/contact', label: 'Contact', secondary: true },
 ]

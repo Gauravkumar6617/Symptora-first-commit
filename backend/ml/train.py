@@ -4,7 +4,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, top_k_accuracy_score
 from sklearn.model_selection import train_test_split
 
@@ -20,10 +20,9 @@ sample_symptoms = ["fatigue", "high_fever", "chills", "headache", "nausea"]
 
 
 def make_model():
-    # 100 trees with leaves of >= 3 rows: ~7x smaller than 200 full-depth trees, same accuracy
-    return RandomForestClassifier(
-        n_estimators=100, min_samples_leaf=3, random_state=SEED, n_jobs=-1
-    )
+    # Beat a 100-tree random forest on partial input (2 symptoms: top-3 98% vs 95%),
+    # gives smoother probabilities, and the saved model is a few KB instead of MBs.
+    return LogisticRegression(C=3, max_iter=3000)
 
 
 def keep_random_symptoms(X, k, rng):
